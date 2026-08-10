@@ -42,9 +42,15 @@ const JIKAN = {
     });
   },
 
-  // Trending/popular anime for the homepage
+  // Trending/popular anime for the homepage. Jikan's popularity filter is
+  // occasionally flaky (upstream MAL issues), so fall back to the plain
+  // top list rather than failing the whole request.
   async topAnime(page = 1) {
-    return this.get(`/top/anime?filter=bypopularity&page=${page}`);
+    try {
+      return await this.get(`/top/anime?filter=bypopularity&page=${page}`);
+    } catch (err) {
+      return this.get(`/top/anime?page=${page}`);
+    }
   },
 
   // Highest rated anime of all time

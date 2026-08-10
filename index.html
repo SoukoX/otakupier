@@ -86,47 +86,32 @@
         fresh.forEach((a) => grid.appendChild(JIKAN.card(a)));
         return fresh.length > 0;
       };
+      const fail = (grid, label) => {
+        grid.innerHTML = `<div class="empty-state">${label} unavailable right now. Please try again later.</div>`;
+      };
 
-      try {
-        // Season endpoints are flaky; try them but fall back to extra
-        // top-anime pages so the home page always shows anime.
-        const [trend, rated] = await Promise.all([
-          JIKAN.topAnime(1),
-          JIKAN.topRated(1),
-        ]);
-        await JIKAN.loadEdits();
+      await JIKAN.loadEdits();
 
-        let airingDone = false;
-        let upcomingDone = false;
+      // Each section loads independently so one flaky Jikan endpoint never
+      // blanks the whole home page. Every section has a top-anime fallback.
+      async function loadSection(grid, label, primary, fallbackPage) {
         try {
-          const s = await JIKAN.currentSeason();
-          airingDone = fill(airing, (s.data || []).slice(0, 25));
+          const res = await primary();
+          if (res && res.data && fill(grid, res.data.slice(0, 25))) return;
         } catch (e) {}
         try {
-          const s = await JIKAN.upcomingSeason();
-          upcomingDone = fill(upcoming, (s.data || []).slice(0, 25));
+          const fb = await JIKAN.topRated(fallbackPage);
+          if (fb && fb.data && fill(grid, fb.data)) return;
         } catch (e) {}
-
-        // Fallbacks: pull more pages of top anime if season data is missing
-        const [extra1, extra2] = await Promise.all([
-          airingDone ? Promise.resolve(null) : JIKAN.topAnime(2).catch(() => null),
-          upcomingDone ? Promise.resolve(null) : JIKAN.topAnime(3).catch(() => null),
-        ]);
-        if (!airingDone) {
-          if (extra1 && extra1.data) fill(airing, extra1.data);
-          else airing.innerHTML = `<div class="empty-state">Seasonal data unavailable right now.</div>`;
-        }
-        if (!upcomingDone) {
-          if (extra2 && extra2.data) fill(upcoming, extra2.data);
-          else upcoming.innerHTML = `<div class="empty-state">Upcoming data unavailable right now.</div>`;
-        }
-
-        fill(trending, trend.data);
-        fill(topRated, rated.data);
-      } catch (err) {
-        const msg = `<div class="empty-state">Could not load anime right now. Please try again later.</div>`;
-        [trending, topRated, airing, upcoming].forEach((g) => (g.innerHTML = msg));
+        fail(grid, label);
       }
+
+      await Promise.all([
+        loadSection(trending, "Trending", () => JIKAN.topAnime(1), 1),
+        loadSection(topRated, "Top Rated", () => JIKAN.topRated(1), 1),
+        loadSection(airing, "Currently airing", () => JIKAN.currentSeason(), 2),
+        loadSection(upcoming, "Upcoming", () => JIKAN.upcomingSeason(), 3),
+      ]);
     }
 
     document.addEventListener("DOMContentLoaded", loadHome);

@@ -10,5 +10,5 @@ const CONFIG = {
 
   SITE_NAME: "OtakuPier",
   // Your GitHub Pages URL once deployed
-  SITE_URL: "https://SoukoX.github.io/otakupier",
+  SITE_URL: "https://soukox.github.io/otakupier",
 };
