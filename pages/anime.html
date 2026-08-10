@@ -447,7 +447,7 @@
       const op = communityRating ? `${communityRating.avg} (${communityRating.count} votes)` : "No votes yet";
       box.innerHTML = `
         <div class="review-form">
-          <strong>Rate this anime</strong> <span style="color:var(--text-dim); font-weight:400; font-size:.9rem;">— 1 vote per user</span>
+          <strong>Rate this anime</strong> <span style="color:var(--text-dim); font-weight:400; font-size:.9rem;">— 1 vote per user ${isAdmin() ? "(admins can vote multiple times)" : ""}</span>
           <div style="display:flex; flex-wrap:wrap; gap:18px; margin:10px 0 14px;">
             <div style="text-align:center;">
               <div style="font-size:.8rem; color:var(--text-dim);">Official score</div>
@@ -457,18 +457,18 @@
               <div style="font-size:.8rem; color:var(--text-dim);">OtakuPier score</div>
               <div style="font-size:1.4rem; font-weight:800; color:var(--accent-2);">${op}</div>
             </div>
-            ${myRank ? `<div style="text-align:center;">
+            ${myRank && !isAdmin() ? `<div style="text-align:center;">
               <div style="font-size:.8rem; color:var(--text-dim);">Your vote</div>
               <div style="font-size:1.4rem; font-weight:800; color:var(--accent);">${myRank.position}/10</div>
             </div>` : ""}
           </div>
           ${isLoggedIn()
-            ? `<label style="display:block; margin-bottom:8px;">Vote ${myRank ? "(change your vote)" : ""}:</label>
+            ? `<label style="display:block; margin-bottom:8px;">Vote ${myRank && !isAdmin() ? "(change your vote)" : ""}:</label>
                <div style="display:flex; gap:10px; flex-wrap:wrap; align-items:center;">
                  <input type="number" id="rankInput" min="1" max="10" step="1" value="${myRank?.position || 5}"
                         style="width:90px; padding:10px; border-radius:10px; border:1px solid var(--border); background:var(--bg-alt); color:var(--text); font-family:inherit;">
-                 <button class="btn btn-primary" onclick="saveRank()">${myRank ? "Update vote" : "Cast vote"}</button>
-                 ${myRank ? `<button class="btn btn-danger" onclick="removeRank()">Remove vote</button>` : ""}
+                 <button class="btn btn-primary" onclick="saveRank()">${myRank && !isAdmin() ? "Update vote" : "Cast vote"}</button>
+                 ${myRank && !isAdmin() ? `<button class="btn btn-danger" onclick="removeRank()">Remove vote</button>` : ""}
                </div>`
             : `<a class="btn btn-outline" href="login.html">Login to vote on this anime</a>`}
         </div>`;
@@ -488,11 +488,11 @@
           anime_image: animeData.images?.jpg?.image_url,
           position: pos,
         };
-        if (myRank) {
+        if (myRank && !isAdmin()) {
           await supabase.from("rankings").update({ position: pos }).eq("id", myRank.id);
         } else {
           await dbInsert("rankings", payload);
-          awardXp(5); // +5 XP for first vote
+          if (!myRank) awardXp(5); // +5 XP for first vote
         }
         showToast("Vote saved!");
         myRank = { ...myRank, position: pos, id: myRank?.id };

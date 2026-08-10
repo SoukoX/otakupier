@@ -29,7 +29,7 @@ create table if not exists public.reviews (
   created_at timestamptz default now()
 );
 
--- 3. Rankings (one entry per user per anime)
+-- 3. Rankings (one entry per user per anime; admins may vote multiple times)
 create table if not exists public.rankings (
   id bigint generated always as identity primary key,
   user_id uuid references auth.users on delete cascade not null,
@@ -37,9 +37,37 @@ create table if not exists public.rankings (
   anime_title text default '',
   anime_image text,
   position integer not null check (position between 1 and 10),
-  created_at timestamptz default now(),
-  unique (user_id, anime_mal_id)
+  created_at timestamptz default now()
 );
+-- Drop the old unique constraint if present so the trigger below can take
+-- over enforcement (it allows admins to vote repeatedly).
+alter table public.rankings drop constraint if exists rankings_user_id_anime_mal_id_key;
+
+-- Enforce "one vote per user per anime" for regular users only. Admins
+-- (profiles.is_admin) are exempt and may cast unlimited votes.
+create or replace function public.enforce_one_vote_per_user()
+returns trigger
+language plpgsql
+security definer set search_path = public
+as $$
+begin
+  if not exists (
+    select 1 from public.profiles p
+    where p.id = new.user_id and p.is_admin
+  ) and exists (
+    select 1 from public.rankings r
+    where r.user_id = new.user_id and r.anime_mal_id = new.anime_mal_id
+  ) then
+    raise exception 'You have already voted for this anime.';
+  end if;
+  return new;
+end;
+$$;
+
+drop trigger if exists enforce_one_vote_per_user on public.rankings;
+create trigger enforce_one_vote_per_user
+  before insert on public.rankings
+  for each row execute function public.enforce_one_vote_per_user();
 
 -- 4. Chat messages (global room)
 create table if not exists public.chat_messages (

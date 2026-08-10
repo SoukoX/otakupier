@@ -104,7 +104,7 @@
             <div class="votes">${r.count} vote${r.count === 1 ? "" : "s"}</div>
           </div>
           <div class="rank-vote" style="text-align:right;">
-            <button class="btn btn-primary btn-small" onclick="event.stopPropagation();openVote(${r.id})">${mine ? "Change vote" : "Vote"}</button>
+            <button class="btn btn-primary btn-small" onclick="event.stopPropagation();openVote(${r.id})">${mine && !isAdmin() ? "Change vote" : "Vote"}</button>
           </div>`;
         el.addEventListener("click", () => (window.location.href = `anime.html?id=${r.id}`));
         list.appendChild(el);
@@ -136,7 +136,7 @@
         <div style="color:var(--text-dim); font-size:.85rem; margin:4px 0 10px;">${JIKAN.esc(row.title)}</div>
         <div class="rating-picker" id="voteStars"></div>
         <div style="display:flex; gap:10px; margin-top:8px; align-items:center;">
-          <span id="voteLabel" style="font-size:.85rem; color:var(--text-dim);">${current ? "Current vote: " + current + "/10" : "Pick a score"}</span>
+          <span id="voteLabel" style="font-size:.85rem; color:var(--text-dim);">${mine && !isAdmin() ? "Current vote: " + current + "/10" : current ? "You've voted " + current + "/10 — vote again?" : "Pick a score"}</span>
           <button class="btn btn-primary" onclick="saveVote(${malId}, window._votePick || ${current || 5})">Submit</button>
           ${mine ? `<button class="btn btn-danger" onclick="removeVote(${malId})">Remove vote</button>` : ""}
           <button class="btn btn-outline" onclick="document.querySelector('.vote-pop')?.remove()">Cancel</button>
@@ -168,7 +168,7 @@
       if (!row) return;
       const mine = myVotes.get(malId);
       try {
-        if (mine) {
+        if (mine && !isAdmin()) {
           await supabase.from("rankings").update({ position: pos }).eq("id", mine.id);
         } else {
           const r = await dbInsert("rankings", {
@@ -179,7 +179,7 @@
             position: pos,
           });
           myVotes.set(malId, { ...r, anime_mal_id: malId });
-          awardXp(5); // +5 XP for first vote
+          if (!mine) awardXp(5); // +5 XP for first vote
         }
         showToast("Vote saved!");
         document.querySelector(".vote-pop")?.remove();
