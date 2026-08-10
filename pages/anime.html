@@ -88,6 +88,9 @@
         images: { jpg: { large_image_url: c.image_url || "", image_url: c.image_url || "" } },
       };
       main.innerHTML = `
+        <div style="margin-bottom:14px;">
+          <a class="btn btn-outline btn-small" href="javascript:history.length > 1 ? history.back() : (location.href='index.html')">&larr; Back</a>
+        </div>
         <div class="detail-header">
           <div class="detail-poster">
             <img src="${c.image_url || "https://placehold.co/300x450?text=?"}"
@@ -134,6 +137,9 @@
       const aired = a.aired?.string || "N/A";
 
       document.getElementById("main").innerHTML = `
+        <div style="margin-bottom:14px;">
+          <a class="btn btn-outline btn-small" href="javascript:history.length > 1 ? history.back() : (location.href='index.html')">&larr; Back</a>
+        </div>
         <div class="detail-header">
           <div class="detail-poster">
             <img src="${a.images?.jpg?.large_image_url || a.images?.jpg?.image_url || ""}"

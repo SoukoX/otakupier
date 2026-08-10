@@ -95,17 +95,9 @@
         const results = settled
           .filter((s) => s.status === "fulfilled" && s.value && s.value.data)
           .map((s) => s.value);
-        const failed = settled.length - results.length;
 
         grid.innerHTML = "";
         await JIKAN.loadEdits();
-        if (failed > 0) {
-          const warn = document.createElement("div");
-          warn.className = "empty-state";
-          warn.style.marginBottom = "16px";
-          warn.innerHTML = `Some data was unavailable (${failed} of ${settled.length} requests) — showing what loaded. <a href="catalog.html" style="color:var(--accent)">Reload</a>`;
-          grid.appendChild(warn);
-        }
         let count = 0;
         results.forEach((res) => {
           res.data.forEach((a) => {
@@ -113,12 +105,9 @@
             count++;
           });
         });
+
         if (!count) {
-          if (failed > 0) {
-            grid.innerHTML = `<div class="empty-state">Could not load this page right now (Jikan is having issues). <a href="catalog.html" style="color:var(--accent)">Retry</a></div>`;
-          } else {
-            grid.innerHTML = `<div class="empty-state">No anime found. Try a different search.</div>`;
-          }
+          grid.innerHTML = `<div class="empty-state">No anime found. Try a different search.</div>`;
         }
 
         // Use the first successful response for pagination metadata

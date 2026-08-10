@@ -103,7 +103,25 @@ const JIKAN = {
     let q = `type=anime&order_by=popularity&page=${page}&q=${encodeURIComponent(query)}`;
     if (type) q += `&type=${type}`;
     if (minScore) q += `&min_score=${minScore}`;
-    return this.get(`/anime?${q}`);
+    try {
+      return await this.get(`/anime?${q}`);
+    } catch (err) {
+      // Jikan's search endpoint is the first thing to break when its
+      // upstream (MAL) is flaky. Fall back to client-side filtering of the
+      // top list so search keeps working even during outages.
+      const top = await this.catalog(page);
+      const needle = query.toLowerCase();
+      const matched = (top.data || []).filter((a) =>
+        [a.title, a.title_english, a.title_japanese, a.title_synonyms].flat().some(
+          (t) => t && String(t).toLowerCase().includes(needle)
+        )
+      );
+      top.data = matched;
+      top.pagination = top.pagination || {};
+      top.pagination.last_visible_page = 1;
+      top.pagination.items = { total: matched.length, per_page: matched.length || 1, count: matched.length };
+      return top;
+    }
   },
 
   // Anime list filtered by genre
@@ -117,9 +135,15 @@ const JIKAN = {
   },
 
   // Full details for one anime (cached — the same anime is looked up from
-  // cards, related sections, and profiles repeatedly)
+  // cards, related sections, and profiles repeatedly). The heavy /full
+  // endpoint is the most flaky when MAL is under load, so fall back to the
+  // lighter /anime/:id which has everything the page needs.
   async getAnime(id) {
-    return this.cachedGet(`/anime/${id}/full`);
+    try {
+      return await this.cachedGet(`/anime/${id}/full`);
+    } catch (err) {
+      return this.cachedGet(`/anime/${id}`);
+    }
   },
 
   // Characters for an anime

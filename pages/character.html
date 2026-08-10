@@ -33,6 +33,9 @@
         const animes = (c.anime || []).slice(0, 12);
 
         main.innerHTML = `
+          <div style="margin-bottom:14px;">
+            <a class="btn btn-outline btn-small" href="javascript:history.length > 1 ? history.back() : (location.href='index.html')">&larr; Back</a>
+          </div>
           <div class="detail-header">
             <div class="detail-poster">
               <img src="${c.images?.jpg?.image_url || "https://placehold.co/300x450?text=?"}"

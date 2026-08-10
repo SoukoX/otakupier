@@ -69,6 +69,9 @@ create trigger enforce_one_vote_per_user
   before insert on public.rankings
   for each row execute function public.enforce_one_vote_per_user();
 
+-- Trigger-only: not callable via the REST API by anyone.
+revoke execute on function public.enforce_one_vote_per_user() from anon, authenticated, public;
+
 -- 4. Chat messages (global room)
 create table if not exists public.chat_messages (
   id bigint generated always as identity primary key,
@@ -608,6 +611,9 @@ create trigger trg_admin_flag
   before update on public.profiles
   for each row execute procedure public.ensure_admin_can_change_admin_flag();
 
+-- Trigger-only: not callable via the REST API by anyone.
+revoke execute on function public.ensure_admin_can_change_admin_flag() from anon, authenticated, public;
+
 -- 12b. Chat cleanup: delete chat messages older than the retention window
 -- (default 24 hours) to keep the table small. SECURITY DEFINER + owner-only
 -- delete so any logged-in user can trigger it from the chat page without
@@ -628,7 +634,7 @@ begin
 end;
 $$;
 
-revoke execute on function public.prune_chat_messages(interval) from public;
+revoke execute on function public.prune_chat_messages(interval) from public, anon;
 grant execute on function public.prune_chat_messages(interval) to authenticated;
 
 -- Optional: nightly purge via pg_cron (best-effort; enabled on Supabase free tier).
