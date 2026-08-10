@@ -4,14 +4,30 @@
 const JIKAN = {
   base: CONFIG.JIKAN_BASE,
 
-  // Jikan rate-limits ~3 requests/sec; serialize with a queue so parallel
-  // page loads don't trip the limiter.
-  _queue: Promise.resolve(),
+  // Jikan allows roughly 3 requests/sec. Instead of fully serializing every
+  // request (which makes the anime page crawl when it fires 25+ fetches at
+  // once), run up to MAX_CONCURRENT requests in parallel — still under the
+  // rate limit, but dramatically faster for data-heavy pages.
+  MAX_CONCURRENT: 3,
+  _active: 0,
+  _waiters: [],
 
   _enqueue(task) {
-    const run = this._queue.then(task);
-    this._queue = run.catch(() => {});
-    return run;
+    return new Promise((resolve, reject) => {
+      this._waiters.push({ task, resolve, reject });
+      this._pump();
+    });
+  },
+
+  _pump() {
+    while (this._active < this.MAX_CONCURRENT && this._waiters.length) {
+      const { task, resolve, reject } = this._waiters.shift();
+      this._active++;
+      Promise.resolve().then(task).then(
+        (val) => { this._active--; this._pump(); resolve(val); },
+        (err) => { this._active--; this._pump(); reject(err); }
+      );
+    }
   },
 
   // Small wrapper with retry/backoff to respect Jikan rate limits (~3 req/sec)

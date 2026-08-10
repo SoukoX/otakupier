@@ -62,10 +62,10 @@
         renderTrailer();
         loadCommunityRating();
         loadSavedState();
-        await loadCharacters();
-        await loadEpisodes();
         loadReviews();
         loadMyRank();
+        // Characters + episodes fetch in parallel (they're independent)
+        await Promise.all([loadCharacters(), loadEpisodes()]);
       } catch (err) {
         main.innerHTML = `<div class="empty-state">Could not load this anime.</div>`;
       }
@@ -212,9 +212,13 @@
       slot.innerHTML = `<h3 class="sub-head">Seasons &amp; Related</h3>
         <div class="grid" id="relatedGrid" style="grid-template-columns:repeat(auto-fill,minmax(150px,1fr));"></div>`;
       const grid = document.getElementById("relatedGrid");
-      related.slice(0, 12).forEach(async (r) => {
+      // Render cards immediately, but fetch each card's image/score in the
+      // background *after* the main page content (characters, episodes) has
+      // loaded, so those never wait behind this section.
+      related.slice(0, 8).forEach((r) => {
         const el = document.createElement("div");
         el.className = "anime-card";
+        el.dataset.malId = r.mal_id;
         el.innerHTML = `<div class="poster">
             <img src="https://placehold.co/300x400?text=Loading" alt="${JIKAN.esc(r.name)}"
                  loading="lazy" onerror="this.src='https://placehold.co/300x400?text=?'">
@@ -225,9 +229,19 @@
           </div>`;
         el.addEventListener("click", () => (window.location.href = `anime.html?id=${r.mal_id}`));
         grid.appendChild(el);
-        // Fetch image + score in the background
+      });
+      // Wait for the rest of the page to finish, then enrich the related cards.
+      requestIdleCallback ? requestIdleCallback(() => enrichRelated(grid), { timeout: 4000 }) : setTimeout(() => enrichRelated(grid), 1200);
+    }
+
+    async function enrichRelated(grid) {
+      if (!grid) return;
+      const cards = [...grid.children];
+      for (const el of cards) {
+        const malId = Number(el.dataset.malId);
+        if (!malId) continue;
         try {
-          const res = await JIKAN.getAnime(r.mal_id);
+          const res = await JIKAN.getAnime(malId);
           const a = res.data;
           const img = el.querySelector("img");
           if (img) img.src = a.images?.jpg?.image_url || "https://placehold.co/300x400?text=?";
@@ -241,7 +255,7 @@
           const img = el.querySelector("img");
           if (img) img.src = "https://placehold.co/300x400?text=?";
         }
-      });
+      }
     }
 
     // Try to find other entries of the same franchise by searching the base
@@ -345,15 +359,20 @@
       const list = document.getElementById("epList");
       const all = [];
       try {
-        // Fetch every page so the full episode list (incl. filler/recap) shows
-        let page = 1;
-        let lastPage = 1;
-        do {
-          const res = await JIKAN.episodes(id, page);
-          all.push(...(res.data || []));
-          lastPage = res.pagination?.last_visible_page || page;
-          page++;
-        } while (page <= lastPage && page <= 10 && all.length < 200);
+        // Fetch the first page to learn the total, then fetch remaining pages
+        // in parallel (bounded at 10 pages / ~200 episodes). The global Jikan
+        // pool still rate-limits the burst, so this is safe.
+        const first = await JIKAN.episodes(id, 1);
+        all.push(...(first.data || []));
+        const lastPage = Math.min(first.pagination?.last_visible_page || 1, 10);
+        if (lastPage > 1) {
+          const rest = await Promise.all(
+            Array.from({ length: lastPage - 1 }, (_, i) =>
+              JIKAN.episodes(id, i + 2).catch(() => ({ data: [] }))
+            )
+          );
+          rest.forEach((r) => all.push(...(r.data || [])));
+        }
 
         list.innerHTML = "";
         if (!all.length) {
