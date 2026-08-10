@@ -163,6 +163,19 @@ function pathPrefix() {
   return window.location.pathname.includes("/pages/") ? "../" : "";
 }
 
+// Reliable "back" navigation. history.length is unreliable across browsers,
+// so we go back to the page the visitor actually came from (document.referrer)
+// and fall back to the home page only when there's nowhere to return to.
+function goBack() {
+  const ref = document.referrer || "";
+  if (ref && ref.startsWith(location.origin)) {
+    location.href = ref;
+    return;
+  }
+  // Came from an external site, a new tab, or a direct link — go home.
+  location.href = pathPrefix() + "index.html";
+}
+
 const NAV_LINKS = [
   { label: "Home", href: "index.html", file: "index.html", inPages: false },
   { label: "Catalog", href: "pages/catalog.html", file: "catalog.html", inPages: true },

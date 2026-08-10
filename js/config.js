@@ -18,6 +18,7 @@ const CONFIG = {
   CAPTCHA_SITE_KEY: "1307338918xyzbb.com",
 
   SITE_NAME: "OtakuPier",
+  SITE_TAGLINE: "Watch & Discover Anime Online",
   // Your GitHub Pages URL once deployed
   SITE_URL: "https://soukox.github.io/otakupier",
 };

@@ -3,7 +3,13 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Anime — OtakuPier</title>
+  <title>Anime Details & Reviews — OtakuPier</title>
+  <meta name="robots" content="index, follow">
+  <meta name="description" content="Full anime details on OtakuPier — synopsis, episodes, characters, trailers, community rankings and user reviews.">
+  <link rel="canonical" href="https://soukox.github.io/otakupier/pages/anime.html">
+  <link rel="icon" type="image/svg+xml" href="../favicon.svg">
+  <link rel="preconnect" href="https://api.jikan.moe">
+  <link rel="preconnect" href="https://cdn.jsdelivr.net">
   <link rel="stylesheet" href="../css/style.css">
 </head>
 <body>
@@ -89,7 +95,7 @@
       };
       main.innerHTML = `
         <div style="margin-bottom:14px;">
-          <a class="btn btn-outline btn-small" href="javascript:history.length > 1 ? history.back() : (location.href='index.html')">&larr; Back</a>
+          <a class="btn btn-outline btn-small" href="javascript:goBack()">&larr; Back</a>
         </div>
         <div class="detail-header">
           <div class="detail-poster">
@@ -138,7 +144,7 @@
 
       document.getElementById("main").innerHTML = `
         <div style="margin-bottom:14px;">
-          <a class="btn btn-outline btn-small" href="javascript:history.length > 1 ? history.back() : (location.href='index.html')">&larr; Back</a>
+          <a class="btn btn-outline btn-small" href="javascript:goBack()">&larr; Back</a>
         </div>
         <div class="detail-header">
           <div class="detail-poster">
