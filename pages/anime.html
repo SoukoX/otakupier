@@ -90,8 +90,8 @@
       main.innerHTML = `
         <div class="detail-header">
           <div class="detail-poster">
-            <img src="${c.image_url || "https://via.placeholder.com/300x450?text=?"}"
-                 alt="${JIKAN.esc(c.title)}" onerror="this.src='https://via.placeholder.com/300x450?text=?'">
+            <img src="${c.image_url || "https://placehold.co/300x450?text=?"}"
+                 alt="${JIKAN.esc(c.title)}" onerror="this.src='https://placehold.co/300x450?text=?'">
           </div>
           <div>
             <h1 class="detail-title">${JIKAN.esc(c.title)}</h1>
@@ -137,7 +137,7 @@
         <div class="detail-header">
           <div class="detail-poster">
             <img src="${a.images?.jpg?.large_image_url || a.images?.jpg?.image_url || ""}"
-                 alt="${JIKAN.esc(mainTitle)}" onerror="this.src='https://via.placeholder.com/300x450?text=?'">
+                 alt="${JIKAN.esc(mainTitle)}" onerror="this.src='https://placehold.co/300x450?text=?'">
           </div>
           <div>
             <h1 class="detail-title">${JIKAN.esc(mainTitle)}</h1>
@@ -216,8 +216,8 @@
         const el = document.createElement("div");
         el.className = "anime-card";
         el.innerHTML = `<div class="poster">
-            <img src="https://via.placeholder.com/300x400?text=Loading" alt="${JIKAN.esc(r.name)}"
-                 loading="lazy" onerror="this.src='https://via.placeholder.com/300x400?text=?'">
+            <img src="https://placehold.co/300x400?text=Loading" alt="${JIKAN.esc(r.name)}"
+                 loading="lazy" onerror="this.src='https://placehold.co/300x400?text=?'">
           </div>
           <div class="info">
             <div class="title">${JIKAN.esc(r.name)}</div>
@@ -230,7 +230,7 @@
           const res = await JIKAN.getAnime(r.mal_id);
           const a = res.data;
           const img = el.querySelector("img");
-          if (img) img.src = a.images?.jpg?.image_url || "https://via.placeholder.com/300x400?text=?";
+          if (img) img.src = a.images?.jpg?.image_url || "https://placehold.co/300x400?text=?";
           const meta = el.querySelector(".info");
           const score = a.score ? a.score.toFixed(2) : "N/A";
           meta.insertAdjacentHTML("beforeend", `<div class="meta">
@@ -239,7 +239,7 @@
           </div>`);
         } catch (err) {
           const img = el.querySelector("img");
-          if (img) img.src = "https://via.placeholder.com/300x400?text=?";
+          if (img) img.src = "https://placehold.co/300x400?text=?";
         }
       });
     }
@@ -326,9 +326,9 @@
           const el = document.createElement("div");
           el.className = "char-card";
           el.innerHTML = `
-            <img src="${c.character.images?.jpg?.image_url || "https://via.placeholder.com/200x200?text=?"}"
+            <img src="${c.character.images?.jpg?.image_url || "https://placehold.co/200x200?text=?"}"
                  alt="${JIKAN.esc(c.character.name)}" loading="lazy"
-                 onerror="this.src='https://via.placeholder.com/200x200?text=?'">
+                 onerror="this.src='https://placehold.co/200x200?text=?'">
             <div class="char-name">${JIKAN.esc(c.character.name)}</div>
             <div class="char-role">${c.role || ""}</div>
             ${vaName ? `<div class="char-role" style="color:var(--accent-3);">${JIKAN.esc(vaName)}</div>` : ""}`;

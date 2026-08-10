@@ -217,9 +217,9 @@ const JIKAN = {
       ? `<div class="jtitle">${this.esc(anime.title_japanese)}</div>` : "";
     el.innerHTML = `
       <div class="poster">
-        <img src="${anime.images?.jpg?.image_url || "https://via.placeholder.com/300x400?text=?"}"
+        <img src="${anime.images?.jpg?.image_url || "https://placehold.co/300x400?text=?"}"
              alt="${this.esc(this.title(anime))}" loading="lazy"
-             onerror="this.src='https://via.placeholder.com/300x400?text=?'">
+             onerror="this.src='https://placehold.co/300x400?text=?'">
       </div>
       <div class="info">
         <div class="title">${this.esc(this.title(anime))}</div>

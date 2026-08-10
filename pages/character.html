@@ -35,8 +35,8 @@
         main.innerHTML = `
           <div class="detail-header">
             <div class="detail-poster">
-              <img src="${c.images?.jpg?.image_url || "https://via.placeholder.com/300x450?text=?"}"
-                   alt="${JIKAN.esc(c.name)}" onerror="this.src='https://via.placeholder.com/300x450?text=?'">
+              <img src="${c.images?.jpg?.image_url || "https://placehold.co/300x450?text=?"}"
+                   alt="${JIKAN.esc(c.name)}" onerror="this.src='https://placehold.co/300x450?text=?'">
             </div>
             <div>
               <h1 class="detail-title">${JIKAN.esc(c.name)}</h1>

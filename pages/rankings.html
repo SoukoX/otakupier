@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Community Rankings — OtakuPier</title>
-  <meta name="description" content="Community rankings powered by OtakuPier users. See the top anime ranked by fans.">
+  <meta name="description" content="Community rankings powered by OtakuPier users. See the top anime ranked by fans and cast your own vote.">
   <link rel="stylesheet" href="../css/style.css">
 </head>
 <body>
@@ -13,7 +13,7 @@
   <main class="container">
     <div class="section-head">
       <h2>Community Rankings</h2>
-      <span style="color:var(--text-dim); font-size:0.9rem;">Ranked by OtakuPier users</span>
+      <span style="color:var(--text-dim); font-size:0.9rem;">Ranked by OtakuPier users — vote out of 10</span>
     </div>
     <div id="rankBody">
       <div class="empty-state">
@@ -29,9 +29,15 @@
   <script src="../js/api.js"></script>
   <script src="../js/app.js"></script>
   <script>
+    let aggRows = [];
+    let myVotes = new Map(); // mal_id -> user's ranking row
+
     async function loadRankings() {
-      if (!SUPABASE_READY || !supabase) return;
       const body = document.getElementById("rankBody");
+      if (!SUPABASE_READY || !supabase) {
+        body.innerHTML = `<div class="empty-state">Rankings need Supabase setup. See the README.</div>`;
+        return;
+      }
       try {
         const { data, error } = await supabase
           .from("rankings")
@@ -39,13 +45,16 @@
           .limit(1000);
         if (error) throw error;
         if (!data.length) {
-          body.innerHTML = `<div class="empty-state">No rankings yet. Open any anime page and rank it!</div>`;
+          body.innerHTML = `<div class="empty-state">No votes yet. Open any anime page and rank it, or use the button below on this page!</div>`;
           return;
         }
 
-        // Aggregate: average position per anime, weighted by number of voters
+        // Aggregate: average score per anime (higher = better)
         const agg = {};
         data.forEach((r) => {
+          if (currentUser && r.user_id === currentUser.id) {
+            myVotes.set(r.anime_mal_id, r);
+          }
           if (!agg[r.anime_mal_id]) {
             agg[r.anime_mal_id] = {
               id: r.anime_mal_id,
@@ -59,33 +68,138 @@
           agg[r.anime_mal_id].count += 1;
         });
 
-        const rows = Object.values(agg)
+        aggRows = Object.values(agg)
           .map((a) => ({ ...a, avg: a.sum / a.count }))
-          .sort((a, b) => a.avg - b.avg)
-          .slice(0, 20);
+          .sort((a, b) => b.avg - a.avg)
+          .slice(0, 50);
 
-        body.innerHTML = `<div class="rank-list"></div>`;
-        const list = body.querySelector(".rank-list");
-        rows.forEach((r, i) => {
-          const el = document.createElement("div");
-          el.className = "rank-item";
-          el.innerHTML = `
-            <div class="rank-num">${i + 1}</div>
-            <div class="rank-thumb">
-              <img src="${r.image || "https://via.placeholder.com/200x280?text=?"}"
-                   alt="${JIKAN.esc(r.title)}" loading="lazy"
-                   onerror="this.src='https://via.placeholder.com/200x280?text=?'">
-            </div>
-            <div class="rank-title">${JIKAN.esc(r.title)}</div>
-            <div class="rank-score">
-              <div class="score-big">${r.avg.toFixed(1)}</div>
-              <div class="votes">${r.count} vote${r.count === 1 ? "" : "s"}</div>
-            </div>`;
-          el.addEventListener("click", () => (window.location.href = `anime.html?id=${r.id}`));
-          list.appendChild(el);
-        });
+        renderList();
       } catch (err) {
         body.innerHTML = `<div class="empty-state">Could not load rankings.</div>`;
+      }
+    }
+
+    function renderList() {
+      const body = document.getElementById("rankBody");
+      body.innerHTML = `<div class="rank-list"></div>`;
+      const list = body.querySelector(".rank-list");
+      aggRows.forEach((r, i) => {
+        const mine = myVotes.get(r.id);
+        const el = document.createElement("div");
+        el.className = "rank-item";
+        el.style.cursor = "pointer";
+        el.innerHTML = `
+          <div class="rank-num">${i + 1}</div>
+          <div class="rank-thumb">
+            <img src="${r.image || "https://placehold.co/200x280?text=?"}"
+                 alt="${JIKAN.esc(r.title)}" loading="lazy"
+                 onerror="this.src='https://placehold.co/200x280?text=?'">
+          </div>
+          <div class="rank-title">
+            ${JIKAN.esc(r.title)}
+            ${mine ? `<div style="font-size:.75rem; color:var(--accent); margin-top:2px;">Your vote: ${mine.position}/10</div>` : ""}
+          </div>
+          <div class="rank-score">
+            <div class="score-big">${r.avg.toFixed(1)}</div>
+            <div class="votes">${r.count} vote${r.count === 1 ? "" : "s"}</div>
+          </div>
+          <div class="rank-vote" style="text-align:right;">
+            <button class="btn btn-primary btn-small" onclick="event.stopPropagation();openVote(${r.id})">${mine ? "Change vote" : "Vote"}</button>
+          </div>`;
+        el.addEventListener("click", () => (window.location.href = `anime.html?id=${r.id}`));
+        list.appendChild(el);
+      });
+    }
+
+    // Open an inline 1–10 vote picker for the given anime
+    function openVote(malId) {
+      if (!isLoggedIn()) {
+        showToast("Login to vote on anime");
+        window.location.href = "login.html";
+        return;
+      }
+      const row = aggRows.find((a) => a.id === malId);
+      if (!row) return;
+      const mine = myVotes.get(malId);
+      const current = mine ? mine.position : 0;
+      const overlay = document.createElement("div");
+      overlay.className = "vote-pop";
+      overlay.style.cssText = "position:fixed; inset:0; background:rgba(0,0,0,.6); z-index:200; display:flex; align-items:center; justify-content:center; padding:20px;";
+      overlay.onclick = () => overlay.remove();
+
+      const box = document.createElement("div");
+      box.className = "review-form";
+      box.style.cssText = "max-width:420px; width:100%; margin:0;";
+      box.onclick = (e) => e.stopPropagation();
+      box.innerHTML = `
+        <strong>Rate this anime</strong>
+        <div style="color:var(--text-dim); font-size:.85rem; margin:4px 0 10px;">${JIKAN.esc(row.title)}</div>
+        <div class="rating-picker" id="voteStars"></div>
+        <div style="display:flex; gap:10px; margin-top:8px; align-items:center;">
+          <span id="voteLabel" style="font-size:.85rem; color:var(--text-dim);">${current ? "Current vote: " + current + "/10" : "Pick a score"}</span>
+          <button class="btn btn-primary" onclick="saveVote(${malId}, window._votePick || ${current || 5})">Submit</button>
+          ${mine ? `<button class="btn btn-danger" onclick="removeVote(${malId})">Remove vote</button>` : ""}
+          <button class="btn btn-outline" onclick="document.querySelector('.vote-pop')?.remove()">Cancel</button>
+        </div>`;
+      overlay.appendChild(box);
+      document.body.appendChild(overlay);
+
+      const picker = document.getElementById("voteStars");
+      for (let i = 1; i <= 10; i++) {
+        const star = document.createElement("button");
+        star.type = "button";
+        star.className = "star" + (i <= current ? " active" : "");
+        star.textContent = "\u2605";
+        star.addEventListener("click", () => {
+          window._votePick = i;
+          [...picker.children].forEach((s, idx) => s.classList.toggle("active", idx < i));
+          document.getElementById("voteLabel").textContent = `Your vote: ${i}/10`;
+        });
+        picker.appendChild(star);
+      }
+    }
+
+    async function saveVote(malId, pos) {
+      if (!Number.isInteger(pos) || pos < 1 || pos > 10) {
+        showToast("Vote must be a whole number between 1 and 10");
+        return;
+      }
+      const row = aggRows.find((a) => a.id === malId);
+      if (!row) return;
+      const mine = myVotes.get(malId);
+      try {
+        if (mine) {
+          await supabase.from("rankings").update({ position: pos }).eq("id", mine.id);
+        } else {
+          const r = await dbInsert("rankings", {
+            user_id: currentUser.id,
+            anime_mal_id: malId,
+            anime_title: row.title,
+            anime_image: row.image,
+            position: pos,
+          });
+          myVotes.set(malId, { ...r, anime_mal_id: malId });
+          awardXp(5); // +5 XP for first vote
+        }
+        showToast("Vote saved!");
+        document.querySelector(".vote-pop")?.remove();
+        await loadRankings();
+      } catch (err) {
+        showToast("Could not save vote: " + err.message);
+      }
+    }
+
+    async function removeVote(malId) {
+      const mine = myVotes.get(malId);
+      if (!mine) return;
+      try {
+        await supabase.from("rankings").delete().eq("id", mine.id);
+        myVotes.delete(malId);
+        showToast("Vote removed");
+        document.querySelector(".vote-pop")?.remove();
+        await loadRankings();
+      } catch (err) {
+        showToast("Could not remove vote");
       }
     }
 
