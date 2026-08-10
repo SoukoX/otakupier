@@ -283,9 +283,94 @@ function setupPasswordToggle() {
   });
 }
 
+// ---------- CAPTCHA (bot protection) ----------
+// Turns a token into a captchaToken for Supabase auth calls. A valid site key
+// looks like "0x..." (Turnstile) or a UUID (hCaptcha); the "key" users often
+// paste from Supabase is the SECRET (dashboard-only) and can't be used here,
+// so we only enable the widget when the key actually looks like a site key.
+function captchaKeyValid() {
+  const k = (CONFIG.CAPTCHA_SITE_KEY || "").trim();
+  return /^0x[0-9a-fA-F]{8,}$/.test(k) || /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-/.test(k);
+}
+
+// Inject the CAPTCHA widget into a container. Returns true if a widget was
+// rendered (caller should then send the token with the auth request).
+function setupCaptcha(container) {
+  if (!CONFIG.CAPTCHA_SITE_KEY || !captchaKeyValid()) return false;
+  const provider = (CONFIG.CAPTCHA_PROVIDER || "turnstile").toLowerCase();
+
+  if (provider === "hcaptcha") {
+    const div = document.createElement("div");
+    div.className = "h-captcha";
+    div.dataset.sitekey = CONFIG.CAPTCHA_SITE_KEY;
+    container.appendChild(div);
+    if (!document.querySelector('script[src*="hcaptcha.com/1/api.js"]')) {
+      const s = document.createElement("script");
+      s.src = "https://hcaptcha.com/1/api.js?render=explicit";
+      s.async = true;
+      s.defer = true;
+      s.onload = () => {
+        if (window.hcaptcha) hcaptcha.render(div, { sitekey: CONFIG.CAPTCHA_SITE_KEY });
+      };
+      document.head.appendChild(s);
+    }
+    return true;
+  }
+
+  // Default: Cloudflare Turnstile
+  const div = document.createElement("div");
+  div.className = "cf-turnstile";
+  div.dataset.sitekey = CONFIG.CAPTCHA_SITE_KEY;
+  container.appendChild(div);
+  if (!document.querySelector('script[src*="challenges.cloudflare.com/turnstile"]')) {
+    const s = document.createElement("script");
+    s.src = "https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit";
+    s.async = true;
+    s.defer = true;
+    s.onload = () => {
+      if (window.turnstile) turnstile.render(div, { sitekey: CONFIG.CAPTCHA_SITE_KEY });
+    };
+    document.head.appendChild(s);
+  }
+  return true;
+}
+
+// Read the current CAPTCHA token from whichever widget is present.
+function getCaptchaToken() {
+  try {
+    if (window.turnstile && document.querySelector(".cf-turnstile")) {
+      return window.turnstile.getResponse(document.querySelector(".cf-turnstile")) || null;
+    }
+    if (window.hcaptcha && document.querySelector(".h-captcha")) {
+      return document.querySelector(".h-captcha textarea[name='h-captcha-response']")?.value || null;
+    }
+  } catch (e) {}
+  return null;
+}
+
+// Block submit until the CAPTCHA is solved.
+function waitForCaptcha(timeoutMs = 120000) {
+  return new Promise((resolve) => {
+    const started = Date.now();
+    const timer = setInterval(() => {
+      const token = getCaptchaToken();
+      if (token) { clearInterval(timer); resolve(token); return; }
+      if (Date.now() - started > timeoutMs) { clearInterval(timer); resolve(null); }
+    }, 400);
+  });
+}
+
 function setupAuthForm(formId, mode) {
   const form = document.getElementById(formId);
   if (!form) return;
+
+  // Render the CAPTCHA widget (if a valid site key is configured)
+  const captchaSlot = document.createElement("div");
+  captchaSlot.id = "captchaSlot";
+  captchaSlot.style.marginTop = "12px";
+  const submitBtn = form.querySelector("button[type=submit]");
+  if (submitBtn) form.insertBefore(captchaSlot, submitBtn);
+  const captchaEnabled = setupCaptcha(captchaSlot);
 
   form.addEventListener("submit", async (e) => {
     e.preventDefault();
@@ -304,6 +389,21 @@ function setupAuthForm(formId, mode) {
       return;
     }
 
+    // If CAPTCHA is active, wait for the user to complete it
+    let captchaToken = null;
+    if (captchaEnabled) {
+      btn.disabled = true;
+      captchaToken = await waitForCaptcha();
+      if (!captchaToken) {
+        btn.disabled = false;
+        if (errBox) {
+          errBox.textContent = "Please complete the security check first.";
+          errBox.style.display = "block";
+        }
+        return;
+      }
+    }
+
     btn.disabled = true;
     const original = btn.textContent;
     btn.textContent = "Please wait...";
@@ -315,10 +415,10 @@ function setupAuthForm(formId, mode) {
         res = await supabase.auth.signUp({
           email,
           password,
-          options: { data: { full_name: name } },
+          options: { data: { full_name: name }, captchaToken },
         });
       } else {
-        res = await supabase.auth.signInWithPassword({ email, password });
+        res = await supabase.auth.signInWithPassword({ email, password, options: { captchaToken } });
       }
 
       if (res.error) throw res.error;
