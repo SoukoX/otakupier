@@ -76,48 +76,56 @@
 
       try {
         // Show ~100 anime per page by fetching a few API pages (25 each),
-        // so the catalog feels as full as the home page.
+        // so the catalog feels as full as the home page. Pages are fetched
+        // in parallel and failures are tolerated — if Jikan drops one page,
+        // we still show whatever loaded instead of killing the whole grid.
         const PER_PAGE = 4;
         const firstPage = (state.page - 1) * PER_PAGE + 1;
-        const results = [];
-        let usedFallback = false;
+        const fetchers = [];
         for (let p = 0; p < PER_PAGE; p++) {
-          try {
-            let res;
-            if (state.q) {
-              res = await JIKAN.search(state.q, firstPage + p);
-            } else if (state.genre) {
-              res = await JIKAN.byGenre(state.genre, firstPage + p);
-            } else {
-              res = await JIKAN.catalog(firstPage + p);
-            }
-            results.push(res);
-          } catch (err) {
-            usedFallback = true;
-            results.push(await JIKAN.catalog(firstPage + p));
+          if (state.q) {
+            fetchers.push(JIKAN.search(state.q, firstPage + p));
+          } else if (state.genre) {
+            fetchers.push(JIKAN.byGenre(state.genre, firstPage + p));
+          } else {
+            fetchers.push(JIKAN.catalog(firstPage + p));
           }
         }
+        const settled = await Promise.allSettled(fetchers);
+        const results = settled
+          .filter((s) => s.status === "fulfilled" && s.value && s.value.data)
+          .map((s) => s.value);
+        const failed = settled.length - results.length;
 
         grid.innerHTML = "";
         await JIKAN.loadEdits();
-        if (usedFallback) {
-          grid.innerHTML = `<div class="empty-state">Some data was unavailable — showing popular anime instead.</div>`;
+        if (failed > 0) {
+          const warn = document.createElement("div");
+          warn.className = "empty-state";
+          warn.style.marginBottom = "16px";
+          warn.innerHTML = `Some data was unavailable (${failed} of ${settled.length} requests) — showing what loaded. <a href="catalog.html" style="color:var(--accent)">Reload</a>`;
+          grid.appendChild(warn);
         }
         let count = 0;
         results.forEach((res) => {
-          if (!res.data) return;
           res.data.forEach((a) => {
             grid.appendChild(JIKAN.card(a));
             count++;
           });
         });
         if (!count) {
-          grid.innerHTML = `<div class="empty-state">No anime found. Try a different search.</div>`;
+          if (failed > 0) {
+            grid.innerHTML = `<div class="empty-state">Could not load this page right now (Jikan is having issues). <a href="catalog.html" style="color:var(--accent)">Retry</a></div>`;
+          } else {
+            grid.innerHTML = `<div class="empty-state">No anime found. Try a different search.</div>`;
+          }
         }
 
-        const total = results[0]?.pagination?.items?.total;
-        const apiLast = results[0]?.pagination?.last_visible_page || 1;
-        const lastPage = Math.ceil(apiLast / PER_PAGE);
+        // Use the first successful response for pagination metadata
+        const metaRes = results[0] || settled.find((s) => s.status === "fulfilled")?.value;
+        const total = metaRes?.pagination?.items?.total;
+        const apiLast = metaRes?.pagination?.last_visible_page || state.page;
+        const lastPage = Math.max(state.page, Math.ceil(apiLast / PER_PAGE));
         document.getElementById("pageInfo").textContent =
           total ? `Page ${state.page} of ${lastPage} (${total.toLocaleString()} titles)` : `Page ${state.page} of ${lastPage}`;
         document.getElementById("prevBtn").style.visibility = state.page > 1 ? "visible" : "hidden";

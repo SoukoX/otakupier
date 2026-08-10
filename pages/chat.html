@@ -29,7 +29,17 @@
   <script src="../js/app.js"></script>
   <script>
     const MAX_MSG_LEN = 1000;
+    // Chat history resets daily: only show messages from the last 24h.
+    const CHAT_WINDOW_MS = 24 * 60 * 60 * 1000;
     let channel = null;
+
+    function withinWindow(m) {
+      try {
+        return Date.now() - new Date(m.created_at).getTime() < CHAT_WINDOW_MS;
+      } catch (e) {
+        return true;
+      }
+    }
 
     function scrollBottom() {
       const box = document.getElementById("messages");
@@ -91,7 +101,11 @@
       if (error) return;
       const box = document.getElementById("messages");
       box.innerHTML = "";
-      await Promise.all([...data].reverse().map((m) => appendMessage(m)));
+      const recent = data.filter(withinWindow);
+      await Promise.all([...recent].reverse().map((m) => appendMessage(m)));
+      if (data.length && recent.length === 0) {
+        box.innerHTML = `<div class="chat-join">Chat history resets every 24 hours. Be the first to say something today!</div>`;
+      }
       scrollBottom();
       subscribe();
     }
@@ -101,6 +115,7 @@
       channel = supabase
         .channel("public:chat_messages")
         .on("postgres_changes", { event: "INSERT", schema: "public", table: "chat_messages" }, (payload) => {
+          if (!withinWindow(payload.new)) return;
           appendMessage(payload.new);
           scrollBottom();
         })
@@ -172,8 +187,10 @@
       window.onAuthStateChanged = () => {
         renderInput();
       };
-      // Daily storage cleanup: purge messages older than 24h (server-side
-      // pruned; safe to call from any signed-in user)
+      // Daily storage cleanup: purge messages older than 24h server-side.
+      // Safe to call from any signed-in user. If the DB function isn't
+      // deployed yet, this fails silently and the client-side 24h filter
+      // still hides old messages.
       if (isLoggedIn()) {
         supabase.rpc("prune_chat_messages").then(({ data }) => {
           if (data > 0) console.log(`[chat] pruned ${data} old messages`);

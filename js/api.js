@@ -30,11 +30,13 @@ const JIKAN = {
     }
   },
 
-  // Small wrapper with retry/backoff to respect Jikan rate limits (~3 req/sec)
-  async get(path, retries = 5) {
+  // Small wrapper with retry/backoff to respect Jikan rate limits (~3 req/sec).
+  // Retries are fast (no long sleep on transient failures) so slow Jikan
+  // periods don't make pages crawl.
+  async get(path, retries = 3) {
     return this._enqueue(async () => {
       for (let attempt = 0; attempt < retries; attempt++) {
-        if (attempt > 0) await new Promise((r) => setTimeout(r, 700 * attempt));
+        if (attempt > 0) await new Promise((r) => setTimeout(r, 350));
         let res;
         try {
           res = await fetch(`${this.base}${path}`);
@@ -55,6 +57,18 @@ const JIKAN = {
         throw new Error(`Jikan API error ${res.status}`);
       }
       throw new Error(`Jikan API error after retries`);
+    });
+  },
+
+  // In-memory cache for repeated lookups (e.g. the same anime referenced from
+  // related/cards). Keys on the full path so paginated calls stay distinct.
+  _cache: new Map(),
+  cachedGet(path, ttlMs = 10 * 60 * 1000) {
+    const hit = this._cache.get(path);
+    if (hit && Date.now() - hit.at < ttlMs) return Promise.resolve(hit.val);
+    return this.get(path).then((val) => {
+      this._cache.set(path, { at: Date.now(), val });
+      return val;
     });
   },
 
@@ -102,9 +116,10 @@ const JIKAN = {
     return this.get(`/top/anime?page=${page}`);
   },
 
-  // Full details for one anime
+  // Full details for one anime (cached — the same anime is looked up from
+  // cards, related sections, and profiles repeatedly)
   async getAnime(id) {
-    return this.get(`/anime/${id}/full`);
+    return this.cachedGet(`/anime/${id}/full`);
   },
 
   // Characters for an anime

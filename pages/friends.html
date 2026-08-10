@@ -29,6 +29,15 @@
       }
       main.innerHTML = `
         <div class="section-head"><h2>Friends</h2></div>
+        <div class="review-form" style="margin-bottom:24px;">
+          <strong>Find people by username</strong>
+          <div style="display:flex; gap:10px; flex-wrap:wrap; margin-top:10px;">
+            <input type="text" id="userSearch" class="search-input" style="flex:1; min-width:200px;"
+                   placeholder="Search by username..." onkeydown="if(event.key==='Enter')searchUsers()">
+            <button class="btn btn-primary" onclick="searchUsers()">Search</button>
+          </div>
+          <div id="userResults" style="margin-top:12px;"></div>
+        </div>
         <h3 class="sub-head">Friend requests</h3>
         <div id="requests"></div>
         <h3 class="sub-head">Your friends</h3>
@@ -107,6 +116,102 @@
         el.innerHTML = `${userRowHtml(f.addressee_id, p?.name, p?.avatar_url)}
           <span class="friend-actions" style="color:var(--text-dim); font-size:.85rem;">Request sent — waiting on them</span>`;
         slot.appendChild(el);
+      }
+    }
+
+    async function searchUsers() {
+      const q = (document.getElementById("userSearch").value || "").trim();
+      const box = document.getElementById("userResults");
+      if (!q) {
+        box.innerHTML = "";
+        return;
+      }
+      box.innerHTML = `<div class="loading"><div class="spinner"></div>Searching...</div>`;
+      let users = [];
+      try {
+        const { data, error } = await supabase
+          .from("profiles")
+          .select("id, name, xp, avatar_url, is_admin")
+          .ilike("name", `%${q}%`)
+          .limit(20);
+        if (error) throw error;
+        users = data || [];
+      } catch (e) {
+        box.innerHTML = `<div class="empty-state">Search failed. Try again.</div>`;
+        return;
+      }
+      if (!users.length) {
+        box.innerHTML = `<div class="empty-state">No users found with that name.</div>`;
+        return;
+      }
+      box.innerHTML = "";
+      for (const u of users) {
+        const el = document.createElement("div");
+        el.className = "user-row";
+        el.innerHTML = `
+          <div class="avatar">${u.avatar_url ? `<img src="${u.avatar_url}" alt="">` : (u.name || "U").charAt(0).toUpperCase()}</div>
+          <div style="flex:1; min-width:0;">
+            ${u.is_admin ? adminNameHTML(u) : `<a href="profile.html?id=${u.id}" style="color:var(--text); text-decoration:none; font-weight:600;">${JIKAN.esc(u.name || "User")}</a>`}
+            <div style="font-size:.75rem; color:var(--text-dim);">${rankForXp(u.xp).icon} ${rankForXp(u.xp).name}</div>
+          </div>
+          <span id="resTag-${u.id}"></span>
+          <div class="friend-actions">
+            <a class="btn btn-outline btn-small" href="profile.html?id=${u.id}">Profile</a>
+            <span id="resBtn-${u.id}"></span>
+          </div>`;
+        box.appendChild(el);
+        renderSearchFriendBtn(u, el);
+      }
+    }
+
+    async function renderSearchFriendBtn(u, el) {
+      const btnSlot = el.querySelector(`#resBtn-${u.id}`);
+      if (!isLoggedIn()) {
+        btnSlot.innerHTML = `<a class="btn btn-primary btn-small" href="login.html">Add friend</a>`;
+        return;
+      }
+      if (u.id === currentUser.id) {
+        btnSlot.innerHTML = `<span style="color:var(--text-dim); font-size:.8rem;">That's you</span>`;
+        return;
+      }
+      try {
+        const { data } = await supabase
+          .from("friendships")
+          .select("*")
+          .or(`and(requester_id.eq.${currentUser.id},addressee_id.eq.${u.id}),and(requester_id.eq.${u.id},addressee_id.eq.${currentUser.id})`)
+          .maybeSingle();
+        if (!data) {
+          btnSlot.innerHTML = `<button class="btn btn-primary btn-small" onclick="sendFriendReqByName('${u.id}')">Add friend</button>`;
+        } else if (data.status === "accepted") {
+          btnSlot.innerHTML = `<span style="color:var(--accent-3); font-size:.8rem;">✓ Friends</span>`;
+        } else if (data.requester_id === currentUser.id) {
+          btnSlot.innerHTML = `<span style="color:var(--text-dim); font-size:.8rem;">Request sent</span>`;
+        } else {
+          btnSlot.innerHTML = `<button class="btn btn-primary btn-small" onclick="acceptFriendReqByName('${data.id}')">Accept</button>`;
+        }
+      } catch (e) {
+        btnSlot.innerHTML = "";
+      }
+    }
+
+    async function sendFriendReqByName(uid) {
+      try {
+        await dbInsert("friendships", { requester_id: currentUser.id, addressee_id: uid, status: "pending" });
+        showToast("Friend request sent!");
+        searchUsers();
+      } catch (err) {
+        showToast("Could not send request");
+      }
+    }
+
+    async function acceptFriendReqByName(fid) {
+      try {
+        await supabase.from("friendships").update({ status: "accepted" }).eq("id", fid);
+        showToast("You are now friends! +10 XP");
+        awardXp(10);
+        searchUsers();
+      } catch (err) {
+        showToast("Could not accept");
       }
     }
 
