@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Thread — OtakuPier</title>
+  <link rel="stylesheet" href="../css/style.css">
+</head>
+<body>
+  <nav class="navbar" id="navbar"></nav>
+
+  <main class="container" id="main">
+    <div class="loading"><div class="spinner"></div>Loading thread...</div>
+  </main>
+
+  <footer id="siteFooter"></footer>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="../js/config.js"></script>
+  <script src="../js/api.js"></script>
+  <script src="../js/app.js"></script>
+  <script>
+    const threadId = new URLSearchParams(window.location.search).get("id");
+
+    async function load() {
+      const main = document.getElementById("main");
+      try {
+        const { data: thread, error } = await supabase
+          .from("forum_threads")
+          .select("*")
+          .eq("id", threadId)
+          .single();
+        if (error || !thread) {
+          main.innerHTML = `<div class="empty-state">Thread not found.</div>`;
+          return;
+        }
+        document.title = `${thread.title} — OtakuPier`;
+        const author = await fetchProfile(thread.user_id);
+        main.innerHTML = `
+          <a href="forums.html" class="btn btn-outline btn-small" style="margin-bottom:16px;">&larr; All threads</a>
+          <div class="review">
+            <div class="review-top">
+              <div class="review-author">
+                <div class="avatar" style="cursor:pointer;" onclick="location.href='profile.html?id=${thread.user_id}'">${(author?.name || "U").charAt(0).toUpperCase()}</div>
+                <a href="profile.html?id=${thread.user_id}" style="color:var(--text); text-decoration:none;">${JIKAN.esc(author?.name || "User")}</a>
+                <span id="rankTag"></span>
+              </div>
+              <span class="genre-tag" style="font-size:.7rem;">${JIKAN.esc(thread.category || "general")}</span>
+            </div>
+            <h2 style="margin:10px 0 6px;">${JIKAN.esc(thread.title)}</h2>
+            <div class="review-date">${new Date(thread.created_at).toLocaleString()}</div>
+            <p style="margin-top:10px; white-space:pre-wrap;">${JIKAN.esc(thread.body)}</p>
+            ${isLoggedIn() && currentUser.id === thread.user_id ? `<button class="btn btn-danger btn-small" style="margin-top:10px;" onclick="deleteThread()">Delete thread</button>` : ""}
+          </div>
+
+          <h3 class="sub-head">Replies</h3>
+          <div id="replies"></div>
+
+          <div id="replyForm"></div>`;
+        if (author) {
+          document.getElementById("rankTag").innerHTML = rankTag(thread.user_id, author);
+          const nameEl = main.querySelector(".review-author a");
+          if (author.is_admin) nameEl.outerHTML = adminNameHTML(author);
+        }
+        await loadReplies();
+        renderReplyForm();
+      } catch (err) {
+        main.innerHTML = `<div class="empty-state">Could not load thread.</div>`;
+      }
+    }
+
+    async function fetchProfile(id) {
+      const { data } = await supabase.from("profiles").select("name, xp, is_admin").eq("id", id).maybeSingle();
+      return data;
+    }
+
+    async function loadReplies() {
+      const box = document.getElementById("replies");
+      const { data, error } = await supabase
+        .from("forum_replies")
+        .select("*")
+        .eq("thread_id", threadId)
+        .order("created_at", { ascending: true });
+      if (error) { box.innerHTML = `<div class="empty-state">Could not load replies.</div>`; return; }
+      box.innerHTML = "";
+      if (!data.length) {
+        box.innerHTML = `<div class="empty-state">No replies yet. Be the first to respond!</div>`;
+        return;
+      }
+      for (const r of data) {
+        const p = await fetchProfile(r.user_id);
+        const el = document.createElement("div");
+        el.className = "review";
+        el.innerHTML = `
+          <div class="review-top">
+            <div class="review-author">
+              <div class="avatar" style="cursor:pointer;" onclick="location.href='profile.html?id=${r.user_id}'">${(p?.name || "U").charAt(0).toUpperCase()}</div>
+              <a href="profile.html?id=${r.user_id}" style="color:var(--text); text-decoration:none;">${JIKAN.esc(p?.name || "User")}</a>
+              <span id="rtag-${r.id}"></span>
+            </div>
+          </div>
+          <div class="review-date">${new Date(r.created_at).toLocaleString()}</div>
+          <p style="margin-top:8px; white-space:pre-wrap;">${JIKAN.esc(r.body)}</p>
+          ${isLoggedIn() && currentUser.id === r.user_id ? `<button class="btn btn-danger btn-small" style="margin-top:8px;" onclick="deleteReply(${r.id})">Delete</button>` : ""}`;
+        box.appendChild(el);
+        if (p) {
+          document.getElementById(`rtag-${r.id}`).innerHTML = rankTag(r.user_id, p);
+          const nameEl = el.querySelector(".review-author a");
+          if (p.is_admin) nameEl.outerHTML = adminNameHTML(p);
+        }
+      }
+    }
+
+    function renderReplyForm() {
+      const slot = document.getElementById("replyForm");
+      if (!isLoggedIn()) {
+        slot.innerHTML = `<p style="color:var(--text-dim); margin-top:16px;"><a href="login.html" style="color:var(--accent)">Login</a> to reply.</p>`;
+        return;
+      }
+      slot.innerHTML = `
+        <form class="review-form" id="replyFormEl">
+          <textarea id="replyBody" placeholder="Write a reply..." style="min-height:90px;"></textarea>
+          <button type="submit" class="btn btn-primary">Reply</button>
+        </form>`;
+      document.getElementById("replyFormEl").addEventListener("submit", submitReply);
+    }
+
+    async function submitReply(e) {
+      e.preventDefault();
+      const body = document.getElementById("replyBody").value.trim();
+      if (!body) return;
+      try {
+        await dbInsert("forum_replies", { thread_id: Number(threadId), user_id: currentUser.id, body });
+        awardXp(5); // +5 XP per reply
+        showToast("Reply posted! +5 XP");
+        loadReplies();
+        document.getElementById("replyBody").value = "";
+      } catch (err) {
+        showToast("Could not reply: " + err.message);
+      }
+    }
+
+    async function deleteThread() {
+      if (!confirm("Delete this thread and all replies?")) return;
+      try {
+        await supabase.from("forum_replies").delete().eq("thread_id", threadId);
+        await supabase.from("forum_threads").delete().eq("id", threadId);
+        showToast("Thread deleted");
+        window.location.href = "forums.html";
+      } catch (err) {
+        showToast("Could not delete thread");
+      }
+    }
+
+    async function deleteReply(rid) {
+      try {
+        await supabase.from("forum_replies").delete().eq("id", rid);
+        showToast("Reply deleted");
+        loadReplies();
+      } catch (err) {
+        showToast("Could not delete reply");
+      }
+    }
+
+    document.addEventListener("DOMContentLoaded", load);
+  </script>
+</body>
+</html>

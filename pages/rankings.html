@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Community Rankings — OtakuPier</title>
+  <meta name="description" content="Community rankings powered by OtakuPier users. See the top anime ranked by fans.">
+  <link rel="stylesheet" href="../css/style.css">
+</head>
+<body>
+  <nav class="navbar" id="navbar"></nav>
+
+  <main class="container">
+    <div class="section-head">
+      <h2>Community Rankings</h2>
+      <span style="color:var(--text-dim); font-size:0.9rem;">Ranked by OtakuPier users</span>
+    </div>
+    <div id="rankBody">
+      <div class="empty-state">
+        Rankings need Supabase setup. Once configured, the community's top anime will appear here.
+      </div>
+    </div>
+  </main>
+
+  <footer id="siteFooter"></footer>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="../js/config.js"></script>
+  <script src="../js/api.js"></script>
+  <script src="../js/app.js"></script>
+  <script>
+    async function loadRankings() {
+      if (!SUPABASE_READY || !supabase) return;
+      const body = document.getElementById("rankBody");
+      try {
+        const { data, error } = await supabase
+          .from("rankings")
+          .select("anime_mal_id, anime_title, anime_image, position, user_id, created_at")
+          .limit(1000);
+        if (error) throw error;
+        if (!data.length) {
+          body.innerHTML = `<div class="empty-state">No rankings yet. Open any anime page and rank it!</div>`;
+          return;
+        }
+
+        // Aggregate: average position per anime, weighted by number of voters
+        const agg = {};
+        data.forEach((r) => {
+          if (!agg[r.anime_mal_id]) {
+            agg[r.anime_mal_id] = {
+              id: r.anime_mal_id,
+              title: r.anime_title,
+              image: r.anime_image,
+              sum: 0,
+              count: 0,
+            };
+          }
+          agg[r.anime_mal_id].sum += r.position;
+          agg[r.anime_mal_id].count += 1;
+        });
+
+        const rows = Object.values(agg)
+          .map((a) => ({ ...a, avg: a.sum / a.count }))
+          .sort((a, b) => a.avg - b.avg)
+          .slice(0, 20);
+
+        body.innerHTML = `<div class="rank-list"></div>`;
+        const list = body.querySelector(".rank-list");
+        rows.forEach((r, i) => {
+          const el = document.createElement("div");
+          el.className = "rank-item";
+          el.innerHTML = `
+            <div class="rank-num">${i + 1}</div>
+            <div class="rank-thumb">
+              <img src="${r.image || "https://via.placeholder.com/200x280?text=?"}"
+                   alt="${JIKAN.esc(r.title)}" loading="lazy"
+                   onerror="this.src='https://via.placeholder.com/200x280?text=?'">
+            </div>
+            <div class="rank-title">${JIKAN.esc(r.title)}</div>
+            <div class="rank-score">
+              <div class="score-big">${r.avg.toFixed(1)}</div>
+              <div class="votes">${r.count} vote${r.count === 1 ? "" : "s"}</div>
+            </div>`;
+          el.addEventListener("click", () => (window.location.href = `anime.html?id=${r.id}`));
+          list.appendChild(el);
+        });
+      } catch (err) {
+        body.innerHTML = `<div class="empty-state">Could not load rankings.</div>`;
+      }
+    }
+
+    document.addEventListener("DOMContentLoaded", loadRankings);
+  </script>
+</body>
+</html>

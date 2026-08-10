@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>My List — OtakuPier</title>
+  <link rel="stylesheet" href="../css/style.css">
+</head>
+<body>
+  <nav class="navbar" id="navbar"></nav>
+
+  <main class="container">
+    <div class="section-head">
+      <h2>My List</h2>
+      <span style="color:var(--text-dim); font-size:.9rem;">Anime you've saved</span>
+    </div>
+    <div class="grid" id="savedGrid"></div>
+  </main>
+
+  <footer id="siteFooter"></footer>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="../js/config.js"></script>
+  <script src="../js/api.js"></script>
+  <script src="../js/app.js"></script>
+  <script>
+    async function loadSaved() {
+      const grid = document.getElementById("savedGrid");
+      grid.innerHTML = skeletonGrid(12);
+      if (!isLoggedIn()) {
+        grid.innerHTML = `<div class="empty-state">
+          <a href="login.html" class="btn btn-primary">Login</a>
+          <p style="margin-top:12px;">Login to save anime to your list.</p>
+        </div>`;
+        return;
+      }
+      try {
+        const { data, error } = await supabase
+          .from("saved_anime")
+          .select("*")
+          .eq("user_id", currentUser.id)
+          .order("created_at", { ascending: false });
+        if (error) throw error;
+        grid.innerHTML = "";
+        if (!data.length) {
+          grid.innerHTML = `<div class="empty-state">
+            No anime saved yet. Browse the <a href="catalog.html" style="color:var(--accent)">catalog</a> and hit "Save to My List".</div>`;
+          return;
+        }
+        data.forEach((s) => {
+          const el = document.createElement("div");
+          el.className = "anime-card";
+          el.innerHTML = `
+            <div class="poster">
+              <img src="${s.anime_image || "https://via.placeholder.com/300x400?text=?"}"
+                   alt="${JIKAN.esc(s.anime_title)}" loading="lazy"
+                   onerror="this.src='https://via.placeholder.com/300x400?text=?'">
+            </div>
+            <div class="info">
+              <div class="title">${JIKAN.esc(s.anime_title)}</div>
+              <div class="meta">
+                <button class="btn btn-danger btn-small" onclick="unsave(${s.anime_mal_id}, this)">Remove</button>
+              </div>
+            </div>`;
+          el.addEventListener("click", (e) => {
+            if (e.target.closest("button")) return;
+            window.location.href = `anime.html?id=${s.anime_mal_id}`;
+          });
+          grid.appendChild(el);
+        });
+      } catch (err) {
+        grid.innerHTML = `<div class="empty-state">Could not load your list.</div>`;
+      }
+    }
+
+    async function unsave(malId, btn) {
+      try {
+        await supabase.from("saved_anime").delete().eq("anime_mal_id", malId).eq("user_id", currentUser.id);
+        const card = btn.closest(".anime-card");
+        if (card) card.remove();
+        showToast("Removed from My List");
+      } catch (err) {
+        showToast("Could not remove");
+      }
+    }
+
+    document.addEventListener("DOMContentLoaded", loadSaved);
+  </script>
+</body>
+</html>

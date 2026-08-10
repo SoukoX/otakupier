@@ -1,0 +1,196 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Messages — OtakuPier</title>
+  <link rel="stylesheet" href="../css/style.css">
+</head>
+<body>
+  <nav class="navbar" id="navbar"></nav>
+
+  <main class="container" id="main">
+    <div class="loading"><div class="spinner"></div>Loading...</div>
+  </main>
+
+  <footer id="siteFooter"></footer>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="../js/config.js"></script>
+  <script src="../js/api.js"></script>
+  <script src="../js/app.js"></script>
+  <script>
+    const params = new URLSearchParams(window.location.search);
+    const withId = params.get("with");
+    let activeUserId = withId || null;
+    let activeUserName = "";
+    let dmChannel = null;
+
+    async function load() {
+      const main = document.getElementById("main");
+      if (!isLoggedIn()) {
+        main.innerHTML = `<div class="empty-state"><a href="login.html" class="btn btn-primary">Login</a>
+          <p style="margin-top:12px;">Login to message friends.</p></div>`;
+        return;
+      }
+      // "with=admin" resolves to the first verified admin account
+      if (activeUserId === "admin") {
+        const { data } = await supabase
+          .from("profiles").select("id").eq("is_admin", true).limit(1).maybeSingle();
+        activeUserId = data?.id || null;
+        if (!activeUserId) {
+          main.innerHTML = `<div class="empty-state">No admin account is set up yet.</div>`;
+          return;
+        }
+      }
+      await loadConversations();
+      if (activeUserId) {
+        const p = await fetchProfile(activeUserId);
+        activeUserName = p?.name || "User";
+        openThread(activeUserId);
+      } else {
+        renderPicker();
+      }
+    }
+
+    async function fetchProfile(id) {
+      const { data } = await supabase.from("profiles").select("name, xp, avatar_url, is_admin").eq("id", id).maybeSingle();
+      return data;
+    }
+
+    // Conversation list (most recent first)
+    async function loadConversations() {
+      const [sent, recv] = await Promise.all([
+        supabase.from("messages").select("recipient_id, body, created_at")
+          .eq("sender_id", currentUser.id).order("created_at", { ascending: false }).limit(200),
+        supabase.from("messages").select("sender_id, body, created_at")
+          .eq("recipient_id", currentUser.id).order("created_at", { ascending: false }).limit(200),
+      ]);
+      const last = new Map();
+      (sent.data || []).forEach((m) => last.set(m.recipient_id, m));
+      (recv.data || []).forEach((m) => {
+        const prev = last.get(m.sender_id);
+        if (!prev || new Date(m.created_at) > new Date(prev.created_at)) last.set(m.sender_id, m);
+      });
+      return [...last.entries()];
+    }
+
+    async function renderPicker() {
+      activeDmPartner = null;
+      const main = document.getElementById("main");
+      const convos = await loadConversations();
+      if (!convos.length) {
+        main.innerHTML = `<div class="section-head"><h2>Messages</h2></div>
+          <div class="empty-state">No conversations yet. Go to a friend's profile and hit Message.</div>`;
+        return;
+      }
+      let html = `<div class="section-head"><h2>Messages</h2></div>`;
+      for (const [uid, lastMsg] of convos) {
+        const p = await fetchProfile(uid);
+        html += `<div class="user-row" style="cursor:pointer;" onclick="openThread('${uid}')">
+          <div class="avatar">${p?.avatar_url ? `<img src="${p.avatar_url}" alt="">` : (p?.name || "U").charAt(0).toUpperCase()}</div>
+          <div style="flex:1;">
+            <b>${p?.is_admin ? adminNameHTML(p) : JIKAN.esc(p?.name || "User")}</b>
+            <div style="color:var(--text-dim); font-size:.8rem; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:60vw;">${JIKAN.esc(lastMsg.body)}</div>
+          </div>
+          <span style="color:var(--text-dim); font-size:.75rem;">${new Date(lastMsg.created_at).toLocaleDateString()}</span>
+        </div>`;
+      }
+      main.innerHTML = html;
+    }
+
+    async function openThread(uid) {
+      activeUserId = uid;
+      activeDmPartner = uid;
+      const p = await fetchProfile(uid);
+      activeUserName = p?.name || "User";
+      markDmRead(uid);
+      const main = document.getElementById("main");
+      main.innerHTML = `
+        <div style="display:flex; align-items:center; gap:12px; margin-bottom:16px;">
+          <button class="btn btn-outline btn-small" onclick="renderPicker()">&larr; All</button>
+          <a href="profile.html?id=${uid}" class="review-author" style="color:var(--text); text-decoration:none; font-weight:700;">
+            <div class="avatar">${p?.avatar_url ? `<img src="${p.avatar_url}" alt="">` : activeUserName.charAt(0).toUpperCase()}</div>
+            ${p?.is_admin ? adminNameHTML(p) : JIKAN.esc(activeUserName)}</a>
+        </div>
+        <div class="dm-thread">
+          <div class="dm-messages" id="dmMessages"></div>
+        <div class="dm-input">
+          <div style="flex:1; display:flex; flex-direction:column;">
+            <input type="text" id="dmInput" class="search-input" maxlength="1000" placeholder="Message... (Enter to send)" 
+                   onkeydown="if(event.key==='Enter')sendDm()" oninput="updateDmCounter()">
+            <span id="dmCount" style="font-size:.7rem; color:var(--text-dim); align-self:flex-end; margin-top:2px;">0/1000</span>
+          </div>
+          <button class="btn btn-primary" onclick="sendDm()">Send</button>
+        </div>`;
+      loadDm();
+      subscribeDm();
+    }
+
+    async function loadDm() {
+      const box = document.getElementById("dmMessages");
+      if (!box) return;
+      const { data } = await supabase
+        .from("messages")
+        .select("*")
+        .or(`and(sender_id.eq.${currentUser.id},recipient_id.eq.${activeUserId}),and(sender_id.eq.${activeUserId},recipient_id.eq.${currentUser.id})`)
+        .order("created_at", { ascending: true })
+        .limit(200);
+      box.innerHTML = "";
+      (data || []).forEach(renderDm);
+      box.scrollTop = box.scrollHeight;
+    }
+
+    function renderDm(m) {
+      const box = document.getElementById("dmMessages");
+      if (!box) return;
+      const mine = m.sender_id === currentUser.id;
+      const el = document.createElement("div");
+      el.className = `dm-bubble ${mine ? "mine" : "theirs"}`;
+      el.innerHTML = `<div class="dm-who">${mine ? "You" : JIKAN.esc(activeUserName)}</div>${JIKAN.esc(m.body)}`;
+      box.appendChild(el);
+    }
+
+    async function sendDm() {
+      const input = document.getElementById("dmInput");
+      const text = input.value.trim();
+      if (!text || !activeUserId) return;
+      if (text.length > 1000) { showToast("Message too long (max 1000 characters)"); return; }
+      try {
+        await dbInsert("messages", { sender_id: currentUser.id, recipient_id: activeUserId, body: text });
+        input.value = "";
+        updateDmCounter();
+        loadDm();
+      } catch (err) {
+        showToast("Could not send: " + err.message);
+      }
+    }
+
+    function updateDmCounter() {
+      const c = document.getElementById("dmCount");
+      if (!c) return;
+      const len = (document.getElementById("dmInput")?.value || "").length;
+      c.textContent = `${len}/1000`;
+      c.style.color = len > 900 ? "var(--danger)" : "var(--text-dim)";
+    }
+
+    function subscribeDm() {
+      if (dmChannel) supabase.removeChannel(dmChannel);
+      dmChannel = supabase
+        .channel(`dm-${currentUser.id}-${activeUserId}`)
+        .on("postgres_changes", { event: "INSERT", schema: "public", table: "messages" }, (payload) => {
+          const m = payload.new;
+          if ((m.sender_id === currentUser.id && m.recipient_id === activeUserId) ||
+              (m.sender_id === activeUserId && m.recipient_id === currentUser.id)) {
+            renderDm(m);
+            const box = document.getElementById("dmMessages");
+            if (box) box.scrollTop = box.scrollHeight;
+          }
+        })
+        .subscribe();
+    }
+
+    document.addEventListener("DOMContentLoaded", load);
+  </script>
+</body>
+</html>

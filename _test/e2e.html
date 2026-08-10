@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><title>e2e</title>
+</head>
+<body>
+<pre id="out"></pre>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="../js/config.js"></script>
+<script>
+const out = document.getElementById("out");
+const results = [];
+function log(msg) { results.push(msg); out.textContent = results.join("\n"); document.title = results.join(" | "); }
+const sb = window.supabase.createClient(CONFIG.SUPABASE_URL, CONFIG.SUPABASE_ANON_KEY);
+
+const ts = Date.now().toString().slice(-6);
+const EMAIL_A = `tester-a-${ts}@example.com`;
+const EMAIL_B = `tester-b-${ts}@example.com`;
+const PASS = "TestPass123!";
+
+async function signIn(email) {
+  const { error } = await sb.auth.signInWithPassword({ email, password: PASS });
+  if (!error) return true;
+  const { data, error: upErr } = await sb.auth.signUp({ email, password: PASS, options: { data: { full_name: email.split("@")[0] } } });
+  if (upErr) throw upErr;
+  return false; // newly created (may need email confirm)
+}
+
+function step(name, ok, extra) {
+  log(`${ok ? "PASS" : "FAIL"}  ${name}${extra ? "  -- " + extra : ""}`);
+}
+
+(async () => {
+  try {
+    const createdA = await signIn(EMAIL_A);
+    log(`--- signed in as A (${EMAIL_A}) created=${createdA} ---`);
+    if (!createdA) throw new Error("A: fresh signup — email confirmation may be required; signIn failed");
+
+    // 1. profile auto-created by trigger
+    let { data: prof, error } = await sb.from("profiles").select("*").eq("id", sb.auth.getUser().data.user.id).maybeSingle();
+    step("profile auto-created by trigger", !error && prof, error?.message);
+
+    // 2. claim daily XP
+    let { data: bonus, error: e2 } = await sb.rpc("claim_daily_xp");
+    step("claim_daily_xp", !e2 && bonus === 5, e2?.message || "bonus=" + bonus);
+
+    // 3. save anime
+    let { error: e3 } = await sb.from("saved_anime").insert({ user_id: sb.auth.getUser().data.user.id, anime_mal_id: 5114, anime_title: "Fullmetal Alchemist: Brotherhood" });
+    step("save anime", !e3, e3?.message);
+
+    // 4. post review
+    let { data: review, error: e4 } = await sb.from("reviews").insert({ user_id: sb.auth.getUser().data.user.id, anime_mal_id: 5114, anime_title: "FMAB", rating: 10, text: "e2e review " + ts }).select().single();
+    step("post review", !e4 && review, e4?.message);
+
+    // 5. ranking vote
+    let { error: e5 } = await sb.from("rankings").insert({ user_id: sb.auth.getUser().data.user.id, anime_mal_id: 5114, anime_title: "FMAB", anime_image: "", position: 1 });
+    step("ranking vote", !e5, e5?.message);
+
+    // 6. chat message
+    let { error: e6 } = await sb.from("chat_messages").insert({ user_id: sb.auth.getUser().data.user.id, author_name: "tester-a", message: "e2e chat " + ts });
+    step("chat message", !e6, e6?.message);
+
+    // 7. forum thread
+    let { data: thread, error: e7 } = await sb.from("forum_threads").insert({ user_id: sb.auth.getUser().data.user.id, title: "E2E Thread " + ts, body: "hello from e2e", category: "general" }).select().single();
+    step("forum thread", !e7 && thread, e7?.message);
+
+    // 8. review like (other user likes A's review)
+    await signIn(EMAIL_B);
+    let { data: userA } = await sb.auth.getUser();
+    let { error: e8 } = await sb.from("review_likes").insert({ user_id: sb.auth.getUser().data.user.id, review_id: review.id });
+    step("review like (B likes A)", !e8, e8?.message);
+
+    // 9. forum reply (B replies to A's thread)
+    let { data: reply, error: e9 } = await sb.from("forum_replies").insert({ thread_id: thread.id, user_id: sb.auth.getUser().data.user.id, body: "reply from B " + ts }).select().single();
+    step("forum reply", !e9 && reply, e9?.message);
+
+    // 10. create club + join + post
+    let { data: club, error: e10 } = await sb.from("clubs").insert({ created_by: sb.auth.getUser().data.user.id, name: "E2E Club " + ts, description: "test club" }).select().single();
+    step("create club", !e10 && club, e10?.message);
+    if (club) {
+      let { error: e10b } = await sb.from("club_members").insert({ club_id: club.id, user_id: sb.auth.getUser().data.user.id, role: "owner" });
+      step("join own club", !e10b, e10b?.message);
+      let { error: e10c } = await sb.from("club_posts").insert({ club_id: club.id, user_id: sb.auth.getUser().data.user.id, body: "club post " + ts });
+      step("club post", !e10c, e10c?.message);
+      // A joins B's club? Instead: B created club above, A (B's own account) fine.
+    }
+
+    // 11. friend request A -> B (B sends to A)
+    let { data: userB } = await sb.auth.getUser();
+    let { error: e11 } = await sb.from("friendships").insert({ requester_id: userA.user.id, addressee_id: userB.user.id, status: "pending" });
+    step("friend request", !e11, e11?.message);
+
+    // 12. B accepts
+    let { error: e12 } = await sb.from("friendships").update({ status: "accepted" }).eq("requester_id", userA.user.id).eq("addressee_id", userB.user.id);
+    step("accept friend request", !e12, e12?.message);
+
+    // 13. DM A -> B
+    let { error: e13 } = await sb.from("messages").insert({ sender_id: userA.user.id, recipient_id: userB.user.id, body: "hello from A " + ts });
+    step("send DM", !e13, e13?.message);
+
+    // 14. XP reflects activity
+    let { data: profA } = await sb.from("profiles").select("xp").eq("id", userA.user.id).maybeSingle();
+    log("A total XP: " + (profA?.xp ?? "?") + " (expected >=5 from daily + 5 save + 10 review + 10 like-reward + 15 thread + chat)");
+
+    // 15. RLS: B cannot read A's DMs
+    let { data: dmCheck } = await sb.from("messages").select("id").eq("sender_id", userA.user.id);
+    step("RLS: B cannot see A's outgoing DMs", (dmCheck ?? []).length === 0, "count=" + (dmCheck?.length ?? "null"));
+
+    // 16. Admin security: non-admin cannot self-promote (trigger blocks it)
+    let selfId = userA.user.id;
+    let { error: e16 } = await sb.from("profiles").update({ is_admin: true }).eq("id", selfId);
+    step("RLS: non-admin cannot set own is_admin", !!e16, e16?.message);
+    let { data: profSelf } = await sb.from("profiles").select("is_admin").eq("id", selfId).maybeSingle();
+    step("RLS: is_admin stays false after attempt", profSelf?.is_admin === false, "is_admin=" + profSelf?.is_admin);
+
+    // 17. Non-admin cannot write to admin tables
+    let { error: e17a } = await sb.from("anime_edits").insert({ mal_id: 1, title: "hax" });
+    step("RLS: non-admin cannot insert anime_edits", !!e17a, e17a?.message);
+    let { error: e17b } = await sb.from("custom_anime").insert({ title: "hax anime" });
+    step("RLS: non-admin cannot insert custom_anime", !!e17b, e17b?.message);
+    let { error: e17c } = await sb.from("bans").insert({ user_id: userB.user.id, reason: "hax" });
+    step("RLS: non-admin cannot insert bans", !!e17c, e17c?.message);
+
+    // 18. Non-admin cannot delete someone else's content
+    let { error: e18a } = await sb.from("reviews").delete().eq("id", review.id);
+    step("RLS: non-admin cannot delete others' review", !!e18a, e18a?.message);
+    let { error: e18b } = await sb.from("chat_messages").delete().not("user_id", "eq", sb.auth.getUser().data.user.id).limit(1);
+    step("RLS: non-admin cannot delete others' chat messages", !!e18b, e18b?.message);
+
+    // 19. Non-admin cannot update a profile that isn't theirs
+    let { error: e19 } = await sb.from("profiles").update({ name: "imposter" }).eq("id", userB.user.id);
+    step("RLS: non-admin cannot edit another user's profile", !!e19, e19?.message);
+
+    // 20. Non-admin cannot delete a ban row / manage admin tables
+    let { error: e20 } = await sb.from("bans").delete().eq("user_id", userB.user.id);
+    step("RLS: non-admin cannot delete bans", !!e20, e20?.message);
+
+    log("DONE — users: " + EMAIL_A + " / " + EMAIL_B);
+  } catch (err) {
+    log("FATAL: " + (err.message || err));
+    log("DONE — users: " + EMAIL_A + " / " + EMAIL_B);
+  }
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Clubs — OtakuPier</title>
+  <link rel="stylesheet" href="../css/style.css">
+</head>
+<body>
+  <nav class="navbar" id="navbar"></nav>
+
+  <main class="container">
+    <div class="section-head">
+      <h2>Clubs</h2>
+      <button class="btn btn-primary" onclick="showNewClub()">＋ Create club</button>
+    </div>
+
+    <div id="clubList">
+      <div class="loading"><div class="spinner"></div>Loading clubs...</div>
+    </div>
+  </main>
+
+  <footer id="siteFooter"></footer>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="../js/config.js"></script>
+  <script src="../js/api.js"></script>
+  <script src="../js/app.js"></script>
+  <script>
+    async function loadClubs() {
+      const list = document.getElementById("clubList");
+      try {
+        const { data, error } = await supabase
+          .from("clubs")
+          .select("*, members:club_members(count)")
+          .order("created_at", { ascending: false });
+        if (error) throw error;
+        list.innerHTML = "";
+        if (!data.length) {
+          list.innerHTML = `<div class="empty-state">No clubs yet. Create one to gather fellow fans!</div>`;
+          return;
+        }
+        for (const c of data) {
+          const owner = await fetchProfile(c.created_by);
+          const el = document.createElement("div");
+          el.className = "user-row";
+          el.style.cursor = "pointer";
+          el.innerHTML = `
+            <div class="avatar" style="width:44px; height:44px; font-size:1.2rem;">${JIKAN.esc(c.name).charAt(0).toUpperCase()}</div>
+            <div style="flex:1; min-width:0;">
+              <b style="font-size:1rem;">${JIKAN.esc(c.name)}</b>
+              <div style="color:var(--text-dim); font-size:.8rem; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${JIKAN.esc(c.description || "")}</div>
+              <div style="color:var(--text-dim); font-size:.75rem; margin-top:4px;">${c.members.length} members • owner: ${JIKAN.esc(owner?.name || "User")}${owner?.is_admin ? " 👑" : ""}</div>
+            </div>`;
+          el.addEventListener("click", () => (window.location.href = `club.html?id=${c.id}`));
+          list.appendChild(el);
+        }
+      } catch (err) {
+        list.innerHTML = `<div class="empty-state">Could not load clubs.</div>`;
+      }
+    }
+
+    async function fetchProfile(id) {
+      const { data } = await supabase.from("profiles").select("name, is_admin").eq("id", id).maybeSingle();
+      return data;
+    }
+
+    function showNewClub() {
+      if (!isLoggedIn()) {
+        showToast("Login to create a club");
+        window.location.href = "login.html";
+        return;
+      }
+      const list = document.getElementById("clubList");
+      list.innerHTML = `
+        <form class="review-form" id="newClubForm">
+          <div class="form-group">
+            <label>Club name</label>
+            <input type="text" id="clubName" placeholder="e.g. Attack on Titan Fans" style="width:100%; padding:12px; border-radius:10px; border:1px solid var(--border); background:var(--bg-alt); color:var(--text); font-family:inherit; margin-bottom:10px;">
+            <label>Description</label>
+            <textarea id="clubDesc" placeholder="What is this club about?" style="min-height:80px;"></textarea>
+          </div>
+          <button type="submit" class="btn btn-primary">Create club</button>
+          <button type="button" class="btn btn-outline" onclick="loadClubs()">Cancel</button>
+        </form>`;
+      document.getElementById("newClubForm").addEventListener("submit", createClub);
+    }
+
+    async function createClub(e) {
+      e.preventDefault();
+      const name = document.getElementById("clubName").value.trim();
+      const description = document.getElementById("clubDesc").value.trim();
+      if (!name) { showToast("Club name is required"); return; }
+      try {
+        const club = await dbInsert("clubs", { created_by: currentUser.id, name, description });
+        await dbInsert("club_members", { club_id: club.id, user_id: currentUser.id, role: "owner" });
+        awardXp(20); // +20 XP for creating a club
+        showToast("Club created! +20 XP");
+        window.location.href = `club.html?id=${club.id}`;
+      } catch (err) {
+        showToast("Could not create club: " + err.message);
+      }
+    }
+
+    document.addEventListener("DOMContentLoaded", loadClubs);
+  </script>
+</body>
+</html>

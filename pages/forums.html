@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Forums — OtakuPier</title>
+  <link rel="stylesheet" href="../css/style.css">
+</head>
+<body>
+  <nav class="navbar" id="navbar"></nav>
+
+  <main class="container">
+    <div class="section-head">
+      <h2>Forums</h2>
+      <button class="btn btn-primary" onclick="showNewThread()">＋ New thread</button>
+    </div>
+
+    <div class="filters" style="margin-bottom:16px;">
+      <select id="catFilter" onchange="loadThreads()">
+        <option value="">All categories</option>
+        <option value="general">General</option>
+        <option value="recommendations">Recommendations</option>
+        <option value="discussion">Discussion</option>
+        <option value="news">News</option>
+        <option value="help">Help</option>
+        <option value="other">Other</option>
+      </select>
+    </div>
+
+    <div id="threadList">
+      <div class="loading"><div class="spinner"></div>Loading threads...</div>
+    </div>
+  </main>
+
+  <footer id="siteFooter"></footer>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="../js/config.js"></script>
+  <script src="../js/api.js"></script>
+  <script src="../js/app.js"></script>
+  <script>
+    async function loadThreads() {
+      const list = document.getElementById("threadList");
+      const cat = document.getElementById("catFilter").value;
+      try {
+        let q = supabase
+          .from("forum_threads")
+          .select("*, replies:forum_replies(count)")
+          .order("created_at", { ascending: false })
+          .limit(100);
+        if (cat) q = q.eq("category", cat);
+        const { data, error } = await q;
+        if (error) throw error;
+        list.innerHTML = "";
+        if (!data.length) {
+          list.innerHTML = `<div class="empty-state">No threads yet. Start the first discussion!</div>`;
+          return;
+        }
+        data.forEach((t) => {
+          const el = document.createElement("div");
+          el.className = "user-row";
+          const catTag = t.category ? `<span class="genre-tag" style="font-size:.7rem;">${JIKAN.esc(t.category)}</span>` : "";
+          el.innerHTML = `
+            <div class="avatar" style="cursor:pointer;" onclick="location.href='profile.html?id=${t.user_id}'">${t.title.charAt(0).toUpperCase()}</div>
+            <div style="flex:1; min-width:0;">
+              <a href="forum-thread.html?id=${t.id}" style="color:var(--text); text-decoration:none; font-weight:700; font-size:.95rem;">${JIKAN.esc(t.title)}</a>
+              <div style="color:var(--text-dim); font-size:.8rem; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${JIKAN.esc(t.body.slice(0, 120))}</div>
+              <div style="color:var(--text-dim); font-size:.75rem; margin-top:4px;">${JIKAN.esc(t.body ? "" : "")}${new Date(t.created_at).toLocaleDateString()} • ${t.replies.length} replies ${catTag}</div>
+            </div>`;
+          el.addEventListener("click", (e) => {
+            if (e.target.closest("a")) return;
+            window.location.href = `forum-thread.html?id=${t.id}`;
+          });
+          list.appendChild(el);
+        });
+      } catch (err) {
+        list.innerHTML = `<div class="empty-state">Could not load threads.</div>`;
+      }
+    }
+
+    function showNewThread() {
+      if (!isLoggedIn()) {
+        showToast("Login to create a thread");
+        window.location.href = "login.html";
+        return;
+      }
+      const list = document.getElementById("threadList");
+      list.innerHTML = `
+        <form class="review-form" id="newThreadForm">
+          <div class="form-group">
+            <label>Title</label>
+            <input type="text" id="threadTitle" placeholder="Thread title" style="width:100%; padding:12px; border-radius:10px; border:1px solid var(--border); background:var(--bg-alt); color:var(--text); font-family:inherit; margin-bottom:10px;">
+            <label>Category</label>
+            <select id="threadCat" style="width:100%; padding:12px; border-radius:10px; border:1px solid var(--border); background:var(--bg-alt); color:var(--text); font-family:inherit; margin-bottom:10px;">
+              <option value="general">General</option>
+              <option value="recommendations">Recommendations</option>
+              <option value="discussion">Discussion</option>
+              <option value="news">News</option>
+              <option value="help">Help</option>
+              <option value="other">Other</option>
+            </select>
+            <label>Body</label>
+            <textarea id="threadBody" placeholder="What do you want to talk about?" style="min-height:120px;"></textarea>
+          </div>
+          <button type="submit" class="btn btn-primary">Post thread</button>
+          <button type="button" class="btn btn-outline" onclick="loadThreads()">Cancel</button>
+        </form>`;
+      document.getElementById("newThreadForm").addEventListener("submit", createThread);
+    }
+
+    async function createThread(e) {
+      e.preventDefault();
+      const title = document.getElementById("threadTitle").value.trim();
+      const body = document.getElementById("threadBody").value.trim();
+      if (!title || !body) { showToast("Title and body are required"); return; }
+      try {
+        await dbInsert("forum_threads", {
+          user_id: currentUser.id,
+          title,
+          body,
+          category: document.getElementById("threadCat").value,
+        });
+        awardXp(15); // +15 XP for creating a thread
+        showToast("Thread posted! +15 XP");
+        loadThreads();
+      } catch (err) {
+        showToast("Could not post thread: " + err.message);
+      }
+    }
+
+    document.addEventListener("DOMContentLoaded", loadThreads);
+  </script>
+</body>
+</html>

@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Catalog — OtakuPier</title>
+  <meta name="description" content="Search and browse the anime catalog on OtakuPier. Filter by genre and popularity.">
+  <link rel="stylesheet" href="../css/style.css">
+</head>
+<body>
+  <nav class="navbar" id="navbar"></nav>
+
+  <main class="container">
+    <div class="section-head">
+      <h2>Anime Catalog</h2>
+    </div>
+
+    <div class="filters">
+      <input type="text" id="searchBox" class="search-input" style="flex:1; min-width:220px;"
+             placeholder="Search anime..." onkeydown="if(event.key==='Enter')applyFilters(1)">
+      <select id="genreSelect" onchange="applyFilters(1)">
+        <option value="">All genres</option>
+      </select>
+      <button class="btn btn-primary" onclick="applyFilters(1)">Search</button>
+      <button class="btn btn-outline" onclick="clearFilters()">Clear</button>
+    </div>
+
+    <div class="grid" id="catalogGrid"></div>
+
+    <div class="pagination">
+      <button class="btn btn-outline btn-small" id="prevBtn" onclick="goPage(-1)">&larr; Prev</button>
+      <span class="page-info" id="pageInfo"></span>
+      <button class="btn btn-outline btn-small" id="nextBtn" onclick="goPage(1)">Next &rarr;</button>
+    </div>
+  </main>
+
+  <footer id="siteFooter"></footer>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="../js/config.js"></script>
+  <script src="../js/api.js"></script>
+  <script src="../js/app.js"></script>
+  <script>
+    const params = new URLSearchParams(window.location.search);
+    let state = {
+      q: params.get("q") || "",
+      genre: "",
+      page: 1,
+    };
+
+    function goPage(delta) {
+      state.page = Math.max(1, state.page + delta);
+      loadCatalog();
+    }
+
+    function clearFilters() {
+      document.getElementById("searchBox").value = "";
+      document.getElementById("genreSelect").value = "";
+      state.q = "";
+      state.genre = "";
+      state.page = 1;
+      loadCatalog();
+      history.replaceState(null, "", "catalog.html");
+    }
+
+    function applyFilters(p) {
+      state.q = document.getElementById("searchBox").value.trim();
+      state.genre = document.getElementById("genreSelect").value;
+      state.page = p || 1;
+      loadCatalog();
+    }
+
+    async function loadCatalog() {
+      const grid = document.getElementById("catalogGrid");
+      grid.innerHTML = skeletonGrid(20);
+
+      try {
+        // Show ~100 anime per page by fetching a few API pages (25 each),
+        // so the catalog feels as full as the home page.
+        const PER_PAGE = 4;
+        const firstPage = (state.page - 1) * PER_PAGE + 1;
+        const results = [];
+        let usedFallback = false;
+        for (let p = 0; p < PER_PAGE; p++) {
+          try {
+            let res;
+            if (state.q) {
+              res = await JIKAN.search(state.q, firstPage + p);
+            } else if (state.genre) {
+              res = await JIKAN.byGenre(state.genre, firstPage + p);
+            } else {
+              res = await JIKAN.catalog(firstPage + p);
+            }
+            results.push(res);
+          } catch (err) {
+            usedFallback = true;
+            results.push(await JIKAN.catalog(firstPage + p));
+          }
+        }
+
+        grid.innerHTML = "";
+        await JIKAN.loadEdits();
+        if (usedFallback) {
+          grid.innerHTML = `<div class="empty-state">Some data was unavailable — showing popular anime instead.</div>`;
+        }
+        let count = 0;
+        results.forEach((res) => {
+          if (!res.data) return;
+          res.data.forEach((a) => {
+            grid.appendChild(JIKAN.card(a));
+            count++;
+          });
+        });
+        if (!count) {
+          grid.innerHTML = `<div class="empty-state">No anime found. Try a different search.</div>`;
+        }
+
+        const total = results[0]?.pagination?.items?.total;
+        const apiLast = results[0]?.pagination?.last_visible_page || 1;
+        const lastPage = Math.ceil(apiLast / PER_PAGE);
+        document.getElementById("pageInfo").textContent =
+          total ? `Page ${state.page} of ${lastPage} (${total.toLocaleString()} titles)` : `Page ${state.page} of ${lastPage}`;
+        document.getElementById("prevBtn").style.visibility = state.page > 1 ? "visible" : "hidden";
+        document.getElementById("nextBtn").style.visibility = state.page < lastPage ? "visible" : "hidden";
+      } catch (err) {
+        grid.innerHTML = `<div class="empty-state">Could not load anime. Please try again later.</div>`;
+      }
+    }
+
+    async function loadGenres() {
+      const sel = document.getElementById("genreSelect");
+      try {
+        const genres = await JIKAN.genres();
+        genres.forEach((g) => {
+          const opt = document.createElement("option");
+          opt.value = g.mal_id;
+          opt.textContent = g.name;
+          sel.appendChild(opt);
+        });
+      } catch (err) {
+        // genre list failed; filtering by genre just won't be available
+      }
+    }
+
+    document.addEventListener("DOMContentLoaded", () => {
+      if (state.q) document.getElementById("searchBox").value = state.q;
+      loadGenres();
+      loadCatalog();
+    });
+  </script>
+</body>
+</html>

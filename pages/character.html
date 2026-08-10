@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Character — OtakuPier</title>
+  <link rel="stylesheet" href="../css/style.css">
+</head>
+<body>
+  <nav class="navbar" id="navbar"></nav>
+
+  <main class="container" id="main">
+    <div class="loading"><div class="spinner"></div>Loading character...</div>
+  </main>
+
+  <footer id="siteFooter"></footer>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="../js/config.js"></script>
+  <script src="../js/api.js"></script>
+  <script src="../js/app.js"></script>
+  <script>
+    const id = new URLSearchParams(window.location.search).get("id");
+
+    async function loadCharacter() {
+      const main = document.getElementById("main");
+      try {
+        const res = await JIKAN.character(id);
+        const c = res.data;
+        document.title = `${c.name} — OtakuPier`;
+
+        const va = c.voices?.find((v) => v.language === "Japanese");
+        const animes = (c.anime || []).slice(0, 12);
+
+        main.innerHTML = `
+          <div class="detail-header">
+            <div class="detail-poster">
+              <img src="${c.images?.jpg?.image_url || "https://via.placeholder.com/300x450?text=?"}"
+                   alt="${JIKAN.esc(c.name)}" onerror="this.src='https://via.placeholder.com/300x450?text=?'">
+            </div>
+            <div>
+              <h1 class="detail-title">${JIKAN.esc(c.name)}</h1>
+              ${c.name_kanji ? `<div class="detail-jtitle">${JIKAN.esc(c.name_kanji)}</div>` : ""}
+              ${va ? `<div class="detail-stats"><span class="stat">Voice Actor: <strong>${JIKAN.esc(va.person.name)}</strong></span></div>` : ""}
+              <p class="detail-synopsis">${JIKAN.esc(c.about || "No biography available.")}</p>
+            </div>
+          </div>
+          <h3 class="sub-head">Appears In</h3>
+          <div class="grid" id="animeGrid"></div>`;
+
+        const grid = document.getElementById("animeGrid");
+        if (!animes.length) {
+          grid.innerHTML = `<div class="empty-state">No appearances listed.</div>`;
+          return;
+        }
+        await JIKAN.loadEdits();
+        animes.forEach((a) => {
+          const item = a.anime;
+          const card = JIKAN.card(item);
+          grid.appendChild(card);
+        });
+      } catch (err) {
+        main.innerHTML = `<div class="empty-state">Could not load this character.</div>`;
+      }
+    }
+
+    document.addEventListener("DOMContentLoaded", loadCharacter);
+  </script>
+</body>
+</html>

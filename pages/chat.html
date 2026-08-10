@@ -1,0 +1,185 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Community Chat — OtakuPier</title>
+  <meta name="description" content="Live anime discussion chat on OtakuPier. Connect with fellow anime fans in real time.">
+  <link rel="stylesheet" href="../css/style.css">
+</head>
+<body>
+  <nav class="navbar" id="navbar"></nav>
+
+  <main class="container">
+    <div class="section-head">
+      <h2>Community Chat</h2>
+      <span style="color:var(--text-dim); font-size:0.9rem;">Talk about anime, live</span>
+    </div>
+    <div class="chat-layout">
+      <div class="chat-messages" id="messages"></div>
+      <div class="chat-input-wrap" id="inputWrap"></div>
+    </div>
+  </main>
+
+  <footer id="siteFooter"></footer>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="../js/config.js"></script>
+  <script src="../js/api.js"></script>
+  <script src="../js/app.js"></script>
+  <script>
+    const MAX_MSG_LEN = 1000;
+    let channel = null;
+
+    function scrollBottom() {
+      const box = document.getElementById("messages");
+      box.scrollTop = box.scrollHeight;
+    }
+
+    function renderInput() {
+      const wrap = document.getElementById("inputWrap");
+      if (!SUPABASE_READY || !supabase) {
+        wrap.innerHTML = `<p style="color:var(--text-dim);">Chat is coming soon — once Supabase is configured.</p>`;
+        return;
+      }
+      if (!isLoggedIn()) {
+        wrap.innerHTML = `<p style="color:var(--text-dim);">Please <a href="login.html" style="color:var(--accent)">log in</a> to join the chat.</p>`;
+        return;
+      }
+      wrap.innerHTML = `
+        <textarea id="msgInput" rows="1" maxlength="1000" placeholder="Say something... (Enter to send, Shift+Enter for new line)"></textarea>
+        <div style="display:flex; flex-direction:column; gap:6px; align-items:flex-end;">
+          <button class="btn btn-primary" onclick="sendMsg()">Send</button>
+          <span id="msgCount" style="font-size:.7rem; color:var(--text-dim);">0/1000</span>
+        </div>`;
+      const ta = document.getElementById("msgInput");
+      ta.addEventListener("keydown", (e) => {
+        if (e.key === "Enter" && !e.shiftKey) {
+          e.preventDefault();
+          sendMsg();
+        }
+      });
+      ta.addEventListener("input", () => { resizeInput(); updateCounter(); });
+    }
+
+    function updateCounter() {
+      const c = document.getElementById("msgCount");
+      if (!c) return;
+      const len = (document.getElementById("msgInput")?.value || "").length;
+      c.textContent = `${len}/1000`;
+      c.style.color = len > 900 ? "var(--danger)" : "var(--text-dim)";
+    }
+
+    function resizeInput() {
+      const ta = document.getElementById("msgInput");
+      if (!ta) return;
+      ta.style.height = "auto";
+      ta.style.height = Math.min(ta.scrollHeight, 140) + "px";
+    }
+
+    async function loadMessages() {
+      if (!SUPABASE_READY || !supabase) {
+        document.getElementById("messages").innerHTML =
+          `<div class="chat-join">Chat needs Supabase configured. See the README.</div>`;
+        return;
+      }
+      const { data, error } = await supabase
+        .from("chat_messages")
+        .select("*")
+        .order("created_at", { ascending: false })
+        .limit(50);
+      if (error) return;
+      const box = document.getElementById("messages");
+      box.innerHTML = "";
+      await Promise.all([...data].reverse().map((m) => appendMessage(m)));
+      scrollBottom();
+      subscribe();
+    }
+
+    function subscribe() {
+      if (channel) return;
+      channel = supabase
+        .channel("public:chat_messages")
+        .on("postgres_changes", { event: "INSERT", schema: "public", table: "chat_messages" }, (payload) => {
+          appendMessage(payload.new);
+          scrollBottom();
+        })
+        .subscribe();
+    }
+
+    async function appendMessage(m) {
+      const box = document.getElementById("messages");
+      const me = currentUser && m.user_id === currentUser.id;
+      const name = m.author_name || "User";
+      const el = document.createElement("div");
+      el.className = "msg" + (me ? " me" : "");
+      const tag = document.createElement("span");
+      tag.className = "rank-tag";
+      el.innerHTML = `
+        <div class="avatar" style="cursor:pointer;" onclick="location.href='profile.html?id=${m.user_id}'">${name.charAt(0).toUpperCase()}</div>
+        <div class="bubble">
+          <div class="msg-author"><a href="profile.html?id=${m.user_id}" style="color:inherit; text-decoration:none;">${JIKAN.esc(name)}</a> ${tag.outerHTML}</div>
+          <div>${JIKAN.esc(m.message)}</div>
+          <div class="msg-time">${new Date(m.created_at).toLocaleTimeString()}</div>
+        </div>`;
+      box.appendChild(el);
+      // Add rank tag + highlight privilege
+      try {
+        const { data: p } = await supabase.from("profiles").select("name, xp, is_admin").eq("id", m.user_id).maybeSingle();
+        if (p) {
+          const tagEl = el.querySelector(".rank-tag");
+          tagEl.innerHTML = `${rankForXp(p.xp).icon} ${rankForXp(p.xp).name}`;
+          if (p.is_admin) {
+            el.classList.add("highlight");
+            tagEl.style.background = "rgba(0,212,168,.2)";
+            tagEl.style.color = "var(--accent-3)";
+          } else if (hasChatPrivilege(p.xp)) {
+            el.classList.add("highlight");
+            tagEl.style.background = "rgba(0,212,168,.2)";
+            tagEl.style.color = "var(--accent-3)";
+          }
+          const author = el.querySelector(".msg-author");
+          if (p.is_admin) author.innerHTML = adminNameHTML(p);
+        }
+      } catch (e) {}
+    }
+
+    async function sendMsg() {
+      const input = document.getElementById("msgInput");
+      const text = input.value.trim();
+      if (!text) return;
+      if (text.length > MAX_MSG_LEN) {
+        showToast(`Message too long (max ${MAX_MSG_LEN} characters)`);
+        return;
+      }
+      try {
+        await dbInsert("chat_messages", {
+          user_id: currentUser.id,
+          author_name: getProfile().name,
+          message: text,
+        });
+        awardXp(1); // +1 XP per chat message
+        input.value = "";
+        updateCounter();
+      } catch (err) {
+        showToast("Could not send message");
+      }
+    }
+
+    document.addEventListener("DOMContentLoaded", () => {
+      renderInput();
+      loadMessages();
+      window.onAuthStateChanged = () => {
+        renderInput();
+      };
+      // Daily storage cleanup: purge messages older than 24h (server-side
+      // pruned; safe to call from any signed-in user)
+      if (isLoggedIn()) {
+        supabase.rpc("prune_chat_messages").then(({ data }) => {
+          if (data > 0) console.log(`[chat] pruned ${data} old messages`);
+        }).catch(() => {});
+      }
+    });
+  </script>
+</body>
+</html>

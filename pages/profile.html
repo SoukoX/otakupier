@@ -1,0 +1,203 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Profile — OtakuPier</title>
+  <link rel="stylesheet" href="../css/style.css">
+</head>
+<body>
+  <nav class="navbar" id="navbar"></nav>
+
+  <main class="container" id="main">
+    <div class="loading"><div class="spinner"></div>Loading profile...</div>
+  </main>
+
+  <footer id="siteFooter"></footer>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="../js/config.js"></script>
+  <script src="../js/api.js"></script>
+  <script src="../js/app.js"></script>
+  <script>
+    const params = new URLSearchParams(window.location.search);
+    let userId = params.get("id");
+    let profileUser = null;
+
+    async function load() {
+      const main = document.getElementById("main");
+      // No id param = my own profile
+      if (!userId) {
+        if (!isLoggedIn()) {
+          main.innerHTML = `<div class="empty-state"><a href="login.html" class="btn btn-primary">Login</a>
+            <p style="margin-top:12px;">Login to see your profile.</p></div>`;
+          return;
+        }
+        userId = currentUser.id;
+      }
+      const st = await userStats(userId);
+      if (!st.profile) {
+        main.innerHTML = `<div class="empty-state">User not found.</div>`;
+        return;
+      }
+      profileUser = st.profile;
+      document.title = `${st.profile.name || "User"} — OtakuPier`;
+
+      const isSelf = isLoggedIn() && currentUser.id === userId;
+      const rank = rankForXp(st.profile.xp);
+      const prog = xpProgress(st.profile.xp);
+      const badges = badgesFor(st.profile, st.counts);
+      const joined = new Date(st.profile.created_at).toLocaleDateString();
+
+      const badgeHtml = badges.length
+        ? badges.map((b) => `<span class="badge-chip" title="${b.label}">${b.icon} ${b.label}</span>`).join("")
+        : `<span style="color:var(--text-dim); font-size:.85rem;">No badges yet — keep participating!</span>`;
+
+      main.innerHTML = `
+        <div class="profile-card">
+          <div class="avatar-lg">${st.profile.avatar_url
+            ? `<img src="${st.profile.avatar_url}" alt="">`
+            : (st.profile.name || "U").charAt(0).toUpperCase()}</div>
+          <div style="flex:1; min-width:220px;">
+            <h2 style="margin:0 0 4px;">${st.profile.is_admin ? adminNameHTML(st.profile) : JIKAN.esc(st.profile.name || "User")}</h2>
+            <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
+              ${rankTag(userId, st.profile)}
+              <span style="color:var(--text-dim); font-size:.85rem;">Joined ${joined}</span>
+            </div>
+            ${st.profile.bio ? `<p style="margin:10px 0 0; color:var(--text-dim);">${JIKAN.esc(st.profile.bio)}</p>` : ""}
+            <div class="stat-strip">
+              <div class="stat"><b>${st.counts.reviews}</b> reviews</div>
+              <div class="stat"><b>${st.counts.saved}</b> saved</div>
+              <div class="stat"><b>${st.counts.votes}</b> votes</div>
+              <div class="stat"><b>${st.counts.chat}</b> messages</div>
+              <div class="stat"><b>${st.counts.likes}</b> likes given</div>
+            </div>
+            <div style="margin-top:14px; max-width:420px;">
+              <div style="display:flex; justify-content:space-between; font-size:.8rem; color:var(--text-dim); margin-bottom:4px;">
+                <span>${rank.icon} ${rank.name}</span>
+                <span>${st.profile.xp || 0} XP${prog.next ? ` / next rank: ${prog.next.icon} ${prog.next.name}` : " (max rank!)"}</span>
+              </div>
+              <div class="xp-bar"><div style="width:${Math.round(prog.pct * 100)}%"></div></div>
+            </div>
+          </div>
+          ${isSelf ? "" : `
+            <div style="display:flex; flex-direction:column; gap:10px; min-width:140px;">
+              <div id="friendBtn"></div>
+              <a class="btn btn-outline" href="dms.html?with=${userId}">Message</a>
+            </div>`}
+        </div>
+
+        <h3 class="sub-head">Badges</h3>
+        <div class="badge-grid" style="margin-bottom:24px;">${badgeHtml}</div>
+
+        <h3 class="sub-head">Reviews &amp; Comments</h3>
+        <div id="reviews"></div>`;
+
+      if (isSelf) main.insertAdjacentHTML("afterbegin", `<div style="margin-bottom:16px;"><a class="btn btn-outline" href="mylist.html">My List</a> <a class="btn btn-outline" href="friends.html">Friends</a></div>`);
+      if (!isSelf) loadFriendButton();
+      loadProfileReviews();
+    }
+
+    async function loadFriendButton() {
+      const slot = document.getElementById("friendBtn");
+      if (!slot) return;
+      if (!isLoggedIn()) {
+        slot.innerHTML = `<a class="btn btn-outline" href="login.html">Add friend</a>`;
+        return;
+      }
+      if (currentUser.id === userId) { slot.innerHTML = ""; return; }
+      try {
+        const { data } = await supabase
+          .from("friendships")
+          .select("*")
+          .or(`and(requester_id.eq.${currentUser.id},addressee_id.eq.${userId}),and(requester_id.eq.${userId},addressee_id.eq.${currentUser.id})`)
+          .maybeSingle();
+        if (!data) {
+          slot.innerHTML = `<button class="btn btn-primary" onclick="sendFriendReq()">Add friend</button>`;
+        } else if (data.status === "accepted") {
+          slot.innerHTML = `<button class="btn btn-outline" onclick="unfriend()">Unfriend</button>`;
+        } else if (data.requester_id === currentUser.id) {
+          slot.innerHTML = `<button class="btn btn-outline" disabled>Request sent</button>`;
+        } else {
+          slot.innerHTML = `<button class="btn btn-primary" onclick="acceptFriendReq('${data.id}')">Accept request</button>`;
+        }
+      } catch (e) {
+        slot.innerHTML = "";
+      }
+    }
+
+    async function sendFriendReq() {
+      try {
+        await dbInsert("friendships", { requester_id: currentUser.id, addressee_id: userId, status: "pending" });
+        showToast("Friend request sent!");
+        loadFriendButton();
+      } catch (err) {
+        showToast("Could not send request");
+      }
+    }
+
+    async function acceptFriendReq(fid) {
+      try {
+        await supabase.from("friendships").update({ status: "accepted" }).eq("id", fid);
+        showToast("You are now friends! +10 XP");
+        awardXp(10);
+        loadFriendButton();
+      } catch (err) {
+        showToast("Could not accept");
+      }
+    }
+
+    async function unfriend() {
+      try {
+        await supabase.from("friendships")
+          .delete()
+          .or(`and(requester_id.eq.${currentUser.id},addressee_id.eq.${userId}),and(requester_id.eq.${userId},addressee_id.eq.${currentUser.id})`);
+        showToast("Unfriended");
+        loadFriendButton();
+      } catch (err) {
+        showToast("Could not unfriend");
+      }
+    }
+
+    async function loadProfileReviews() {
+      const slot = document.getElementById("reviews");
+      try {
+        const { data, error } = await supabase
+          .from("reviews")
+          .select("*")
+          .eq("user_id", userId)
+          .order("created_at", { ascending: false })
+          .limit(50);
+        if (error) throw error;
+        slot.innerHTML = "";
+        if (!data.length) {
+          slot.innerHTML = `<div class="empty-state">No reviews yet.</div>`;
+          return;
+        }
+        data.forEach((r) => {
+          const el = document.createElement("div");
+          el.className = "review";
+          const stars = r.rating
+            ? `<span class="stars">${"\u2605".repeat(r.rating)}<span style="opacity:.25">${"\u2605".repeat(10 - r.rating)}</span></span>`
+            : `<span class="review-date" style="padding:2px 8px; background:rgba(0,212,168,.12); border-radius:999px;">Comment</span>`;
+          el.innerHTML = `
+            <div class="review-top">
+              <a href="anime.html?id=${r.anime_mal_id}" class="review-author" style="color:var(--text); text-decoration:none;">
+                <div class="avatar" style="cursor:pointer;">${JIKAN.esc(r.anime_title || "Anime").charAt(0).toUpperCase()}</div>
+                ${JIKAN.esc(r.anime_title || "Anime")}
+              </a>
+              ${stars}
+            </div>
+            <div class="review-date">${new Date(r.created_at).toLocaleString()}</div>
+            <p style="margin-top:8px;">${JIKAN.esc(r.text)}</p>`;
+          slot.appendChild(el);
+        });
+      } catch (err) {
+        slot.innerHTML = `<div class="empty-state">Could not load reviews.</div>`;
+      }
+    }
+
+    document.addEventListener("DOMContentLoaded", load);
+  </script>
+</body>
+</html>

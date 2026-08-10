@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Friends — OtakuPier</title>
+  <link rel="stylesheet" href="../css/style.css">
+</head>
+<body>
+  <nav class="navbar" id="navbar"></nav>
+
+  <main class="container" id="main">
+    <div class="loading"><div class="spinner"></div>Loading...</div>
+  </main>
+
+  <footer id="siteFooter"></footer>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="../js/config.js"></script>
+  <script src="../js/api.js"></script>
+  <script src="../js/app.js"></script>
+  <script>
+    async function load() {
+      const main = document.getElementById("main");
+      if (!isLoggedIn()) {
+        main.innerHTML = `<div class="empty-state"><a href="login.html" class="btn btn-primary">Login</a>
+          <p style="margin-top:12px;">Login to manage friends.</p></div>`;
+        return;
+      }
+      main.innerHTML = `
+        <div class="section-head"><h2>Friends</h2></div>
+        <h3 class="sub-head">Friend requests</h3>
+        <div id="requests"></div>
+        <h3 class="sub-head">Your friends</h3>
+        <div id="friendsList"></div>`;
+
+      const [requests, friends, sent] = await Promise.all([
+        supabase.from("friendships").select("*").eq("addressee_id", currentUser.id).eq("status", "pending"),
+        supabase.from("friendships").select("*").eq("status", "accepted")
+          .or(`requester_id.eq.${currentUser.id},addressee_id.eq.${currentUser.id}`),
+        supabase.from("friendships").select("*").eq("requester_id", currentUser.id).eq("status", "pending"),
+      ]);
+
+      renderRequests(requests.data || []);
+      renderFriends(friends.data || []);
+      renderSent(sent.data || []);
+    }
+
+    async function fetchUser(id) {
+      const { data } = await supabase.from("profiles").select("name, xp, avatar_url").eq("id", id).maybeSingle();
+      return data;
+    }
+
+    function userRowHtml(userId, name, avatar) {
+      const letter = (name || "U").charAt(0).toUpperCase();
+      return `<div class="avatar">${avatar ? `<img src="${avatar}" alt="">` : letter}</div>
+        <a href="profile.html?id=${userId}" style="color:var(--text); text-decoration:none; font-weight:600;">${JIKAN.esc(name || "User")}</a>`;
+    }
+
+    async function renderRequests(list) {
+      const slot = document.getElementById("requests");
+      if (!list.length) { slot.innerHTML = `<p style="color:var(--text-dim);">No pending requests.</p>`; return; }
+      slot.innerHTML = "";
+      for (const f of list) {
+        const p = await fetchUser(f.requester_id);
+        const el = document.createElement("div");
+        el.className = "user-row";
+        el.innerHTML = `${userRowHtml(f.requester_id, p?.name, p?.avatar_url)}
+          <span id="tag-${f.id}"></span>
+          <div class="friend-actions">
+            <button class="btn btn-primary btn-small" onclick="respond(${f.id}, 'accepted', this)">Accept</button>
+            <button class="btn btn-outline btn-small" onclick="respond(${f.id}, 'declined', this)">Decline</button>
+          </div>`;
+        slot.appendChild(el);
+        if (p) el.querySelector(`#tag-${f.id}`).innerHTML = rankTag(f.requester_id, p);
+      }
+    }
+
+    async function renderFriends(list) {
+      const slot = document.getElementById("friendsList");
+      if (!list.length) { slot.innerHTML = `<p style="color:var(--text-dim);">No friends yet. Visit someone's profile and send a request.</p>`; return; }
+      slot.innerHTML = "";
+      for (const f of list) {
+        const otherId = f.requester_id === currentUser.id ? f.addressee_id : f.requester_id;
+        const p = await fetchUser(otherId);
+        const el = document.createElement("div");
+        el.className = "user-row";
+        el.innerHTML = `${userRowHtml(otherId, p?.name, p?.avatar_url)}
+          <span id="tag-${otherId}"></span>
+          <div class="friend-actions">
+            <a class="btn btn-outline btn-small" href="dms.html?with=${otherId}">Message</a>
+            <a class="btn btn-outline btn-small" href="profile.html?id=${otherId}">Profile</a>
+            <button class="btn btn-danger btn-small" onclick="unfriend('${otherId}', this)">Unfriend</button>
+          </div>`;
+        slot.appendChild(el);
+        if (p) el.querySelector(`#tag-${otherId}`).innerHTML = rankTag(otherId, p);
+      }
+    }
+
+    async function renderSent(list) {
+      if (!list.length) return;
+      const slot = document.getElementById("requests");
+      for (const f of list) {
+        const p = await fetchUser(f.addressee_id);
+        const el = document.createElement("div");
+        el.className = "user-row";
+        el.innerHTML = `${userRowHtml(f.addressee_id, p?.name, p?.avatar_url)}
+          <span class="friend-actions" style="color:var(--text-dim); font-size:.85rem;">Request sent — waiting on them</span>`;
+        slot.appendChild(el);
+      }
+    }
+
+    async function respond(fid, status, btn) {
+      try {
+        await supabase.from("friendships").update({ status }).eq("id", fid);
+        if (status === "accepted") {
+          awardXp(10);
+          showToast("You are now friends! +10 XP");
+        } else {
+          showToast("Request declined");
+        }
+        btn.closest(".user-row").remove();
+      } catch (err) {
+        showToast("Could not update request");
+      }
+    }
+
+    async function unfriend(otherId, btn) {
+      try {
+        await supabase.from("friendships")
+          .delete()
+          .or(`and(requester_id.eq.${currentUser.id},addressee_id.eq.${otherId}),and(requester_id.eq.${otherId},addressee_id.eq.${currentUser.id})`);
+        btn.closest(".user-row").remove();
+        showToast("Unfriended");
+      } catch (err) {
+        showToast("Could not unfriend");
+      }
+    }
+
+    document.addEventListener("DOMContentLoaded", load);
+  </script>
+</body>
+</html>

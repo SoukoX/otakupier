@@ -1,0 +1,476 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Admin Panel — OtakuPier</title>
+  <link rel="stylesheet" href="../css/style.css">
+  <style>
+    .admin-tabs { display:flex; gap:8px; flex-wrap:wrap; margin-bottom:18px; }
+    .admin-tab { padding:8px 16px; border-radius:999px; border:1px solid var(--border); background:var(--bg-alt); color:var(--text); cursor:pointer; font-weight:600; font-size:.9rem; }
+    .admin-tab.active { background:var(--accent); color:#fff; border-color:var(--accent); }
+    .stat-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(160px,1fr)); gap:12px; margin-bottom:20px; }
+    .stat-card { background:var(--bg-card); border:1px solid var(--border); border-radius:12px; padding:16px; }
+    .stat-card b { font-size:1.6rem; color:var(--accent-3); }
+    .stat-card span { display:block; color:var(--text-dim); font-size:.8rem; margin-top:4px; }
+    .admin-list-item { display:flex; gap:10px; align-items:center; padding:10px 14px; background:var(--bg-card); border:1px solid var(--border); border-radius:10px; margin-bottom:8px; flex-wrap:wrap; }
+    .admin-list-item .grow { flex:1; min-width:200px; }
+    .ban-reason { color:#ff4d6d; font-size:.78rem; }
+  </style>
+</head>
+<body>
+  <nav class="navbar" id="navbar"></nav>
+
+  <main class="container" id="main">
+    <div class="loading"><div class="spinner"></div>Checking permissions...</div>
+  </main>
+
+  <footer id="siteFooter"></footer>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="../js/config.js"></script>
+  <script src="../js/api.js"></script>
+  <script src="../js/app.js"></script>
+  <script>
+    const main = document.getElementById("main");
+    let activeTab = "dash";
+
+    async function boot() {
+      if (!supabase) {
+        main.innerHTML = `<div class="empty-state">Supabase not configured.</div>`;
+        return;
+      }
+      await new Promise((r) => {
+        if (currentUser && currentProfile) return r();
+        const t = setInterval(() => { if (currentUser && currentProfile) { clearInterval(t); r(); } }, 100);
+        setTimeout(() => { clearInterval(t); r(); }, 4000);
+      });
+
+      if (!isLoggedIn()) {
+        main.innerHTML = `<div class="empty-state"><h2>Admin only</h2>
+          <p>You must be signed in with an admin account.</p>
+          <a href="login.html" class="btn btn-primary" style="margin-top:10px;">Login</a></div>`;
+        return;
+      }
+      if (!isAdmin()) {
+        main.innerHTML = `<div class="empty-state"><h2>Access denied</h2>
+          <p>This panel is restricted to verified admins. If you think this is a mistake, contact the site admin.</p></div>`;
+        return;
+      }
+      renderPanel();
+    }
+
+    function renderPanel() {
+      document.title = "Admin Panel — OtakuPier";
+      main.innerHTML = `
+        <div class="section-head"><h2>⚙ Admin Panel</h2>
+          <span style="color:var(--text-dim); font-size:.9rem;">Signed in as ${JIKAN.esc(getProfile().name)}</span>
+        </div>
+        <div class="admin-tabs">
+          <button class="admin-tab" data-t="dash">Dashboard</button>
+          <button class="admin-tab" data-t="anime">Anime editor</button>
+          <button class="admin-tab" data-t="custom">Custom anime</button>
+          <button class="admin-tab" data-t="users">Users &amp; bans</button>
+          <button class="admin-tab" data-t="mod">Moderation</button>
+        </div>
+        <div id="panel"></div>`;
+      document.querySelectorAll(".admin-tab").forEach((b) => {
+        b.addEventListener("click", () => {
+          activeTab = b.dataset.t;
+          document.querySelectorAll(".admin-tab").forEach((x) => x.classList.toggle("active", x === b));
+          loadTab();
+        });
+      });
+      loadTab();
+    }
+
+    async function loadTab() {
+      const panel = document.getElementById("panel");
+      panel.innerHTML = `<div class="loading"><div class="spinner"></div>Loading...</div>`;
+      if (activeTab === "dash") await loadDash();
+      else if (activeTab === "anime") await loadAnimeEditor();
+      else if (activeTab === "custom") await loadCustomAnime();
+      else if (activeTab === "users") await loadUsers();
+      else if (activeTab === "mod") await loadModeration();
+    }
+
+    // ---------- Dashboard ----------
+    async function loadDash() {
+      const panel = document.getElementById("panel");
+      const count = async (table) => (await supabase.from(table).select("id", { count: "exact", head: true })).count || 0;
+      let profiles = 0, reviews = 0, chat = 0, threads = 0, clubs = 0, bans = 0;
+      try { [profiles, reviews, chat, threads, clubs, bans] = await Promise.all([
+        count("profiles"), count("reviews"), count("chat_messages"), count("forum_threads"), count("clubs"), count("bans"),
+      ]); } catch (e) {}
+      panel.innerHTML = `
+        <div class="stat-grid">
+          <div class="stat-card"><b>${profiles}</b><span>Users</span></div>
+          <div class="stat-card"><b>${reviews}</b><span>Reviews</span></div>
+          <div class="stat-card"><b>${chat}</b><span>Chat messages</span></div>
+          <div class="stat-card"><b>${threads}</b><span>Forum threads</span></div>
+          <div class="stat-card"><b>${clubs}</b><span>Clubs</span></div>
+          <div class="stat-card"><b>${bans}</b><span>Active bans</span></div>
+        </div>
+        <p style="color:var(--text-dim); font-size:.9rem;">Use the tabs above to edit anime details, add custom anime, ban users, or remove violating content. No code changes needed.</p>`;
+    }
+
+    // ---------- Anime editor (overrides Jikan data) ----------
+    let editingMalId = null;
+    async function loadAnimeEditor() {
+      const panel = document.getElementById("panel");
+      panel.innerHTML = `
+        <div class="review-form">
+          <strong>Edit anime details</strong>
+          <p style="color:var(--text-dim); font-size:.85rem;">Changes override the Jikan/MyAnimeList data site-wide (detail page, and title/image on cards).</p>
+          <div style="display:flex; gap:10px; flex-wrap:wrap; margin:10px 0;">
+            <input type="number" id="edMalId" class="search-input" placeholder="MyAnimeList ID (e.g. 5114)" style="flex:1; min-width:200px;">
+            <button class="btn btn-primary" onclick="fetchAnimeForEdit()">Load anime</button>
+          </div>
+          <div id="edPreview"></div>
+          <div id="edForm" style="display:none;">
+            <label style="font-size:.85rem; color:var(--text-dim);">Title override</label>
+            <input type="text" id="edTitle" class="search-input" style="width:100%; margin:4px 0 10px;">
+            <label style="font-size:.85rem; color:var(--text-dim);">Image URL override</label>
+            <input type="text" id="edImage" class="search-input" style="width:100%; margin:4px 0 10px;">
+            <label style="font-size:.85rem; color:var(--text-dim);">Status override</label>
+            <input type="text" id="edStatus" class="search-input" style="width:100%; margin:4px 0 10px;">
+            <label style="font-size:.85rem; color:var(--text-dim);">Synopsis override</label>
+            <textarea id="edSynopsis" style="min-height:100px;"></textarea>
+            <div style="display:flex; gap:10px; margin-top:10px;">
+              <button class="btn btn-primary" onclick="saveAnimeEdit()">Save override</button>
+              <button class="btn btn-danger" onclick="clearAnimeEdit()">Remove override</button>
+            </div>
+          </div>
+        </div>`;
+    }
+
+    async function fetchAnimeForEdit() {
+      const malId = Number(document.getElementById("edMalId").value);
+      if (!malId) { showToast("Enter a MyAnimeList ID"); return; }
+      editingMalId = malId;
+      const prev = document.getElementById("edPreview");
+      const form = document.getElementById("edForm");
+      prev.innerHTML = `<div class="loading"><div class="spinner"></div></div>`;
+      form.style.display = "none";
+      try {
+        const res = await JIKAN.getAnime(malId);
+        const a = res.data;
+        const { data: edit } = await supabase.from("anime_edits").select("*").eq("mal_id", malId).maybeSingle();
+        const t = a.title_english || a.title;
+        prev.innerHTML = `
+          <div style="display:flex; gap:12px; align-items:center; margin:10px 0; padding:12px; background:var(--bg-card); border:1px solid var(--border); border-radius:10px;">
+            <img src="${a.images?.jpg?.image_url}" alt="" style="width:48px; height:64px; object-fit:cover; border-radius:6px;">
+            <div>
+              <b>${JIKAN.esc(t)}</b>
+              <div style="color:var(--text-dim); font-size:.85rem;">MAL ID ${malId} • ${a.type || ""} • ${a.status || ""}</div>
+              <div style="color:var(--accent-3); font-size:.8rem;">${edit ? "Has an admin override" : "Using original Jikan data"}</div>
+            </div>
+          </div>`;
+        form.style.display = "block";
+        document.getElementById("edTitle").value = edit?.title || "";
+        document.getElementById("edImage").value = edit?.image_url || "";
+        document.getElementById("edStatus").value = edit?.status || "";
+        document.getElementById("edSynopsis").value = edit?.synopsis || "";
+      } catch (err) {
+        prev.innerHTML = `<div class="empty-state">Could not load that anime (bad ID or API error).</div>`;
+      }
+    }
+
+    async function saveAnimeEdit() {
+      if (!editingMalId) return;
+      const payload = { mal_id: editingMalId, edited_by: currentUser.id };
+      const t = document.getElementById("edTitle").value.trim();
+      const i = document.getElementById("edImage").value.trim();
+      const s = document.getElementById("edStatus").value.trim();
+      const y = document.getElementById("edSynopsis").value.trim();
+      if (t) payload.title = t;
+      if (i) payload.image_url = i;
+      if (s) payload.status = s;
+      if (y) payload.synopsis = y;
+      try {
+        await supabase.from("anime_edits").upsert(payload, { onConflict: "mal_id" });
+        showToast("Override saved!");
+        fetchAnimeForEdit();
+      } catch (err) { showToast("Save failed: " + (err.message || "")); }
+    }
+
+    async function clearAnimeEdit() {
+      if (!editingMalId) return;
+      try {
+        await supabase.from("anime_edits").delete().eq("mal_id", editingMalId);
+        showToast("Override removed");
+        fetchAnimeForEdit();
+      } catch (err) { showToast("Delete failed"); }
+    }
+
+    // ---------- Custom anime ----------
+    async function loadCustomAnime() {
+      const panel = document.getElementById("panel");
+      let list = [];
+      try { const { data } = await supabase.from("custom_anime").select("*").order("created_at", { ascending: false }).limit(50); list = data || []; } catch (e) {}
+      panel.innerHTML = `
+        <div class="review-form">
+          <strong>Add custom anime</strong>
+          <p style="color:var(--text-dim); font-size:.85rem;">Adds an anime that isn't on MyAnimeList. It gets its own page at <code>anime.html?id=CUSTOMID</code> and works with reviews, rankings, and My List.</p>
+          <input type="text" id="caTitle" class="search-input" placeholder="Title *" style="width:100%; margin:8px 0;">
+          <input type="text" id="caJp" class="search-input" placeholder="Japanese title (optional)" style="width:100%; margin-bottom:8px;">
+          <input type="url" id="caImage" class="search-input" placeholder="Image URL (optional)" style="width:100%; margin-bottom:8px;">
+          <div style="display:flex; gap:10px; flex-wrap:wrap; margin-bottom:8px;">
+            <input type="number" id="caYear" class="search-input" placeholder="Year (optional)" style="flex:1; min-width:120px;">
+            <input type="text" id="caStatus" class="search-input" placeholder="Status (e.g. Ongoing)" style="flex:1; min-width:140px;">
+          </div>
+          <textarea id="caSynopsis" placeholder="Synopsis (optional)" style="min-height:80px;"></textarea>
+          <button class="btn btn-primary" onclick="addCustomAnime()" style="margin-top:10px;">Add anime</button>
+        </div>
+        <h3 class="sub-head">Existing custom anime (${list.length})</h3>
+        <div id="caList"></div>`;
+      const ca = document.getElementById("caList");
+      if (!list.length) { ca.innerHTML = `<div class="empty-state">No custom anime yet.</div>`; return; }
+      list.forEach((c) => {
+        const el = document.createElement("div");
+        el.className = "admin-list-item";
+        el.innerHTML = `
+          <img src="${c.image_url || "https://via.placeholder.com/45x60?text=?"}" alt="" style="width:45px; height:60px; object-fit:cover; border-radius:6px;" onerror="this.src='https://via.placeholder.com/45x60?text=?'">
+          <div class="grow">
+            <b>${JIKAN.esc(c.title)}</b>
+            <div style="color:var(--text-dim); font-size:.8rem;">${JIKAN.esc(c.status || "Unknown")}${c.year ? " • " + c.year : ""}</div>
+            <div style="color:var(--text-dim); font-size:.75rem;"><a href="anime.html?id=${c.id}" style="color:var(--accent);">View page</a></div>
+          </div>
+          <button class="btn btn-danger btn-small" onclick="deleteCustomAnime(${c.id})">Delete</button>`;
+        ca.appendChild(el);
+      });
+    }
+
+    async function addCustomAnime() {
+      const title = document.getElementById("caTitle").value.trim();
+      if (!title) { showToast("Title is required"); return; }
+      try {
+        await supabase.from("custom_anime").insert({
+          title,
+          jp_title: document.getElementById("caJp").value.trim(),
+          image_url: document.getElementById("caImage").value.trim(),
+          synopsis: document.getElementById("caSynopsis").value.trim(),
+          status: document.getElementById("caStatus").value.trim() || "Unknown",
+          year: Number(document.getElementById("caYear").value) || null,
+          added_by: currentUser.id,
+        });
+        showToast("Custom anime added!");
+        loadCustomAnime();
+      } catch (err) { showToast("Add failed: " + (err.message || "")); }
+    }
+
+    async function deleteCustomAnime(cid) {
+      if (!confirm("Delete this custom anime and its reviews/rankings?")) return;
+      try {
+        await supabase.from("reviews").delete().eq("anime_mal_id", cid);
+        await supabase.from("rankings").delete().eq("anime_mal_id", cid);
+        await supabase.from("saved_anime").delete().eq("anime_mal_id", cid);
+        await supabase.from("custom_anime").delete().eq("id", cid);
+        showToast("Deleted");
+        loadCustomAnime();
+      } catch (err) { showToast("Delete failed"); }
+    }
+
+    // ---------- Users & bans ----------
+    async function loadUsers() {
+      const panel = document.getElementById("panel");
+      panel.innerHTML = `
+        <div class="review-form">
+          <strong>Find a user</strong>
+          <div style="display:flex; gap:10px; flex-wrap:wrap; margin:10px 0;">
+            <input type="text" id="usrQ" class="search-input" placeholder="Search by name..." style="flex:1; min-width:200px;" onkeydown="if(event.key==='Enter')searchUsers()">
+            <button class="btn btn-primary" onclick="searchUsers()">Search</button>
+          </div>
+        </div>
+        <div id="usrList"><div class="loading"><div class="spinner"></div>Loading users...</div></div>`;
+      searchUsers();
+    }
+
+    async function searchUsers() {
+      const q = (document.getElementById("usrQ")?.value || "").trim().toLowerCase();
+      const box = document.getElementById("usrList");
+      box.innerHTML = `<div class="loading"><div class="spinner"></div>Loading users...</div>`;
+      try {
+        let query = supabase.from("profiles").select("id, name, avatar_url, xp, is_admin, created_at").order("xp", { ascending: false }).limit(200);
+        if (q) query = query.ilike("name", `%${q}%`);
+        const { data } = await query;
+        const bans = {};
+        const { data: bData } = await supabase.from("bans").select("user_id, reason");
+        (bData || []).forEach((b) => (bans[b.user_id] = b));
+        box.innerHTML = "";
+        if (!data.length) { box.innerHTML = `<div class="empty-state">No users found.</div>`; return; }
+        data.forEach((u) => {
+          const ban = bans[u.id];
+          const el = document.createElement("div");
+          el.className = "admin-list-item";
+          el.innerHTML = `
+            <div class="avatar">${(u.name || "U").charAt(0).toUpperCase()}</div>
+            <div class="grow">
+              <div>${JIKAN.esc(u.name || "User")} ${u.is_admin ? '<span class="admin-badge">✓ Admin</span>' : ""}</div>
+              <div style="color:var(--text-dim); font-size:.8rem;">XP ${u.xp || 0} • joined ${new Date(u.created_at).toLocaleDateString()}</div>
+              ${ban ? `<div class="ban-reason">⛔ BANNED${ban.reason ? ": " + JIKAN.esc(ban.reason) : ""}</div>` : ""}
+            </div>
+            <a class="btn btn-outline btn-small" href="profile.html?id=${u.id}">Profile</a>
+            ${ban
+              ? `<button class="btn btn-primary btn-small" onclick="unbanUser('${u.id}')">Unban</button>`
+              : `<button class="btn btn-danger btn-small" onclick="banUser('${u.id}','${JIKAN.esc(u.name || "User")}')">Ban</button>`}
+            ${u.is_admin
+              ? `<button class="btn btn-outline btn-small" onclick="demoteAdmin('${u.id}')">Remove admin</button>`
+              : `<button class="btn btn-outline btn-small" onclick="promoteAdmin('${u.id}')">Make admin</button>`}`;
+          box.appendChild(el);
+        });
+      } catch (err) {
+        box.innerHTML = `<div class="empty-state">Could not load users.</div>`;
+      }
+    }
+
+    async function banUser(uid, name) {
+      const reason = prompt(`Ban ${name}? Enter a reason (optional):`, "Policy violation");
+      if (reason === null) return;
+      try {
+        await supabase.from("bans").insert({ user_id: uid, reason, banned_by: currentUser.id });
+        showToast(`${name} banned`);
+        searchUsers();
+      } catch (err) { showToast("Ban failed: " + (err.message || "")); }
+    }
+
+    async function unbanUser(uid) {
+      try {
+        await supabase.from("bans").delete().eq("user_id", uid);
+        showToast("User unbanned");
+        searchUsers();
+      } catch (err) { showToast("Unban failed"); }
+    }
+
+    async function promoteAdmin(uid) {
+      if (!confirm("Make this user a verified admin? They gain full moderation power.")) return;
+      try {
+        await supabase.from("profiles").update({ is_admin: true }).eq("id", uid);
+        showToast("Promoted to admin");
+        searchUsers();
+      } catch (err) { showToast("Promote failed"); }
+    }
+
+    async function demoteAdmin(uid) {
+      if (uid === currentUser.id) { showToast("You can't demote yourself here"); return; }
+      if (!confirm("Remove admin privileges from this user?")) return;
+      try {
+        await supabase.from("profiles").update({ is_admin: false }).eq("id", uid);
+        showToast("Admin privileges removed");
+        searchUsers();
+      } catch (err) { showToast("Demote failed"); }
+    }
+
+    // ---------- Moderation ----------
+    async function loadModeration() {
+      const panel = document.getElementById("panel");
+      panel.innerHTML = `
+        <h3 class="sub-head">Recent reviews</h3><div id="modReviews"></div>
+        <h3 class="sub-head">Recent chat messages</h3><div id="modChat"></div>
+        <h3 class="sub-head">Recent forum threads</h3><div id="modThreads"></div>
+        <h3 class="sub-head">Recent club posts</h3><div id="modClub"></div>`;
+      loadModReviews();
+      loadModChat();
+      loadModThreads();
+      loadModClub();
+    }
+
+    async function loadModReviews() {
+      const box = document.getElementById("modReviews");
+      const { data } = await supabase.from("reviews").select("id, user_id, anime_mal_id, anime_title, rating, text, created_at").order("created_at", { ascending: false }).limit(20);
+      box.innerHTML = "";
+      if (!data?.length) { box.innerHTML = `<div class="empty-state">None.</div>`; return; }
+      data.forEach(async (r) => {
+        const p = await fetchProfileRow(r.user_id);
+        const el = document.createElement("div");
+        el.className = "admin-list-item";
+        el.innerHTML = `
+          <div class="grow">
+            <div>${adminNameHTML(p)} <span style="color:var(--text-dim); font-size:.8rem;">rated ${r.rating ?? "—"} on ${JIKAN.esc(r.anime_title || r.anime_mal_id)}</span></div>
+            <div style="color:var(--text-dim); font-size:.85rem;">${JIKAN.esc((r.text || "").slice(0, 140))}</div>
+          </div>
+          <button class="btn btn-danger btn-small" onclick="modDelete('reviews', ${r.id})">Delete</button>`;
+        box.appendChild(el);
+      });
+    }
+
+    async function loadModChat() {
+      const box = document.getElementById("modChat");
+      const { data } = await supabase.from("chat_messages").select("id, user_id, author_name, message, created_at").order("created_at", { ascending: false }).limit(20);
+      box.innerHTML = "";
+      if (!data?.length) { box.innerHTML = `<div class="empty-state">None.</div>`; return; }
+      data.forEach(async (m) => {
+        const p = await fetchProfileRow(m.user_id);
+        const el = document.createElement("div");
+        el.className = "admin-list-item";
+        el.innerHTML = `
+          <div class="grow">
+            <div>${adminNameHTML(p || { name: m.author_name })} <span style="color:var(--text-dim); font-size:.8rem;">${new Date(m.created_at).toLocaleString()}</span></div>
+            <div style="color:var(--text-dim); font-size:.85rem;">${JIKAN.esc(m.message.slice(0, 140))}</div>
+          </div>
+          <button class="btn btn-danger btn-small" onclick="modDelete('chat_messages', ${m.id})">Delete</button>`;
+        box.appendChild(el);
+      });
+    }
+
+    async function loadModThreads() {
+      const box = document.getElementById("modThreads");
+      const { data } = await supabase.from("forum_threads").select("id, user_id, title, category, created_at").order("created_at", { ascending: false }).limit(20);
+      box.innerHTML = "";
+      if (!data?.length) { box.innerHTML = `<div class="empty-state">None.</div>`; return; }
+      data.forEach(async (t) => {
+        const p = await fetchProfileRow(t.user_id);
+        const el = document.createElement("div");
+        el.className = "admin-list-item";
+        el.innerHTML = `
+          <div class="grow">
+            <div>${adminNameHTML(p)} <span style="color:var(--text-dim); font-size:.8rem;">[${JIKAN.esc(t.category)}]</span></div>
+            <div style="color:var(--text-dim); font-size:.85rem;">${JIKAN.esc(t.title)}</div>
+          </div>
+          <button class="btn btn-danger btn-small" onclick="modDeleteThread(${t.id})">Delete</button>`;
+        box.appendChild(el);
+      });
+    }
+
+    async function loadModClub() {
+      const box = document.getElementById("modClub");
+      const { data } = await supabase.from("club_posts").select("id, user_id, club_id, body, created_at").order("created_at", { ascending: false }).limit(20);
+      box.innerHTML = "";
+      if (!data?.length) { box.innerHTML = `<div class="empty-state">None.</div>`; return; }
+      data.forEach(async (p) => {
+        const profile = await fetchProfileRow(p.user_id);
+        const el = document.createElement("div");
+        el.className = "admin-list-item";
+        el.innerHTML = `
+          <div class="grow">
+            <div>${adminNameHTML(profile)} <span style="color:var(--text-dim); font-size:.8rem;">club #${p.club_id}</span></div>
+            <div style="color:var(--text-dim); font-size:.85rem;">${JIKAN.esc((p.body || "").slice(0, 140))}</div>
+          </div>
+          <button class="btn btn-danger btn-small" onclick="modDelete('club_posts', ${p.id})">Delete</button>`;
+        box.appendChild(el);
+      });
+    }
+
+    async function modDelete(table, id) {
+      if (!confirm(`Delete this ${table} row?`)) return;
+      try {
+        await supabase.from(table).delete().eq("id", id);
+        showToast("Deleted");
+        loadModeration();
+      } catch (err) { showToast("Delete failed: " + (err.message || "")); }
+    }
+
+    async function modDeleteThread(id) {
+      if (!confirm("Delete this thread AND all its replies?")) return;
+      try {
+        await supabase.from("forum_replies").delete().eq("thread_id", id);
+        await supabase.from("forum_threads").delete().eq("id", id);
+        showToast("Thread deleted");
+        loadModeration();
+      } catch (err) { showToast("Delete failed"); }
+    }
+
+    document.addEventListener("DOMContentLoaded", boot);
+  </script>
+</body>
+</html>

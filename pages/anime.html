@@ -1,0 +1,756 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Anime — OtakuPier</title>
+  <link rel="stylesheet" href="../css/style.css">
+</head>
+<body>
+  <nav class="navbar" id="navbar"></nav>
+
+  <main class="container" id="main">
+    <div class="loading"><div class="spinner"></div>Loading anime...</div>
+  </main>
+
+  <footer id="siteFooter"></footer>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="../js/config.js"></script>
+  <script src="../js/api.js"></script>
+  <script src="../js/app.js"></script>
+  <script>
+    const id = new URLSearchParams(window.location.search).get("id");
+    let animeData = null;
+    let myRank = null;
+    let communityRating = null;
+
+    async function loadAnime() {
+      const main = document.getElementById("main");
+      try {
+        // Admin-added custom anime (not on MyAnimeList) render first
+        if (supabase) {
+          const { data: custom } = await supabase
+            .from("custom_anime").select("*").eq("id", Number(id)).maybeSingle();
+          if (custom) { renderCustom(custom); return; }
+        }
+
+        const res = await JIKAN.getAnime(id);
+        animeData = res.data;
+
+        // Apply admin-curated overrides (title / image / synopsis / status)
+        if (supabase) {
+          try {
+            const { data: edit } = await supabase
+              .from("anime_edits").select("*").eq("mal_id", Number(id)).maybeSingle();
+            if (edit) {
+              const a = animeData;
+              if (edit.title) { a.title = edit.title; a.title_english = edit.title; }
+              if (edit.synopsis) a.synopsis = edit.synopsis;
+              if (edit.image_url) {
+                a.images = a.images || {};
+                a.images.jpg = a.images.jpg || {};
+                a.images.jpg.image_url = edit.image_url;
+                a.images.jpg.large_image_url = edit.image_url;
+              }
+              if (edit.status) a.status = edit.status;
+            }
+          } catch (e) {}
+        }
+
+        renderHeader();
+        renderTrailer();
+        loadCommunityRating();
+        loadSavedState();
+        await loadCharacters();
+        await loadEpisodes();
+        loadReviews();
+        loadMyRank();
+      } catch (err) {
+        main.innerHTML = `<div class="empty-state">Could not load this anime.</div>`;
+      }
+    }
+
+    // Render an admin-added custom anime entry
+    function renderCustom(c) {
+      const main = document.getElementById("main");
+      document.title = `${c.title} — OtakuPier`;
+      animeData = {
+        mal_id: c.id,
+        title: c.title,
+        title_english: c.title,
+        title_japanese: c.jp_title,
+        synopsis: c.synopsis || "No description yet.",
+        score: null,
+        type: c.type || "Anime",
+        status: c.status || "Unknown",
+        episodes: null,
+        images: { jpg: { large_image_url: c.image_url || "", image_url: c.image_url || "" } },
+      };
+      main.innerHTML = `
+        <div class="detail-header">
+          <div class="detail-poster">
+            <img src="${c.image_url || "https://via.placeholder.com/300x450?text=?"}"
+                 alt="${JIKAN.esc(c.title)}" onerror="this.src='https://via.placeholder.com/300x450?text=?'">
+          </div>
+          <div>
+            <h1 class="detail-title">${JIKAN.esc(c.title)}</h1>
+            ${c.jp_title ? `<div class="detail-jtitle">${JIKAN.esc(c.jp_title)}</div>` : ""}
+            <div class="detail-stats">
+              <span class="stat">Year: <strong>${c.year || "N/A"}</strong></span>
+              <span class="stat">Type: <strong>${JIKAN.esc(c.type || "Anime")}</strong></span>
+              <span class="stat">Status: <strong>${JIKAN.esc(c.status || "Unknown")}</strong></span>
+            </div>
+            <p class="detail-synopsis">${JIKAN.esc(c.synopsis || "No description yet.")}</p>
+            <span class="pill" style="background:rgba(255,196,0,.15); color:#ffc400;">Community entry</span>
+          </div>
+        </div>
+
+        <div id="rankBox"></div>
+        <div id="saveSlot" style="margin-top:14px;"></div>
+
+        <div class="reviews-section">
+          <h3 class="sub-head">Reviews &amp; Comments</h3>
+          <div id="reviewFormSlot"></div>
+          <div id="reviewList"></div>
+        </div>`;
+
+      loadSavedState();
+      loadCommunityRating();
+      loadReviews();
+      loadMyRank();
+    }
+
+    function renderHeader() {
+      const a = animeData;
+      const synopsis = (a.synopsis || "No synopsis available.").replace(/\[Written by MAL Rewrite\]/, "");
+      const mainTitle = a.title_english || a.title;
+      const jpTitle = a.title_japanese || (a.title_english ? a.title : "");
+      document.title = `${mainTitle} — OtakuPier`;
+
+      const genres = (a.genres || []).map((g) => `<span class="genre-tag">${g.name}</span>`).join("");
+      const studios = (a.studios || []).map((s) => s.name).join(", ") || "N/A";
+      const licensors = (a.licensors || []).map((s) => s.name).join(", ") || "N/A";
+      const aired = a.aired?.string || "N/A";
+
+      document.getElementById("main").innerHTML = `
+        <div class="detail-header">
+          <div class="detail-poster">
+            <img src="${a.images?.jpg?.large_image_url || a.images?.jpg?.image_url || ""}"
+                 alt="${JIKAN.esc(mainTitle)}" onerror="this.src='https://via.placeholder.com/300x450?text=?'">
+          </div>
+          <div>
+            <h1 class="detail-title">${JIKAN.esc(mainTitle)}</h1>
+            ${jpTitle ? `<div class="detail-jtitle">${JIKAN.esc(jpTitle)}</div>` : ""}
+            <div class="detail-stats">
+              <span class="stat" title="MyAnimeList score">Official: <strong>${a.score ? a.score.toFixed(2) : "N/A"}</strong></span>
+              <span class="stat" id="opScoreStat" title="OtakuPier community score">OtakuPier: <strong>--</strong></span>
+              <span class="stat">Rank: <strong>#${a.rank || "N/A"}</strong></span>
+              <span class="stat">Episodes: <strong>${a.episodes || "?"}</strong></span>
+              <span class="stat">Type: <strong>${a.type || "N/A"}</strong></span>
+              <span class="stat">Status: <strong>${a.status || "N/A"}</strong></span>
+            </div>
+            <div class="detail-stats">
+              <span class="stat">Studio: <strong>${JIKAN.esc(studios)}</strong></span>
+              <span class="stat">Aired: <strong>${JIKAN.esc(aired)}</strong></span>
+            </div>
+            <div class="detail-stats">
+              <span class="stat">Licensors: <strong>${JIKAN.esc(licensors)}</strong></span>
+              <span class="stat">Source: <strong>${a.source || "N/A"}</strong></span>
+              <span class="stat">Rating: <strong>${a.rating || "N/A"}</strong></span>
+              <span class="stat">Duration: <strong>${a.duration || "N/A"}</strong></span>
+            </div>
+            <p class="detail-synopsis">${JIKAN.esc(synopsis)}</p>
+            <div class="detail-genres">${genres}</div>
+            <div id="mangaLinks"></div>
+          </div>
+        </div>
+
+        <div id="rankBox"></div>
+
+        <div id="saveSlot" style="margin-top:14px;"></div>
+
+        <div id="relatedSlot"></div>
+
+        <div id="trailerSlot"></div>
+
+        <h3 class="sub-head">Characters</h3>
+        <div class="char-grid" id="charGrid"><div class="loading"><div class="spinner"></div></div></div>
+
+        <h3 class="sub-head">Episodes</h3>
+        <div class="ep-list" id="epList"><div class="loading"><div class="spinner"></div></div></div>
+
+        <div class="reviews-section">
+          <h3 class="sub-head">Reviews &amp; Comments</h3>
+          <div id="reviewFormSlot"></div>
+          <div id="reviewList"></div>
+        </div>`;
+
+      loadMangaLinks();
+      loadRelated();
+    }
+
+    // ---------- Seasons & related anime (sequels, movies, OVAs) ----------
+    async function loadRelated() {
+      const slot = document.getElementById("relatedSlot");
+      if (!slot) return;
+      let related = JIKAN.relatedAnime(animeData);
+
+      // Jikan relations can be incomplete for some franchises. If we only
+      // have a couple of entries, try to find sibling seasons by title.
+      if (related.length < 3) {
+        const extra = await franchiseFallback(animeData);
+        const have = new Set(related.map((r) => r.mal_id));
+        extra.forEach((r) => {
+          if (!have.has(r.mal_id)) {
+            have.add(r.mal_id);
+            related.push(r);
+          }
+        });
+      }
+      if (!related.length) return;
+      slot.innerHTML = `<h3 class="sub-head">Seasons &amp; Related</h3>
+        <div class="grid" id="relatedGrid" style="grid-template-columns:repeat(auto-fill,minmax(150px,1fr));"></div>`;
+      const grid = document.getElementById("relatedGrid");
+      related.slice(0, 12).forEach(async (r) => {
+        const el = document.createElement("div");
+        el.className = "anime-card";
+        el.innerHTML = `<div class="poster">
+            <img src="https://via.placeholder.com/300x400?text=Loading" alt="${JIKAN.esc(r.name)}"
+                 loading="lazy" onerror="this.src='https://via.placeholder.com/300x400?text=?'">
+          </div>
+          <div class="info">
+            <div class="title">${JIKAN.esc(r.name)}</div>
+            <div class="jtitle" style="color:var(--accent-3);">${JIKAN.esc(r.relation)}</div>
+          </div>`;
+        el.addEventListener("click", () => (window.location.href = `anime.html?id=${r.mal_id}`));
+        grid.appendChild(el);
+        // Fetch image + score in the background
+        try {
+          const res = await JIKAN.getAnime(r.mal_id);
+          const a = res.data;
+          const img = el.querySelector("img");
+          if (img) img.src = a.images?.jpg?.image_url || "https://via.placeholder.com/300x400?text=?";
+          const meta = el.querySelector(".info");
+          const score = a.score ? a.score.toFixed(2) : "N/A";
+          meta.insertAdjacentHTML("beforeend", `<div class="meta">
+            <span class="score">★ ${score}</span>
+            <span class="pill">${a.type || "Anime"}</span>
+          </div>`);
+        } catch (err) {
+          const img = el.querySelector("img");
+          if (img) img.src = "https://via.placeholder.com/300x400?text=?";
+        }
+      });
+    }
+
+    // Try to find other entries of the same franchise by searching the base
+    // title (e.g., strip "Season 2" / "Part II" to find season 1 and movies).
+    async function franchiseFallback(a) {
+      const base = baseTitle(a);
+      if (!base) return [];
+      try {
+        const res = await JIKAN.search(base, 1);
+        const out = [];
+        (res.data || []).forEach((it) => {
+          if (it.mal_id === a.mal_id) return;
+          const t = JIKAN.title(it).toLowerCase();
+          const jp = it.title_japanese ? it.title_japanese.toLowerCase() : "";
+          if (t.includes(base) || jp.includes(base)) {
+            out.push({ mal_id: it.mal_id, name: JIKAN.title(it), relation: "Related", sort: 6 });
+          }
+        });
+        return out.sort((x, y) => x.sort - y.sort);
+      } catch (err) {
+        return [];
+      }
+    }
+
+    // Reduce a title like "Attack on Titan: Final Season Part 2" to "attack on titan"
+    function baseTitle(a) {
+      let t = (a.title_english || a.title || "").toLowerCase();
+      t = t.replace(/\b(final|the|season|part|movie|film|ova|ona|special|live action|:|\|)\b/gi, " ");
+      t = t.replace(/\b(1st|2nd|3rd|4th|5th|6th|7th|8th|9th|10th|11th|12th)\b/gi, " ");
+      t = t.replace(/[0-9]+/g, " ");
+      t = t.replace(/\b(ii|iii|iv|v|vi|vii|viii|ix|x)\b/g, " ");
+      t = t.replace(/\s+/g, " ").trim();
+      // Keep at most the first 4 significant words to avoid false positives
+      const words = t.split(" ");
+      return words.slice(0, 4).join(" ");
+    }
+
+    // ---------- Manga links (MAL + MangaDex) ----------
+    async function loadMangaLinks() {
+      const slot = document.getElementById("mangaLinks");
+      if (!slot) return;
+      const manga = JIKAN.relatedManga(animeData);
+      if (!manga.length) return;
+
+      let html = `<div class="detail-genres" style="margin-top:6px;"><span class="genre-tag" style="background:rgba(0,212,168,.15); border-color:rgba(0,212,168,.4); color:var(--accent-3);">Manga</span></div>
+        <div style="display:flex; flex-direction:column; gap:6px;">`;
+
+      // Keep only the single best adaptation
+      const m = manga[0];
+      const md = await JIKAN.mangadexSearch(m.name);
+      if (md[0]) {
+        html += `<a href="${md[0].url}" target="_blank" rel="noopener" style="color:var(--accent-3); font-weight:600;">
+          Read the manga on MangaDex: ${JIKAN.esc(md[0].title)}</a>`;
+      }
+      html += `<a href="${m.url}" target="_blank" rel="noopener" style="color:var(--accent); font-weight:600;">
+        Read the manga: ${JIKAN.esc(m.name)} <span style="opacity:.6">(MyAnimeList)</span></a>`;
+
+      html += `</div>`;
+      slot.innerHTML = html;
+    }
+
+    function renderTrailer() {
+      const slot = document.getElementById("trailerSlot");
+      const t = animeData.trailer;
+      const ytId = t?.youtube_id;
+      if (ytId) {
+        slot.innerHTML = `<h3 class="sub-head">Trailer</h3>
+          <div class="trailer-wrap">
+            <iframe src="https://www.youtube-nocookie.com/embed/${ytId}" allowfullscreen loading="lazy"></iframe>
+          </div>`;
+      }
+    }
+
+    async function loadCharacters() {
+      const grid = document.getElementById("charGrid");
+      try {
+        const res = await JIKAN.characters(id);
+        grid.innerHTML = "";
+        res.data.slice(0, 12).forEach((c) => {
+          const va = (c.voice_actors || []).find((v) => v.language === "Japanese");
+          const vaName = va?.person?.name ? `VA: ${va.person.name}` : "";
+          const el = document.createElement("div");
+          el.className = "char-card";
+          el.innerHTML = `
+            <img src="${c.character.images?.jpg?.image_url || "https://via.placeholder.com/200x200?text=?"}"
+                 alt="${JIKAN.esc(c.character.name)}" loading="lazy"
+                 onerror="this.src='https://via.placeholder.com/200x200?text=?'">
+            <div class="char-name">${JIKAN.esc(c.character.name)}</div>
+            <div class="char-role">${c.role || ""}</div>
+            ${vaName ? `<div class="char-role" style="color:var(--accent-3);">${JIKAN.esc(vaName)}</div>` : ""}`;
+          el.addEventListener("click", () => (window.location.href = `character.html?id=${c.character.mal_id}`));
+          grid.appendChild(el);
+        });
+        if (!res.data.length) grid.innerHTML = `<div class="empty-state">No characters listed.</div>`;
+      } catch (err) {
+        grid.innerHTML = `<div class="empty-state">Could not load characters.</div>`;
+      }
+    }
+
+    async function loadEpisodes() {
+      const list = document.getElementById("epList");
+      const all = [];
+      try {
+        // Fetch every page so the full episode list (incl. filler/recap) shows
+        let page = 1;
+        let lastPage = 1;
+        do {
+          const res = await JIKAN.episodes(id, page);
+          all.push(...(res.data || []));
+          lastPage = res.pagination?.last_visible_page || page;
+          page++;
+        } while (page <= lastPage && page <= 10 && all.length < 200);
+
+        list.innerHTML = "";
+        if (!all.length) {
+          list.innerHTML = `<div class="empty-state">Episode list unavailable.</div>`;
+          return;
+        }
+        all.forEach((ep) => {
+          const el = document.createElement("div");
+          el.className = "ep-item";
+          const score = ep.score ? `<span class="ep-score">★ ${ep.score.toFixed(2)}</span>` : "";
+          const badges = (ep.filler ? `<span class="ep-badge">Filler</span>` : "")
+                       + (ep.recap ? `<span class="ep-badge">Recap</span>` : "");
+          el.innerHTML = `
+            <div class="ep-num">Episode ${ep.mal_id || "?"} ${badges}</div>
+            <div class="ep-title">${JIKAN.esc(ep.title || "Untitled")}</div>
+            ${ep.title_japanese ? `<div class="char-role" style="color:var(--text-dim);">${JIKAN.esc(ep.title_japanese)}</div>` : ""}
+            <div class="ep-meta">
+              ${score}
+              ${ep.aired ? `<span class="char-role">${JIKAN.esc(String(ep.aired).slice(0, 10))}</span>` : ""}
+              ${ep.url ? `<a class="ep-link" href="${ep.url}" target="_blank" rel="noopener">MAL &nearr;</a>` : ""}
+            </div>`;
+          list.appendChild(el);
+        });
+      } catch (err) {
+        list.innerHTML = `<div class="empty-state">Could not load episodes.</div>`;
+      }
+    }
+
+    // ---------- OtakuPier community rating (avg of all user votes) ----------
+    async function loadCommunityRating() {
+      if (!SUPABASE_READY || !supabase) return;
+      try {
+        const { data, error } = await supabase
+          .from("rankings")
+          .select("position")
+          .eq("anime_mal_id", Number(id));
+        if (error) throw error;
+        const n = data.length;
+        if (!n) return;
+        const avg = data.reduce((s, r) => s + r.position, 0) / n;
+        communityRating = { avg: avg.toFixed(2), count: n };
+        const stat = document.getElementById("opScoreStat");
+        if (stat) {
+          stat.innerHTML = `OtakuPier: <strong style="color:var(--accent-3)">${avg.toFixed(2)}</strong> (${n} vote${n === 1 ? "" : "s"})`;
+        }
+      } catch (err) {
+        // silently ignore; official score stays
+      }
+    }
+
+    // ---------- Rankings: 1 user = 1 vote ----------
+    async function loadMyRank() {
+      if (!SUPABASE_READY || !supabase) return;
+      const box = document.getElementById("rankBox");
+      try {
+        const { data } = await supabase
+          .from("rankings")
+          .select("*")
+          .eq("anime_mal_id", Number(id))
+          .eq("user_id", currentUser?.id)
+          .maybeSingle();
+        myRank = data;
+        renderRankBox(box);
+      } catch (err) {
+        renderRankBox(box);
+      }
+    }
+
+    function renderRankBox(box) {
+      if (!box) return;
+      const official = animeData.score ? animeData.score.toFixed(1) : "N/A";
+      const op = communityRating ? `${communityRating.avg} (${communityRating.count} votes)` : "No votes yet";
+      box.innerHTML = `
+        <div class="review-form">
+          <strong>Rate this anime</strong> <span style="color:var(--text-dim); font-weight:400; font-size:.9rem;">— 1 vote per user</span>
+          <div style="display:flex; flex-wrap:wrap; gap:18px; margin:10px 0 14px;">
+            <div style="text-align:center;">
+              <div style="font-size:.8rem; color:var(--text-dim);">Official score</div>
+              <div style="font-size:1.4rem; font-weight:800; color:var(--accent-3);">${official}</div>
+            </div>
+            <div style="text-align:center;">
+              <div style="font-size:.8rem; color:var(--text-dim);">OtakuPier score</div>
+              <div style="font-size:1.4rem; font-weight:800; color:var(--accent-2);">${op}</div>
+            </div>
+            ${myRank ? `<div style="text-align:center;">
+              <div style="font-size:.8rem; color:var(--text-dim);">Your vote</div>
+              <div style="font-size:1.4rem; font-weight:800; color:var(--accent);">${myRank.position}/10</div>
+            </div>` : ""}
+          </div>
+          ${isLoggedIn()
+            ? `<label style="display:block; margin-bottom:8px;">Vote ${myRank ? "(change your vote)" : ""}:</label>
+               <div style="display:flex; gap:10px; flex-wrap:wrap; align-items:center;">
+                 <input type="number" id="rankInput" min="1" max="10" step="1" value="${myRank?.position || 5}"
+                        style="width:90px; padding:10px; border-radius:10px; border:1px solid var(--border); background:var(--bg-alt); color:var(--text); font-family:inherit;">
+                 <button class="btn btn-primary" onclick="saveRank()">${myRank ? "Update vote" : "Cast vote"}</button>
+                 ${myRank ? `<button class="btn btn-danger" onclick="removeRank()">Remove vote</button>` : ""}
+               </div>`
+            : `<a class="btn btn-outline" href="login.html">Login to vote on this anime</a>`}
+        </div>`;
+    }
+
+    async function saveRank() {
+      const pos = Number(document.getElementById("rankInput").value);
+      if (!Number.isInteger(pos) || pos < 1 || pos > 10) {
+        showToast("Vote must be a whole number between 1 and 10");
+        return;
+      }
+      try {
+        const payload = {
+          user_id: currentUser.id,
+          anime_mal_id: Number(id),
+          anime_title: JIKAN.title(animeData),
+          anime_image: animeData.images?.jpg?.image_url,
+          position: pos,
+        };
+        if (myRank) {
+          await supabase.from("rankings").update({ position: pos }).eq("id", myRank.id);
+        } else {
+          await dbInsert("rankings", payload);
+          awardXp(5); // +5 XP for first vote
+        }
+        showToast("Vote saved!");
+        myRank = { ...myRank, position: pos, id: myRank?.id };
+        communityRating = null;
+        renderRankBox(document.getElementById("rankBox"));
+        loadCommunityRating();
+      } catch (err) {
+        showToast("Could not save vote: " + err.message);
+      }
+    }
+
+    async function removeRank() {
+      if (!myRank) return;
+      try {
+        await supabase.from("rankings").delete().eq("id", myRank.id);
+        myRank = null;
+        communityRating = null;
+        showToast("Vote removed");
+        renderRankBox(document.getElementById("rankBox"));
+        loadCommunityRating();
+      } catch (err) {
+        showToast("Could not remove vote");
+      }
+    }
+
+    // ---------- Save to My List ----------
+    let isSaved = false;
+    async function loadSavedState() {
+      const slot = document.getElementById("saveSlot");
+      if (!slot) return;
+      if (!isLoggedIn()) {
+        slot.innerHTML = `<button class="btn btn-outline" onclick="location.href='login.html'">Save to My List</button>
+          <span style="color:var(--text-dim); font-size:.85rem; margin-left:10px;">Login to save this anime.</span>`;
+        return;
+      }
+      try {
+        const { data } = await supabase
+          .from("saved_anime")
+          .select("id")
+          .eq("anime_mal_id", Number(id))
+          .eq("user_id", currentUser.id)
+          .maybeSingle();
+        isSaved = !!data;
+        renderSaveButton(slot);
+      } catch (err) {
+        slot.innerHTML = "";
+      }
+    }
+
+    function renderSaveButton(slot) {
+      slot.innerHTML = isSaved
+        ? `<button class="btn btn-outline" onclick="unsaveAnime()">✓ Saved</button>
+           <span style="color:var(--text-dim); font-size:.85rem; margin-left:10px;">In your My List.</span>`
+        : `<button class="btn btn-primary" onclick="saveAnime()">＋ Save to My List</button>`;
+    }
+
+    async function saveAnime() {
+      if (!isLoggedIn()) return;
+      try {
+        await dbInsert("saved_anime", {
+          user_id: currentUser.id,
+          anime_mal_id: Number(id),
+          anime_title: JIKAN.title(animeData),
+          anime_image: animeData.images?.jpg?.image_url,
+        });
+        isSaved = true;
+        awardXp(5); // +5 XP for saving an anime
+        showToast("Saved to My List! +5 XP");
+        renderSaveButton(document.getElementById("saveSlot"));
+      } catch (err) {
+        showToast("Could not save: " + err.message);
+      }
+    }
+
+    async function unsaveAnime() {
+      try {
+        await supabase.from("saved_anime").delete().eq("anime_mal_id", Number(id)).eq("user_id", currentUser.id);
+        isSaved = false;
+        showToast("Removed from My List");
+        renderSaveButton(document.getElementById("saveSlot"));
+      } catch (err) {
+        showToast("Could not remove");
+      }
+    }
+
+    // ---------- Reviews & Comments ----------
+    function renderReviewForm() {
+      const slot = document.getElementById("reviewFormSlot");
+      if (!slot) return;
+      if (!isLoggedIn()) {
+        slot.innerHTML = `<p style="color:var(--text-dim); margin-bottom:20px;">
+          <a href="login.html" style="color:var(--accent)">Login</a> to leave a review or comment.</p>`;
+        return;
+      }
+      slot.innerHTML = `
+        <form class="review-form" id="reviewForm">
+          <div class="form-group">
+            <label for="reviewType">Type</label>
+            <select id="reviewType" style="width:100%; padding:12px; border-radius:10px; border:1px solid var(--border); background:var(--bg-alt); color:var(--text); font-family:inherit; margin-bottom:10px;">
+              <option value="review">Review (with rating)</option>
+              <option value="comment">Comment (no rating)</option>
+            </select>
+          </div>
+          <div class="rating-picker" id="starPicker"></div>
+          <textarea id="reviewText" placeholder="Share your thoughts on this anime..."></textarea>
+          <button type="submit" class="btn btn-primary">Post</button>
+        </form>`;
+      buildStarPicker();
+      document.getElementById("reviewType").addEventListener("change", (e) => {
+        const picker = document.getElementById("starPicker");
+        if (picker) picker.style.display = e.target.value === "review" ? "flex" : "none";
+      });
+      document.getElementById("reviewForm").addEventListener("submit", submitReview);
+    }
+
+    let pickedRating = 0;
+    function buildStarPicker() {
+      const picker = document.getElementById("starPicker");
+      if (!picker) return;
+      picker.innerHTML = "";
+      for (let i = 1; i <= 10; i++) {
+        const star = document.createElement("button");
+        star.type = "button";
+        star.className = "star";
+        star.textContent = "\u2605";
+        star.addEventListener("click", () => {
+          pickedRating = i;
+          [...picker.children].forEach((s, idx) => s.classList.toggle("active", idx < i));
+        });
+        picker.appendChild(star);
+      }
+    }
+
+    async function submitReview(e) {
+      e.preventDefault();
+      const text = document.getElementById("reviewText").value.trim();
+      const type = document.getElementById("reviewType").value;
+      if (!text) {
+        showToast("Please write something first");
+        return;
+      }
+      if (type === "review" && !pickedRating) {
+        showToast("Please pick a star rating for your review");
+        return;
+      }
+      try {
+        await dbInsert("reviews", {
+          user_id: currentUser.id,
+          anime_mal_id: Number(id),
+          anime_title: JIKAN.title(animeData),
+          rating: type === "review" ? pickedRating : null,
+          text,
+          is_comment: type === "comment",
+        });
+        awardXp(10); // +10 XP for posting
+        showToast((type === "review" ? "Review posted! +10 XP" : "Comment posted! +10 XP"));
+        document.getElementById("reviewText").value = "";
+        pickedRating = 0;
+        buildStarPicker();
+        loadReviews();
+      } catch (err) {
+        showToast("Could not post: " + err.message);
+      }
+    }
+
+    async function loadReviews() {
+      const list = document.getElementById("reviewList");
+      renderReviewForm();
+      if (!SUPABASE_READY || !supabase) {
+        list.innerHTML = `<div class="empty-state">Reviews will appear here once Supabase is configured.</div>`;
+        return;
+      }
+      try {
+        const { data, error } = await supabase
+          .from("reviews")
+          .select("*")
+          .eq("anime_mal_id", Number(id))
+          .order("created_at", { ascending: false })
+          .limit(100);
+        if (error) throw error;
+        list.innerHTML = "";
+        if (!data.length) {
+          list.innerHTML = `<div class="empty-state">No reviews or comments yet. Be the first!</div>`;
+          return;
+        }
+        // Fetch like counts + whether the current user liked each review
+        let likeMap = {};
+        try {
+          const ids = data.map((r) => r.id);
+          const { data: likes } = await supabase.from("review_likes").select("review_id").in("review_id", ids);
+          likes.forEach((l) => { likeMap[l.review_id] = (likeMap[l.review_id] || 0) + 1; });
+        } catch (e) {}
+        data.forEach((r) => {
+          const el = document.createElement("div");
+          el.className = "review";
+          const name = r.author_name || "User";
+          const stars = r.rating
+            ? `<span class="stars">${"\u2605".repeat(r.rating)}<span style="opacity:.25">${"\u2605".repeat(10 - r.rating)}</span></span>`
+            : `<span class="review-date" style="padding:2px 8px; background:rgba(0,212,168,.12); border-radius:999px;">Comment</span>`;
+          const likeCount = likeMap[r.id] || 0;
+          el.innerHTML = `
+            <div class="review-top">
+              <div class="review-author">
+                <div class="avatar" style="cursor:pointer;" onclick="location.href='profile.html?id=${r.user_id}'">${name.charAt(0).toUpperCase()}</div>
+                <a href="profile.html?id=${r.user_id}" style="color:var(--text); text-decoration:none;">${JIKAN.esc(name)}</a>
+                <span id="rankTag-${r.id}"></span>
+              </div>
+              ${stars}
+            </div>
+            <div class="review-date">${new Date(r.created_at).toLocaleString()}</div>
+            <p style="margin-top:8px;">${JIKAN.esc(r.text)}</p>
+            <div class="review-actions">
+              <button class="like-btn" onclick="toggleLike(${r.id})" id="likeBtn-${r.id}">
+                ♡ <span id="likeCount-${r.id}">${likeCount}</span>
+              </button>
+            </div>`;
+          list.appendChild(el);
+          fetchReviewAuthor(r.user_id, r.id, name);
+        });
+      } catch (err) {
+        list.innerHTML = `<div class="empty-state">Could not load reviews.</div>`;
+      }
+    }
+
+    // Fetch a reviewer's profile to display their name + rank badge
+    async function fetchReviewAuthor(userId, reviewId, fallback) {
+      const tag = document.getElementById(`rankTag-${reviewId}`);
+      if (!tag) return;
+      try {
+        const { data } = await supabase.from("profiles").select("name, xp, is_admin").eq("id", userId).maybeSingle();
+        if (data) {
+          const nameEl = tag.parentElement.querySelector("a");
+          if (nameEl && data.name) {
+            if (data.is_admin) nameEl.outerHTML = adminNameHTML(data);
+            else nameEl.textContent = data.name;
+          }
+          tag.innerHTML = rankTag(userId, data);
+        } else {
+          tag.innerHTML = rankTag(userId, { xp: 0 });
+        }
+      } catch (e) {
+        tag.innerHTML = rankTag(userId, { xp: 0 });
+      }
+    }
+
+    let likesLoaded = false;
+    async function toggleLike(reviewId) {
+      if (!isLoggedIn()) {
+        showToast("Login to like reviews");
+        return;
+      }
+      const btn = document.getElementById(`likeBtn-${reviewId}`);
+      const countEl = document.getElementById(`likeCount-${reviewId}`);
+      const already = btn.classList.contains("liked");
+      try {
+        if (already) {
+          await supabase.from("review_likes").delete().eq("review_id", reviewId).eq("user_id", currentUser.id);
+          btn.classList.remove("liked");
+          btn.innerHTML = `♡ <span id="likeCount-${reviewId}">${Math.max(0, Number(countEl.textContent) - 1)}</span>`;
+        } else {
+          await dbInsert("review_likes", { user_id: currentUser.id, review_id: reviewId });
+          btn.classList.add("liked");
+          btn.innerHTML = `♥ <span id="likeCount-${reviewId}">${Number(countEl.textContent) + 1}</span>`;
+          // +10 XP to the review author (fire-and-forget)
+          try {
+            const { data: rev } = await supabase.from("reviews").select("user_id").eq("id", reviewId).single();
+            if (rev && rev.user_id !== currentUser.id) {
+              await supabase.rpc("award_xp_to", { recipient: rev.user_id, amount: 10 });
+            }
+          } catch (e) {}
+        }
+      } catch (err) {
+        showToast("Could not update like");
+      }
+    }
+
+    document.addEventListener("DOMContentLoaded", loadAnime);
+  </script>
+</body>
+</html>

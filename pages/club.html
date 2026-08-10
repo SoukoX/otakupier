@@ -1,0 +1,227 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Club — OtakuPier</title>
+  <link rel="stylesheet" href="../css/style.css">
+</head>
+<body>
+  <nav class="navbar" id="navbar"></nav>
+
+  <main class="container" id="main">
+    <div class="loading"><div class="spinner"></div>Loading club...</div>
+  </main>
+
+  <footer id="siteFooter"></footer>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="../js/config.js"></script>
+  <script src="../js/api.js"></script>
+  <script src="../js/app.js"></script>
+  <script>
+    const clubId = new URLSearchParams(window.location.search).get("id");
+    let club = null;
+    let isMember = false;
+    let myRole = "";
+
+    async function load() {
+      const main = document.getElementById("main");
+      try {
+        const { data: c, error } = await supabase.from("clubs").select("*").eq("id", clubId).single();
+        if (error || !c) { main.innerHTML = `<div class="empty-state">Club not found.</div>`; return; }
+        club = c;
+        document.title = `${c.name} — OtakuPier`;
+        const owner = await fetchProfile(c.created_by);
+        if (isLoggedIn()) {
+          const { data: mem } = await supabase.from("club_members").select("*")
+            .eq("club_id", clubId).eq("user_id", currentUser.id).maybeSingle();
+          isMember = !!mem;
+          myRole = mem?.role || "";
+        }
+        main.innerHTML = `
+          <a href="clubs.html" class="btn btn-outline btn-small" style="margin-bottom:16px;">&larr; All clubs</a>
+          <div class="profile-card">
+            <div class="avatar-lg" style="width:70px; height:70px; font-size:1.6rem;">${JIKAN.esc(c.name).charAt(0).toUpperCase()}</div>
+            <div style="flex:1; min-width:220px;">
+              <h2 style="margin:0 0 4px;">${JIKAN.esc(c.name)}</h2>
+              <p style="color:var(--text-dim); margin:0 0 8px;">${JIKAN.esc(c.description || "No description yet.")}</p>
+              <span style="color:var(--text-dim); font-size:.8rem;">Owner: ${owner?.is_admin ? adminNameHTML(owner) : `<a href="profile.html?id=${c.created_by}" style="color:var(--accent);">${JIKAN.esc(owner?.name || "User")}</a>`} • created ${new Date(c.created_at).toLocaleDateString()}</span>
+              <div id="joinBtn" style="margin-top:12px;"></div>
+            </div>
+          </div>
+
+          <h3 class="sub-head">Members (<span id="memberCount">?</span>)</h3>
+          <div id="memberList"></div>
+
+          <h3 class="sub-head">Club discussion</h3>
+          <div id="posts"></div>
+          <div id="postForm"></div>`;
+        loadMembers();
+        loadPosts();
+        renderJoinButton();
+        renderPostForm();
+      } catch (err) {
+        main.innerHTML = `<div class="empty-state">Could not load club.</div>`;
+      }
+    }
+
+    async function fetchProfile(id) {
+      const { data } = await supabase.from("profiles").select("name, xp, is_admin").eq("id", id).maybeSingle();
+      return data;
+    }
+
+    async function loadMembers() {
+      const { data } = await supabase.from("club_members").select("*, user_id").eq("club_id", clubId);
+      const box = document.getElementById("memberList");
+      const count = document.getElementById("memberCount");
+      if (count) count.textContent = data.length;
+      box.innerHTML = "";
+      for (const m of data) {
+        const p = await fetchProfile(m.user_id);
+        const el = document.createElement("div");
+        el.className = "user-row";
+        el.innerHTML = `
+          <div class="avatar" style="cursor:pointer;" onclick="location.href='profile.html?id=${m.user_id}'">${(p?.name || "U").charAt(0).toUpperCase()}</div>
+          ${p?.is_admin ? adminNameHTML(p) : `<a href="profile.html?id=${m.user_id}" style="color:var(--text); text-decoration:none; font-weight:600;">${JIKAN.esc(p?.name || "User")}</a>`}
+          ${m.role === "owner" ? `<span class="genre-tag" style="font-size:.7rem;">Owner</span>` : ""}
+          ${myRole === "owner" && m.role !== "owner" ? `<button class="btn btn-danger btn-small" style="margin-left:auto;" onclick="removeMember('${m.user_id}')">Remove</button>` : ""}`;
+        box.appendChild(el);
+      }
+    }
+
+    function renderJoinButton() {
+      const slot = document.getElementById("joinBtn");
+      if (!isLoggedIn()) {
+        slot.innerHTML = `<a class="btn btn-primary" href="login.html">Login to join</a>`;
+        return;
+      }
+      if (myRole === "owner") {
+        slot.innerHTML = `<button class="btn btn-outline" onclick="deleteClub()">Delete club</button>`;
+      } else if (isMember) {
+        slot.innerHTML = `<button class="btn btn-outline" onclick="leaveClub()">Leave club</button>`;
+      } else {
+        slot.innerHTML = `<button class="btn btn-primary" onclick="joinClub()">Join this club</button>`;
+      }
+    }
+
+    async function joinClub() {
+      try {
+        await dbInsert("club_members", { club_id: Number(clubId), user_id: currentUser.id, role: "member" });
+        awardXp(10); // +10 XP for joining
+        showToast("Welcome to the club! +10 XP");
+        isMember = true;
+        loadMembers();
+        renderJoinButton();
+        renderPostForm();
+      } catch (err) {
+        showToast("Could not join: " + err.message);
+      }
+    }
+
+    async function leaveClub() {
+      try {
+        await supabase.from("club_members").delete().eq("club_id", clubId).eq("user_id", currentUser.id);
+        showToast("You left the club");
+        isMember = false;
+        myRole = "";
+        loadMembers();
+        renderJoinButton();
+        renderPostForm();
+      } catch (err) {
+        showToast("Could not leave club");
+      }
+    }
+
+    async function removeMember(uid) {
+      try {
+        await supabase.from("club_members").delete().eq("club_id", clubId).eq("user_id", uid);
+        showToast("Member removed");
+        loadMembers();
+      } catch (err) {
+        showToast("Could not remove member");
+      }
+    }
+
+    async function deleteClub() {
+      if (!confirm("Delete this club permanently?")) return;
+      try {
+        await supabase.from("club_posts").delete().eq("club_id", clubId);
+        await supabase.from("club_members").delete().eq("club_id", clubId);
+        await supabase.from("clubs").delete().eq("id", clubId);
+        showToast("Club deleted");
+        window.location.href = "clubs.html";
+      } catch (err) {
+        showToast("Could not delete club");
+      }
+    }
+
+    async function loadPosts() {
+      const box = document.getElementById("posts");
+      const { data } = await supabase.from("club_posts").select("*").eq("club_id", clubId).order("created_at", { ascending: true });
+      box.innerHTML = "";
+      if (!data.length) {
+        box.innerHTML = `<div class="empty-state">No posts yet. Start the conversation!</div>`;
+        return;
+      }
+      for (const p of data) {
+        const author = await fetchProfile(p.user_id);
+        const el = document.createElement("div");
+        el.className = "review";
+        el.innerHTML = `
+          <div class="review-top">
+            <div class="review-author">
+              <div class="avatar" style="cursor:pointer;" onclick="location.href='profile.html?id=${p.user_id}'">${(author?.name || "U").charAt(0).toUpperCase()}</div>
+              ${author?.is_admin ? adminNameHTML(author) : `<a href="profile.html?id=${p.user_id}" style="color:var(--text); text-decoration:none;">${JIKAN.esc(author?.name || "User")}</a>`}
+            </div>
+          </div>
+          <div class="review-date">${new Date(p.created_at).toLocaleString()}</div>
+          <p style="margin-top:8px; white-space:pre-wrap;">${JIKAN.esc(p.body)}</p>
+          ${isLoggedIn() && currentUser.id === p.user_id ? `<button class="btn btn-danger btn-small" style="margin-top:8px;" onclick="deletePost(${p.id})">Delete</button>` : ""}`;
+        box.appendChild(el);
+      }
+    }
+
+    function renderPostForm() {
+      const slot = document.getElementById("postForm");
+      if (!isLoggedIn() || !isMember) {
+        slot.innerHTML = `<p style="color:var(--text-dim); margin-top:16px;">Join the club to post.</p>`;
+        return;
+      }
+      slot.innerHTML = `
+        <form class="review-form" id="postFormEl">
+          <textarea id="postBody" placeholder="Share something with the club..." style="min-height:90px;"></textarea>
+          <button type="submit" class="btn btn-primary">Post</button>
+        </form>`;
+      document.getElementById("postFormEl").addEventListener("submit", submitPost);
+    }
+
+    async function submitPost(e) {
+      e.preventDefault();
+      const body = document.getElementById("postBody").value.trim();
+      if (!body) return;
+      try {
+        await dbInsert("club_posts", { club_id: Number(clubId), user_id: currentUser.id, body });
+        awardXp(5); // +5 XP per club post
+        showToast("Posted! +5 XP");
+        document.getElementById("postBody").value = "";
+        loadPosts();
+      } catch (err) {
+        showToast("Could not post: " + err.message);
+      }
+    }
+
+    async function deletePost(pid) {
+      try {
+        await supabase.from("club_posts").delete().eq("id", pid);
+        showToast("Post deleted");
+        loadPosts();
+      } catch (err) {
+        showToast("Could not delete post");
+      }
+    }
+
+    document.addEventListener("DOMContentLoaded", load);
+  </script>
+</body>
+</html>

@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>OtakuPier — Anime Catalog & Community</title>
+  <meta name="description" content="OtakuPier: browse anime, characters, episodes, community rankings, reviews and live chat.">
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <nav class="navbar" id="navbar"></nav>
+
+  <header class="hero">
+    <h1>Welcome to <span>OtakuPier</span></h1>
+    <p>Explore the world of anime. Discover titles, characters, episodes, and connect with the community — rankings, reviews, and live chat.</p>
+    <a href="pages/catalog.html" class="btn btn-primary">Browse the catalog</a>
+  </header>
+
+  <main class="container">
+    <section id="trending">
+      <div class="section-head">
+        <h2>Trending Now</h2>
+        <a class="link" href="pages/catalog.html">View all</a>
+      </div>
+      <div class="grid" id="trendingGrid"></div>
+    </section>
+
+    <section id="airing">
+      <div class="section-head">
+        <h2>Currently Airing</h2>
+        <a class="link" href="pages/catalog.html">View all</a>
+      </div>
+      <div class="grid" id="airingGrid"></div>
+    </section>
+
+    <section id="upcoming">
+      <div class="section-head">
+        <h2>Upcoming</h2>
+        <a class="link" href="pages/catalog.html">View all</a>
+      </div>
+      <div class="grid" id="upcomingGrid"></div>
+    </section>
+
+    <section id="toprated">
+      <div class="section-head">
+        <h2>Top Rated</h2>
+        <a class="link" href="pages/rankings.html">See community rankings</a>
+      </div>
+      <div class="grid" id="topRatedGrid"></div>
+    </section>
+  </main>
+
+  <footer id="siteFooter"></footer>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="js/config.js"></script>
+  <script src="js/api.js"></script>
+  <script src="js/app.js"></script>
+  <script>
+    async function loadHome() {
+      const trending = document.getElementById("trendingGrid");
+      const topRated = document.getElementById("topRatedGrid");
+      const airing = document.getElementById("airingGrid");
+      const upcoming = document.getElementById("upcomingGrid");
+
+      // Translucent skeleton placeholders while data loads
+      [trending, topRated, airing, upcoming].forEach((g) => {
+        g.innerHTML = skeletonGrid(12);
+      });
+
+      // Track anime already placed so the same title never appears twice
+      const seen = new Set();
+      const pick = (list) => {
+        const fresh = [];
+        (list || []).forEach((a) => {
+          if (a.mal_id && !seen.has(a.mal_id)) {
+            seen.add(a.mal_id);
+            fresh.push(a);
+          }
+        });
+        return fresh.slice(0, 25);
+      };
+      const fill = (grid, list) => {
+        const fresh = pick(list);
+        grid.innerHTML = "";
+        fresh.forEach((a) => grid.appendChild(JIKAN.card(a)));
+        return fresh.length > 0;
+      };
+
+      try {
+        // Season endpoints are flaky; try them but fall back to extra
+        // top-anime pages so the home page always shows anime.
+        const [trend, rated] = await Promise.all([
+          JIKAN.topAnime(1),
+          JIKAN.topRated(1),
+        ]);
+        await JIKAN.loadEdits();
+
+        let airingDone = false;
+        let upcomingDone = false;
+        try {
+          const s = await JIKAN.currentSeason();
+          airingDone = fill(airing, (s.data || []).slice(0, 25));
+        } catch (e) {}
+        try {
+          const s = await JIKAN.upcomingSeason();
+          upcomingDone = fill(upcoming, (s.data || []).slice(0, 25));
+        } catch (e) {}
+
+        // Fallbacks: pull more pages of top anime if season data is missing
+        const [extra1, extra2] = await Promise.all([
+          airingDone ? Promise.resolve(null) : JIKAN.topAnime(2).catch(() => null),
+          upcomingDone ? Promise.resolve(null) : JIKAN.topAnime(3).catch(() => null),
+        ]);
+        if (!airingDone) {
+          if (extra1 && extra1.data) fill(airing, extra1.data);
+          else airing.innerHTML = `<div class="empty-state">Seasonal data unavailable right now.</div>`;
+        }
+        if (!upcomingDone) {
+          if (extra2 && extra2.data) fill(upcoming, extra2.data);
+          else upcoming.innerHTML = `<div class="empty-state">Upcoming data unavailable right now.</div>`;
+        }
+
+        fill(trending, trend.data);
+        fill(topRated, rated.data);
+      } catch (err) {
+        const msg = `<div class="empty-state">Could not load anime right now. Please try again later.</div>`;
+        [trending, topRated, airing, upcoming].forEach((g) => (g.innerHTML = msg));
+      }
+    }
+
+    document.addEventListener("DOMContentLoaded", loadHome);
+  </script>
+</body>
+</html>
