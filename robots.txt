@@ -1,4 +1,4 @@
 User-agent: *
 Allow: /
 
-Sitemap: https://soukox.github.io/otakupier/sitemap.xml
+Sitemap: https://otakupier.2bd.net/sitemap.xml
