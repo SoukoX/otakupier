@@ -167,22 +167,55 @@ const JIKAN = {
     return res.data;
   },
 
-  // MangaDex search by title (free, CORS-enabled API)
-  async mangadexSearch(title, limit = 1) {
-    try {
-      const res = await fetch(
-        `https://api.mangadex.org/manga?title=${encodeURIComponent(title)}&limit=${limit}`
-      );
-      if (!res.ok) return [];
-      const body = await res.json();
-      return (body.data || []).map((m) => ({
-        id: m.id,
-        title: m.attributes?.title?.en || Object.values(m.attributes?.title || {})[0] || "",
-        url: `https://mangadex.org/title/${m.id}`,
-      }));
-    } catch (err) {
-      return [];
+  // MangaDex search by title. The MangaDex API only returns
+  // Access-Control-Allow-Origin for its own domains, so browsers can't read
+  // it directly — we try the API straight, then via public CORS proxies, and
+  // return the first successful result. Returns [] if all attempts fail
+  // (callers should fall back to a plain MangaDex search link).
+  async mangadexSearch(title, limit = 3) {
+    const url = `https://api.mangadex.org/manga?title=${encodeURIComponent(title)}&limit=${limit}`;
+    const attempts = [
+      url,
+      `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`,
+      `https://api.allorigins.win/get?url=${encodeURIComponent(url)}`,
+      `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(url)}`,
+    ];
+    for (const target of attempts) {
+      let json = null;
+      try {
+        const ctrl = new AbortController();
+        const timer = setTimeout(() => ctrl.abort(), 12000);
+        const res = await fetch(target, { signal: ctrl.signal });
+        clearTimeout(timer);
+        if (!res.ok) continue;
+        const raw = await res.text();
+        // allorigins /get wraps the body as {contents: "..."}
+        let body = raw;
+        try {
+          const wrap = JSON.parse(raw);
+          if (wrap && typeof wrap === "object" && wrap.contents !== undefined) {
+            body = wrap.contents;
+          }
+        } catch (e) {}
+        json = JSON.parse(body);
+      } catch (err) {
+        continue;
+      }
+      const list = (json.data || [])
+        .filter((m) => m.attributes?.title)
+        .map((m) => {
+          const t = m.attributes.title;
+          const title = t.en || t["ja-ro"] || Object.values(t)[0] || "";
+          return { id: m.id, title, url: `https://mangadex.org/title/${m.id}` };
+        });
+      if (list.length) return list;
     }
+    return [];
+  },
+
+  // A MangaDex search link that always works (no API / CORS involved).
+  mangadexSearchLink(title) {
+    return `https://mangadex.org/search?q=${encodeURIComponent(title)}`;
   },
 
   // Related manga from an anime's relations list. Prefers the main
