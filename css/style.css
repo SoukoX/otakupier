@@ -189,6 +189,57 @@ img {
   width: 100%;
 }
 
+/* ---------- Where to Watch ---------- */
+.watch-panel {
+  margin: 4px 0 6px;
+}
+.watch-btns {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 6px 0 10px;
+}
+.watch-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 14px;
+  border-radius: 10px;
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: var(--text);
+  background: var(--bg-alt);
+  border: 1px solid var(--border);
+  text-decoration: none;
+  transition: transform 0.15s, border-color 0.2s, box-shadow 0.2s;
+}
+.watch-btn:hover {
+  transform: translateY(-1px);
+  border-color: var(--accent);
+  box-shadow: 0 4px 14px rgba(124, 92, 255, 0.25);
+}
+.watch-ext {
+  opacity: 0.6;
+}
+.watch-search {
+  margin: 4px 0 6px;
+  font-size: 0.85rem;
+  color: var(--text-dim);
+}
+.watch-search a {
+  color: var(--accent);
+  text-decoration: none;
+  font-weight: 600;
+}
+.watch-search a:hover {
+  text-decoration: underline;
+}
+.watch-note {
+  font-size: 0.8rem;
+  color: var(--text-dim);
+  opacity: 0.85;
+}
+
 /* ---------- Search bar ---------- */
 .search-input {
   flex: 1;
