@@ -435,12 +435,35 @@ function setupAuthForm(formId, mode) {
       }
 
       if (res.error) throw res.error;
+
+      // A signup that returns no new identity means the email is already
+      // registered. Supabase obfuscates this to prevent email enumeration,
+      // so no confirmation email is sent and NO second account is created.
+      if (mode === "signup" && (!res.data?.user?.identities || res.data.user.identities.length === 0)) {
+        btn.disabled = false;
+        btn.textContent = original;
+        showToast("An account with this email already exists. Try logging in instead.");
+        setTimeout(() => (window.location.href = pathPrefix() + "login.html"), 2200);
+        return;
+      }
+
       currentUser = res.data.user || currentUser;
       showToast(mode === "signup" ? "Account created! Check your email to confirm." : "Logged in!");
       setTimeout(() => (window.location.href = pathPrefix() + "index.html"), mode === "signup" ? 2500 : 700);
     } catch (err) {
+      const m = (err.message || "").toLowerCase();
+      let msg = err.message || "Something went wrong. Try again.";
+      if (m.includes("not authorized")) {
+        msg = "The email service can't deliver to this address — an admin must configure a custom SMTP provider.";
+      } else if (m.includes("rate limit") || m.includes("over_email_send_rate_limit")) {
+        msg = "Too many verification emails were sent this hour. Please wait a while and try again.";
+      } else if (m.includes("invalid login")) {
+        msg = "Incorrect email or password.";
+      } else if (m.includes("already registered") || m.includes("already exists")) {
+        msg = "An account with this email already exists. Try logging in.";
+      }
       if (errBox) {
-        errBox.textContent = err.message || "Something went wrong. Try again.";
+        errBox.textContent = msg;
         errBox.style.display = "block";
       }
       btn.disabled = false;
