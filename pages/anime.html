@@ -174,6 +174,7 @@
             </div>
             <p class="detail-synopsis">${JIKAN.esc(synopsis)}</p>
             <div class="detail-genres">${genres}</div>
+            <div id="watchSlot"></div>
             <div id="mangaLinks"></div>
           </div>
         </div>
@@ -199,6 +200,7 @@
         </div>`;
 
       loadMangaLinks();
+      loadWatchLinks();
       loadRelated();
     }
 
@@ -305,27 +307,93 @@
       return words.slice(0, 4).join(" ");
     }
 
-    // ---------- Manga links (MAL + MangaDex) ----------
+    // ---------- Manga links (MangaDex + MAL) ----------
     async function loadMangaLinks() {
       const slot = document.getElementById("mangaLinks");
       if (!slot) return;
-      const manga = JIKAN.relatedManga(animeData);
+
+      let manga = JIKAN.relatedManga(animeData);
+      // MAL sometimes has no Adaptation relation for an anime (or the /full
+      // endpoint fell back to /anime/:id which omits relations). In that case
+      // search MangaDex by the anime title itself so the manga is still found.
+      if (!manga.length) {
+        const t = JIKAN.title(animeData);
+        if (t) manga = [{ name: t, url: animeData.url || "", mal_id: null }];
+      }
       if (!manga.length) return;
 
-      let html = `<div class="detail-genres" style="margin-top:6px;"><span class="genre-tag" style="background:rgba(0,212,168,.15); border-color:rgba(0,212,168,.4); color:var(--accent-3);">Manga</span></div>
+      // Collect MangaDex matches for the top few related manga titles.
+      const results = [];
+      const seenIds = new Set();
+      for (const m of manga.slice(0, 3)) {
+        const md = await JIKAN.mangadexSearch(m.name, 3);
+        for (const r of md) {
+          if (seenIds.has(r.id)) continue;
+          seenIds.add(r.id);
+          results.push({ ...r, srcName: m.name, srcUrl: m.url });
+        }
+      }
+      if (!results.length && !manga.some((m) => m.url)) return;
+
+      let html = `<div class="detail-genres" style="margin-top:6px;"><span class="genre-tag" style="background:rgba(0,212,168,.15); border-color:rgba(0,212,168,.4); color:var(--accent-3);">Read the Manga</span></div>
         <div style="display:flex; flex-direction:column; gap:6px;">`;
 
-      // Keep only the single best adaptation
-      const m = manga[0];
-      const md = await JIKAN.mangadexSearch(m.name);
-      if (md[0]) {
-        html += `<a href="${md[0].url}" target="_blank" rel="noopener" style="color:var(--accent-3); font-weight:600;">
-          Read the manga on MangaDex: ${JIKAN.esc(md[0].title)}</a>`;
-      }
-      html += `<a href="${m.url}" target="_blank" rel="noopener" style="color:var(--accent); font-weight:600;">
-        Read the manga: ${JIKAN.esc(m.name)} <span style="opacity:.6">(MyAnimeList)</span></a>`;
+      const withMd = new Set();
+      results.slice(0, 3).forEach((r) => {
+        withMd.add(r.srcName);
+        html += `<a href="${r.url}" target="_blank" rel="noopener" style="color:var(--accent-3); font-weight:600;">
+          Read the manga on MangaDex: ${JIKAN.esc(r.title)} <span style="opacity:.6">&nearr;</span></a>`;
+      });
+
+      // MAL page for any related manga without a MangaDex match.
+      manga.slice(0, 3).forEach((m) => {
+        if (!m.url || withMd.has(m.name)) return;
+        html += `<a href="${m.url}" target="_blank" rel="noopener" style="color:var(--accent); font-weight:600;">
+          Read the manga: ${JIKAN.esc(m.name)} <span style="opacity:.6">(MyAnimeList)</span></a>`;
+      });
 
       html += `</div>`;
+      slot.innerHTML = html;
+    }
+
+    // ---------- Where to Watch (official platforms + search fallbacks) ----------
+    async function loadWatchLinks() {
+      const slot = document.getElementById("watchSlot");
+      if (!slot) return;
+      const a = animeData;
+      const mainTitle = JIKAN.title(a);
+      const q = encodeURIComponent(mainTitle);
+
+      // Official streaming platforms reported by MAL (via Jikan /full).
+      const seen = new Set();
+      const official = (a.streaming || []).filter((s) => {
+        const k = (s.name || "").toLowerCase();
+        if (seen.has(k) || !s.url) return false;
+        seen.add(k);
+        return true;
+      });
+
+      // Search gateways as a fallback (all legal, open in a new tab).
+      const searches = [
+        { name: "Crunchyroll", url: `https://www.crunchyroll.com/search?q=${q}` },
+        { name: "Netflix", url: `https://www.netflix.com/search?q=${q}` },
+        { name: "AniList", url: `https://anilist.co/search/anime?search=${q}` },
+        { name: "Internet Archive", url: `https://archive.org/search?query=${encodeURIComponent(mainTitle + " anime")}` },
+        { name: "MyAnimeList", url: a.url || `https://myanimelist.net/search/all?q=${q}` },
+      ];
+
+      let html = `<h3 class="sub-head">Where to Watch</h3><div class="watch-panel">`;
+      if (official.length) {
+        html += `<div class="watch-btns">` +
+          official.map((s) => `<a class="watch-btn" href="${s.url}" target="_blank" rel="noopener">${JIKAN.esc(s.name)} <span class="watch-ext">&nearr;</span></a>`).join("") +
+          `</div>`;
+      } else {
+        html += `<div class="watch-note">No official stream is listed on MyAnimeList for this title.</div>`;
+      }
+      html += `<div class="watch-search">Also try searching:
+        ${searches.map((s) => `<a href="${s.url}" target="_blank" rel="noopener">${JIKAN.esc(s.name)}</a>`).join(" · ")}</div>
+        <div class="watch-note">OtakuPier is a catalog &amp; community site, not a streaming service — availability varies by region. Always support the official release.</div>
+      </div>`;
       slot.innerHTML = html;
     }
 
