@@ -15,10 +15,10 @@ const CONFIG = {
   //   Auth > Bot and Abuse Protection > Enable CAPTCHA protection
   // If CAPTCHA_SITE_KEY is empty, the forms work without CAPTCHA.
   CAPTCHA_PROVIDER: "turnstile",
-  CAPTCHA_SITE_KEY: "1307338918xyzbb.com",
+  CAPTCHA_SITE_KEY: "",
 
   SITE_NAME: "OtakuPier",
   SITE_TAGLINE: "Watch & Discover Anime Online",
   // Your GitHub Pages URL once deployed
-  SITE_URL: "https://soukox.github.io/otakupier",
+  SITE_URL: "https://otakupier.2bd.net",
 };
