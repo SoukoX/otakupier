@@ -308,7 +308,9 @@
     }
 
     // ---------- Manga links (MangaDex + MAL) ----------
-    async function loadMangaLinks() {
+    // Renders instantly with guaranteed links (MangaDex search + MAL page),
+    // then upgrades MangaDex to a direct title link when the API responds.
+    function loadMangaLinks() {
       const slot = document.getElementById("mangaLinks");
       if (!slot) return;
 
@@ -322,45 +324,46 @@
       }
       if (!manga.length) return;
 
-      // Collect MangaDex matches for the top few related manga titles.
-      const results = [];
-      const seenIds = new Set();
-      for (const m of manga.slice(0, 3)) {
-        const md = await JIKAN.mangadexSearch(m.name, 3);
-        for (const r of md) {
-          if (seenIds.has(r.id)) continue;
-          seenIds.add(r.id);
-          results.push({ ...r, srcName: m.name, srcUrl: m.url });
+      const render = (directByName) => {
+        const direct = directByName || new Map();
+        let html = `<div class="detail-genres" style="margin-top:6px;"><span class="genre-tag" style="background:rgba(0,212,168,.15); border-color:rgba(0,212,168,.4); color:var(--accent-3);">Read the Manga</span></div>
+          <div style="display:flex; flex-direction:column; gap:6px;">`;
+        manga.slice(0, 3).forEach((m) => {
+          const d = direct.get(m.name);
+          if (d) {
+            html += `<a href="${d.url}" target="_blank" rel="noopener" style="color:var(--accent-3); font-weight:600;">
+              Read the manga on MangaDex: ${JIKAN.esc(d.title)} <span style="opacity:.6">&nearr;</span></a>`;
+          } else {
+            // MangaDex search link needs no API and always works.
+            html += `<a href="${JIKAN.mangadexSearchLink(m.name)}" target="_blank" rel="noopener" style="color:var(--accent-3); font-weight:600;">
+              Read the manga on MangaDex: ${JIKAN.esc(m.name)} <span style="opacity:.6">&nearr;</span></a>`;
+          }
+        });
+        manga.slice(0, 3).forEach((m) => {
+          if (m.url) {
+            html += `<a href="${m.url}" target="_blank" rel="noopener" style="color:var(--accent); font-weight:600;">
+              Read the manga: ${JIKAN.esc(m.name)} <span style="opacity:.6">(MyAnimeList)</span></a>`;
+          }
+        });
+        html += `</div>`;
+        slot.innerHTML = html;
+      };
+
+      // Guaranteed links show immediately — no network wait.
+      render(null);
+
+      // Upgrade to direct MangaDex title links in the background.
+      (async () => {
+        const direct = new Map();
+        for (const m of manga.slice(0, 3)) {
+          if (direct.has(m.name)) continue;
+          const md = await JIKAN.mangadexSearch(m.name, 3);
+          for (const r of md) {
+            if (!direct.has(m.name)) direct.set(m.name, r);
+          }
         }
-      }
-
-      let html = `<div class="detail-genres" style="margin-top:6px;"><span class="genre-tag" style="background:rgba(0,212,168,.15); border-color:rgba(0,212,168,.4); color:var(--accent-3);">Read the Manga</span></div>
-        <div style="display:flex; flex-direction:column; gap:6px;">`;
-
-      const withMd = new Set();
-      results.slice(0, 3).forEach((r) => {
-        withMd.add(r.srcName);
-        html += `<a href="${r.url}" target="_blank" rel="noopener" style="color:var(--accent-3); font-weight:600;">
-          Read the manga on MangaDex: ${JIKAN.esc(r.title)} <span style="opacity:.6">&nearr;</span></a>`;
-      });
-
-      // Always offer a working MangaDex search link (no API/CORS needed), so
-      // MangaDex is reachable even when the API lookup above fails.
-      manga.slice(0, 3).forEach((m) => {
-        if (withMd.has(m.name)) return;
-        html += `<a href="${JIKAN.mangadexSearchLink(m.name)}" target="_blank" rel="noopener" style="color:var(--accent-3); font-weight:600;">
-          Read the manga on MangaDex: ${JIKAN.esc(m.name)} <span style="opacity:.6">&nearr;</span></a>`;
-      });
-
-      // MAL page for any related manga that only got a search-link fallback.
-      manga.slice(0, 3).forEach((m) => {
-        if (!m.url || withMd.has(m.name)) return;
-        html += `<a href="${m.url}" target="_blank" rel="noopener" style="color:var(--accent); font-weight:600;">
-          Read the manga: ${JIKAN.esc(m.name)} <span style="opacity:.6">(MyAnimeList)</span></a>`;
-      });
-
-      html += `</div>`;
-      slot.innerHTML = html;
+        if (direct.size) render(direct);
+      })();
     }
 
     // ---------- Where to Watch (official platforms + search fallbacks) ----------
