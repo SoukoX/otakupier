@@ -333,7 +333,6 @@
           results.push({ ...r, srcName: m.name, srcUrl: m.url });
         }
       }
-      if (!results.length && !manga.some((m) => m.url)) return;
 
       let html = `<div class="detail-genres" style="margin-top:6px;"><span class="genre-tag" style="background:rgba(0,212,168,.15); border-color:rgba(0,212,168,.4); color:var(--accent-3);">Read the Manga</span></div>
         <div style="display:flex; flex-direction:column; gap:6px;">`;
@@ -345,7 +344,15 @@
           Read the manga on MangaDex: ${JIKAN.esc(r.title)} <span style="opacity:.6">&nearr;</span></a>`;
       });
 
-      // MAL page for any related manga without a MangaDex match.
+      // Always offer a working MangaDex search link (no API/CORS needed), so
+      // MangaDex is reachable even when the API lookup above fails.
+      manga.slice(0, 3).forEach((m) => {
+        if (withMd.has(m.name)) return;
+        html += `<a href="${JIKAN.mangadexSearchLink(m.name)}" target="_blank" rel="noopener" style="color:var(--accent-3); font-weight:600;">
+          Read the manga on MangaDex: ${JIKAN.esc(m.name)} <span style="opacity:.6">&nearr;</span></a>`;
+      });
+
+      // MAL page for any related manga that only got a search-link fallback.
       manga.slice(0, 3).forEach((m) => {
         if (!m.url || withMd.has(m.name)) return;
         html += `<a href="${m.url}" target="_blank" rel="noopener" style="color:var(--accent); font-weight:600;">
@@ -392,7 +399,6 @@
       }
       html += `<div class="watch-search">Also try searching:
         ${searches.map((s) => `<a href="${s.url}" target="_blank" rel="noopener">${JIKAN.esc(s.name)}</a>`).join(" · ")}</div>
-        <div class="watch-note">OtakuPier is a catalog &amp; community site, not a streaming service — availability varies by region. Always support the official release.</div>
       </div>`;
       slot.innerHTML = html;
     }
