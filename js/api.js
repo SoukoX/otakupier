@@ -201,19 +201,29 @@ const JIKAN = {
       } catch (err) {
         continue;
       }
+      const q = title.trim().toLowerCase();
+      const matchScore = (t) => {
+        const s = (t || "").toLowerCase();
+        if (s === q) return 100;
+        if (s.startsWith(q) || q.startsWith(s)) return 60;
+        if (s.includes(q) || q.includes(s)) return 30;
+        return 0;
+      };
       const list = (json.data || [])
         .filter((m) => m.attributes?.title)
         .map((m) => {
           const t = m.attributes.title;
           const title = t.en || t["ja-ro"] || Object.values(t)[0] || "";
           return { id: m.id, title, url: `https://mangadex.org/title/${m.id}` };
-        });
+        })
+        // Best title match first so we don't link to a random spinoff.
+        .sort((a, b) => matchScore(b.title) - matchScore(a.title));
       if (list.length) return list;
     }
     return [];
   },
 
-  // A MangaDex search link that always works (no API / CORS involved).
+  // MangaDex search link that always works (no API / CORS involved).
   mangadexSearchLink(title) {
     return `https://mangadex.org/search?q=${encodeURIComponent(title)}`;
   },
