@@ -448,8 +448,20 @@ function setupAuthForm(formId, mode) {
       }
 
       currentUser = res.data.user || currentUser;
-      showToast(mode === "signup" ? "Account created! Check your email to confirm." : "Logged in!");
-      setTimeout(() => (window.location.href = pathPrefix() + "index.html"), mode === "signup" ? 2500 : 700);
+      if (mode === "signup") {
+        // If Supabase returned a session, email confirmation is disabled and
+        // the user is already signed in — don't tell them to check their mail.
+        if (res.data?.session) {
+          showToast("Account created — welcome!");
+          setTimeout(() => (window.location.href = pathPrefix() + "index.html"), 700);
+        } else {
+          showToast("Account created! Check your email to confirm.");
+          setTimeout(() => (window.location.href = pathPrefix() + "index.html"), 2500);
+        }
+      } else {
+        showToast("Logged in!");
+        setTimeout(() => (window.location.href = pathPrefix() + "index.html"), 700);
+      }
     } catch (err) {
       const m = (err.message || "").toLowerCase();
       let msg = err.message || "Something went wrong. Try again.";
