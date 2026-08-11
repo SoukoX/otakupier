@@ -90,7 +90,7 @@ Verified admins get a red name + "✓ Admin" badge site-wide and access to the *
    SUPABASE_URL: "https://YOUR-PROJECT-REF.supabase.co",
    SUPABASE_ANON_KEY: "YOUR-ANON-KEY",
    ```
-6. (Optional) Authentication > Providers > Email > enable email confirmation or leave off
+6. (Optional) Authentication > Providers > Email > enable email confirmation or leave off. Note: with confirmation ON, the **built-in** Supabase email service only sends to your project team's member addresses and is limited to **2 emails/hour**. For real users, configure a custom SMTP provider (Authentication > SMTP Settings) with any transactional service (Resend, SendGrid, Mailgun) — otherwise signup confirmations will never arrive.
 7. The site now has full accounts, reviews, rankings, live chat, friends, DMs, My List, and XP/ranks
 
 ## How to deploy for free (GitHub Pages)
