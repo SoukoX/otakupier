@@ -2,8 +2,9 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
+  <meta name="referrer" content="strict-origin-when-cross-origin">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Messages — OtakuPier</title>
+  <title>Messages - OtakuPier</title>
   <meta name="robots" content="index, follow">
   <meta name="description" content="Private messages between OtakuPier users.">
   <link rel="canonical" href="https://otakupier.2bd.net/pages/dms.html">
@@ -94,7 +95,7 @@
       for (const [uid, lastMsg] of convos) {
         const p = await fetchProfile(uid);
         html += `<div class="user-row" style="cursor:pointer;" onclick="openThread('${uid}')">
-          <div class="avatar">${p?.avatar_url ? `<img src="${p.avatar_url}" alt="">` : (p?.name || "U").charAt(0).toUpperCase()}</div>
+          <div class="avatar">${p?.avatar_url ? `<img src="${JIKAN.safeImg(p.avatar_url)}" alt="">` : (p?.name || "U").charAt(0).toUpperCase()}</div>
           <div style="flex:1;">
             <b>${p?.is_admin ? adminNameHTML(p) : JIKAN.esc(p?.name || "User")}</b>
             <div style="color:var(--text-dim); font-size:.8rem; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:60vw;">${JIKAN.esc(lastMsg.body)}</div>
@@ -116,7 +117,7 @@
         <div style="display:flex; align-items:center; gap:12px; margin-bottom:16px;">
           <button class="btn btn-outline btn-small" onclick="renderPicker()">&larr; All</button>
           <a href="profile.html?id=${uid}" class="review-author" style="color:var(--text); text-decoration:none; font-weight:700;">
-            <div class="avatar">${p?.avatar_url ? `<img src="${p.avatar_url}" alt="">` : activeUserName.charAt(0).toUpperCase()}</div>
+            <div class="avatar">${p?.avatar_url ? `<img src="${JIKAN.safeImg(p.avatar_url)}" alt="">` : activeUserName.charAt(0).toUpperCase()}</div>
             ${p?.is_admin ? adminNameHTML(p) : JIKAN.esc(activeUserName)}</a>
         </div>
         <div class="dm-thread">
