@@ -2,8 +2,9 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
+  <meta name="referrer" content="strict-origin-when-cross-origin">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Profile — OtakuPier</title>
+  <title>Profile - OtakuPier</title>
   <meta name="robots" content="index, follow">
   <meta name="description" content="User profile on OtakuPier — rank, reviews and activity.">
   <link rel="canonical" href="https://otakupier.2bd.net/pages/profile.html">
@@ -47,7 +48,7 @@
         return;
       }
       profileUser = st.profile;
-      document.title = `${st.profile.name || "User"} — OtakuPier`;
+      document.title = `${st.profile.name || "User"} - OtakuPier`;
 
       const isSelf = isLoggedIn() && currentUser.id === userId;
       const rank = rankForXp(st.profile.xp);
@@ -62,7 +63,7 @@
       main.innerHTML = `
         <div class="profile-card">
           <div class="avatar-lg">${st.profile.avatar_url
-            ? `<img src="${st.profile.avatar_url}" alt="">`
+            ? `<img src="${JIKAN.safeImg(st.profile.avatar_url)}" alt="">`
             : (st.profile.name || "U").charAt(0).toUpperCase()}</div>
           <div style="flex:1; min-width:220px;">
             <h2 style="margin:0 0 4px;">${st.profile.is_admin ? adminNameHTML(st.profile) : JIKAN.esc(st.profile.name || "User")}</h2>
