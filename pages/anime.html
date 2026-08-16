@@ -944,7 +944,7 @@
           .select("*")
           .eq("anime_mal_id", Number(id))
           .order("created_at", { ascending: false })
-          .limit(100);
+          .limit(200);
         if (error) throw error;
         list.innerHTML = "";
         if (!data.length) {
@@ -958,13 +958,15 @@
           const { data: likes } = await supabase.from("review_likes").select("review_id").in("review_id", ids);
           likes.forEach((l) => { likeMap[l.review_id] = (likeMap[l.review_id] || 0) + 1; });
         } catch (e) {}
-        data.forEach((r) => {
+
+        // Build a review card (top-level or reply)
+        const renderCard = (r) => {
           const el = document.createElement("div");
-          el.className = "review";
+          el.className = "review" + (r.parent_id ? " review-reply" : "");
           const name = r.author_name || "User";
           const stars = r.rating
             ? `<span class="stars">${"\u2605".repeat(r.rating)}<span style="opacity:.25">${"\u2605".repeat(10 - r.rating)}</span></span>`
-            : `<span class="review-date" style="padding:2px 8px; background:rgba(0,212,168,.12); border-radius:999px;">Comment</span>`;
+            : `<span class="review-date" style="padding:2px 8px; background:rgba(0,212,168,.12); border-radius:999px;">${r.parent_id ? "Reply" : "Comment"}</span>`;
           const likeCount = likeMap[r.id] || 0;
           el.innerHTML = `
             <div class="review-top">
@@ -981,12 +983,76 @@
               <button class="like-btn" onclick="toggleLike(${r.id})" id="likeBtn-${r.id}">
                 ♡ <span id="likeCount-${r.id}">${likeCount}</span>
               </button>
-            </div>`;
-          list.appendChild(el);
+              <button class="like-btn" onclick="toggleReplyBox(${r.id})">↩ Reply</button>
+            </div>
+            <div class="reply-box" id="replyBox-${r.id}" style="display:none;">
+              <textarea id="replyText-${r.id}" placeholder="Write a reply..." class="reply-textarea"></textarea>
+              <button class="btn btn-primary" onclick="submitReply(${r.id})">Post reply</button>
+            </div>
+            <div class="reply-children" id="replies-${r.id}"></div>`;
           fetchReviewAuthor(r.user_id, r.id, name);
+          return el;
+        };
+
+        // Separate top-level items from replies
+        const top = data.filter((r) => !r.parent_id);
+        const replies = data.filter((r) => r.parent_id);
+
+        // Render top-level cards first
+        const topEls = new Map();
+        top.forEach((r) => {
+          const el = renderCard(r);
+          topEls.set(r.id, el);
+          list.appendChild(el);
+        });
+        // Attach replies under their parent
+        replies.forEach((r) => {
+          const parentEl = topEls.get(r.parent_id);
+          const holder = parentEl ? parentEl.querySelector(`#replies-${r.parent_id}`) : null;
+          if (holder) holder.appendChild(renderCard(r));
+          else list.appendChild(renderCard(r));
         });
       } catch (err) {
         list.innerHTML = `<div class="empty-state">Could not load reviews.</div>`;
+      }
+    }
+
+    function toggleReplyBox(reviewId) {
+      const box = document.getElementById(`replyBox-${reviewId}`);
+      if (!box) return;
+      box.style.display = box.style.display === "none" ? "block" : "none";
+      if (box.style.display === "block") {
+        const ta = document.getElementById(`replyText-${reviewId}`);
+        if (ta) ta.focus();
+      }
+    }
+
+    async function submitReply(parentId) {
+      if (!isLoggedIn()) {
+        showToast("Login to reply to a review");
+        return;
+      }
+      const ta = document.getElementById(`replyText-${parentId}`);
+      const text = ta ? ta.value.trim() : "";
+      if (!text) {
+        showToast("Please write a reply first");
+        return;
+      }
+      try {
+        await dbInsert("reviews", {
+          user_id: currentUser.id,
+          anime_mal_id: Number(id),
+          anime_title: JIKAN.title(animeData),
+          rating: null,
+          text,
+          is_comment: true,
+          parent_id: parentId,
+        });
+        awardXp(5); // +5 XP for replying
+        showToast("Reply posted! +5 XP");
+        loadReviews();
+      } catch (err) {
+        showToast("Could not post reply: " + err.message);
       }
     }
 
