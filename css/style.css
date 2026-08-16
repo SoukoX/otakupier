@@ -234,6 +234,24 @@ img {
 .watch-search a:hover {
   text-decoration: underline;
 }
+.watch-add-form {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 10px;
+}
+.watch-add-form input {
+  padding: 10px 12px;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: var(--bg-alt);
+  color: var(--text);
+  font-family: inherit;
+}
+.watch-add-form input:focus {
+  outline: none;
+  border-color: var(--accent);
+}
 .watch-note {
   font-size: 0.8rem;
   color: var(--text-dim);
