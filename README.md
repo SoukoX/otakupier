@@ -97,7 +97,7 @@ Verified admins get a red name + "✓ Admin" badge site-wide and access to the *
 ## Community features
 - **Accounts** — email login/signup
 - **Save anime** — "Save to My List" button on every anime page (+5 XP)
-- **Rank & review** — vote an anime 1–10 (1 vote/user), write reviews & comments (+10 XP)
+- **Rank & review** — vote an anime 1–10 (1 vote/user), write reviews & comments (+10 XP); reply to any review/comment (+5 XP)
 - **Review likes** — like reviews; the author earns +10 XP
 - **Chat** — live global chat (+1 XP per message)
 - **Friends** — send/accept friend requests (+10 XP on accept)
