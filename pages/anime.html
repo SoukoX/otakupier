@@ -456,8 +456,85 @@
           <div class="watch-search">Still can't find it? Search:
             ${searches.map((s) => `<a href="${s.url}" target="_blank" rel="noopener">${JIKAN.esc(s.name)}</a>`).join(" · ")}
           </div>
-        </div>`;
+        </div>
+        <div id="communityWatch"></div>`;
       if (epCount > 0) renderEpRow(listOfEpisodes());
+      renderCommunityLinks();
+    }
+
+    // ---------- Community watch links (user-submitted, admin-approved) ----------
+    async function renderCommunityLinks() {
+      const box = document.getElementById("communityWatch");
+      if (!box) return;
+      if (!SUPABASE_READY || !supabase) return;
+      const malId = Number(id);
+      box.innerHTML = `<div class="loading"><div class="spinner"></div></div>`;
+      try {
+        const { data, error } = await supabase
+          .from("watch_links")
+          .select("*")
+          .eq("anime_mal_id", malId)
+          .order("created_at", { ascending: false });
+        if (error) throw error;
+
+        const approved = (data || []).filter((l) => l.approved);
+        const pending = (data || []).filter((l) => !l.approved && isLoggedIn() && l.user_id === currentUser.id);
+
+        let html = `<h3 class="sub-head" style="margin-top:22px;">Community Watch Links</h3>
+          <div class="watch-panel">`;
+        if (!approved.length) {
+          html += `<div class="watch-note">No community links yet. Know a place to watch this? Add one below.</div>`;
+        } else {
+          html += `<div class="watch-btns">` + approved.map((l) =>
+            `<a class="watch-btn" href="${JIKAN.safeImg(l.url)}" target="_blank" rel="noopener">${JIKAN.esc(l.provider_name)} <span class="watch-ext">&nearr;</span></a>`
+          ).join("") + `</div>`;
+        }
+        if (pending.length) {
+          html += `<div class="stream-notice" style="margin-top:8px;">Your pending links (awaiting admin approval):
+            ${pending.map((l) => `${JIKAN.esc(l.provider_name)} <button class="btn btn-danger btn-small" onclick="deleteCommunityLink(${l.id})">x</button>`).join(" · ")}
+          </div>`;
+        }
+        if (isLoggedIn()) {
+          html += `
+            <form class="watch-add-form" onsubmit="submitCommunityLink(event)">
+              <input type="text" id="clProvider" placeholder="Provider (e.g. Crunchyroll)" required style="flex:1; min-width:140px;">
+              <input type="url" id="clUrl" placeholder="https://..." required style="flex:2; min-width:220px;">
+              <button type="submit" class="btn btn-primary">Suggest link</button>
+            </form>
+            <div class="stream-scroll-note">Links are shown publicly only after admin approval.</div>`;
+        } else {
+          html += `<div class="watch-note"><a href="login.html" style="color:var(--accent)">Login</a> to suggest a watch link.</div>`;
+        }
+        html += `</div>`;
+        box.innerHTML = html;
+      } catch (e) {
+        box.innerHTML = "";
+      }
+    }
+
+    function submitCommunityLink(ev) {
+      ev.preventDefault();
+      if (!isLoggedIn()) { showToast("Login to suggest a link"); return; }
+      const provider = document.getElementById("clProvider").value.trim();
+      const url = document.getElementById("clUrl").value.trim();
+      if (!/^https?:\/\//i.test(url)) { showToast("URL must start with http:// or https://"); return; }
+      dbInsert("watch_links", {
+        anime_mal_id: Number(id),
+        user_id: currentUser.id,
+        provider_name: provider,
+        url,
+        approved: false,
+      }).then(() => {
+        showToast("Link submitted for admin approval");
+        renderCommunityLinks();
+      }).catch((err) => showToast("Could not submit: " + err.message));
+    }
+
+    async function deleteCommunityLink(linkId) {
+      try {
+        await supabase.from("watch_links").delete().eq("id", linkId);
+        renderCommunityLinks();
+      } catch (e) { showToast("Could not remove link"); }
     }
 
     // ---------- Watch Online (third-party streaming providers) ----------
