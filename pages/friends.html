@@ -2,8 +2,9 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
+  <meta name="referrer" content="strict-origin-when-cross-origin">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Friends — OtakuPier</title>
+  <title>Friends - OtakuPier</title>
   <meta name="robots" content="index, follow">
   <meta name="description" content="Manage your friends on OtakuPier and send friend requests.">
   <link rel="canonical" href="https://otakupier.2bd.net/pages/friends.html">
@@ -68,7 +69,7 @@
 
     function userRowHtml(userId, name, avatar) {
       const letter = (name || "U").charAt(0).toUpperCase();
-      return `<div class="avatar">${avatar ? `<img src="${avatar}" alt="">` : letter}</div>
+      return `<div class="avatar">${avatar ? `<img src="${JIKAN.safeImg(avatar)}" alt="">` : letter}</div>
         <a href="profile.html?id=${userId}" style="color:var(--text); text-decoration:none; font-weight:600;">${JIKAN.esc(name || "User")}</a>`;
     }
 
@@ -155,7 +156,7 @@
         const el = document.createElement("div");
         el.className = "user-row";
         el.innerHTML = `
-          <div class="avatar">${u.avatar_url ? `<img src="${u.avatar_url}" alt="">` : (u.name || "U").charAt(0).toUpperCase()}</div>
+          <div class="avatar">${u.avatar_url ? `<img src="${JIKAN.safeImg(u.avatar_url)}" alt="">` : (u.name || "U").charAt(0).toUpperCase()}</div>
           <div style="flex:1; min-width:0;">
             ${u.is_admin ? adminNameHTML(u) : `<a href="profile.html?id=${u.id}" style="color:var(--text); text-decoration:none; font-weight:600;">${JIKAN.esc(u.name || "User")}</a>`}
             <div style="font-size:.75rem; color:var(--text-dim);">${rankForXp(u.xp).icon} ${rankForXp(u.xp).name}</div>
