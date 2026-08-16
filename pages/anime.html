@@ -490,7 +490,7 @@
           ).join("") + `</div>`;
         }
         if (pending.length) {
-          html += `<div class="stream-notice" style="margin-top:8px;">Your pending links (awaiting admin approval):
+          html += `<div class="stream-notice" style="margin-top:8px;">Your link is pending (awaiting admin approval):
             ${pending.map((l) => `${JIKAN.esc(l.provider_name)} <button class="btn btn-danger btn-small" onclick="deleteCommunityLink(${l.id})">x</button>`).join(" · ")}
           </div>`;
         }
