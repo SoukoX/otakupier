@@ -218,9 +218,9 @@ function renderNav() {
 
   const authArea = isLoggedIn()
     ? `<div class="user-menu">
-         <a href="${p}pages/profile.html" class="user-avatar" title="${getProfile().name}">${getProfile().avatar
-         ? `<img src="${getProfile().avatar}" alt="">`
-         : getProfile().name.charAt(0).toUpperCase()}</a>
+         <a href="${p}pages/profile.html" class="user-avatar" title="${JIKAN.esc(getProfile().name)}">${getProfile().avatar
+         ? `<img src="${JIKAN.safeImg(getProfile().avatar)}" alt="">`
+         : JIKAN.esc(getProfile().name.charAt(0).toUpperCase())}</a>
          <button class="btn btn-outline btn-small" onclick="logout()">Logout</button>
        </div>`
     : `<a href="${p}pages/login.html" class="btn btn-outline btn-small">Login</a>
@@ -394,9 +394,9 @@ function setupAuthForm(formId, mode) {
     const email = document.getElementById("email").value.trim();
     const password = document.getElementById("password").value;
 
-    if (password.length < 6) {
+    if (password.length < 8) {
       if (errBox) {
-        errBox.textContent = "Password must be at least 6 characters.";
+        errBox.textContent = "Password must be at least 8 characters.";
         errBox.style.display = "block";
       }
       return;
