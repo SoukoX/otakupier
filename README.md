@@ -153,7 +153,7 @@ The Database Linter shows WARN findings named `authenticated_security_definer_fu
 - **stricter referrer policy** (`strict-origin-when-cross-origin`) added to every page so full URLs (and any tokens in them) aren't leaked to third parties (Jikan, streaming embeds).
 
 ## Recommended user-side actions
-- **Rotate / stop using `pass.txt`** 
+- **Rotate / stop using `pass.txt`** — it contained a plaintext password (`i0dT!h5YSfo42tUV`, likely the Supabase DB password) and is gitignored but still on disk.
 - **Keep the Supabase `anon` key publishable-only** (it is public by design — never put the `service_role` key in `js/config.js`; it would grant full DB control). Verify no `service_role`/secret lives in the repo.
 - **Enable Supabase "Confirm email"** (or a custom SMTP) before real users sign up, so accounts can't be created/abused anonymously.
 - **Keep Supabase CAPTCHA disabled or set a real site key** — otherwise signup breaks (see the email/account status notes).
