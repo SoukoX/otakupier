@@ -575,6 +575,12 @@ create policy "Approved watch links are viewable by everyone"
   on public.watch_links for select
   using (approved or auth.uid() = user_id);
 
+-- Admins can view every submitted link (including pending ones) for approval.
+drop policy if exists "Admins can view all watch links" on public.watch_links;
+create policy "Admins can view all watch links"
+  on public.watch_links for select
+  using (exists (select 1 from public.profiles p where p.id = auth.uid() and p.is_admin));
+
 -- Logged-in (non-banned) users may submit a link for an anime.
 drop policy if exists "Users can submit watch links" on public.watch_links;
 create policy "Users can submit watch links"
