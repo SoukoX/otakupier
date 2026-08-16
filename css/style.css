@@ -957,6 +957,33 @@ section {
   margin-bottom: 8px;
 }
 
+.share-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 14px 0;
+}
+
+.share-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 14px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--bg-alt);
+  color: var(--text-dim);
+  font-size: 0.8rem;
+  font-weight: 700;
+  cursor: pointer;
+  text-decoration: none;
+}
+
+.share-btn:hover {
+  border-color: var(--accent);
+  color: var(--accent-3);
+}
+
 .review p {
   color: var(--text-dim);
 }
