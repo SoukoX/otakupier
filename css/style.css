@@ -199,6 +199,10 @@ img {
   padding-top: 20px;
   border-top: 1px solid var(--border);
 }
+.watch-community .watch-add-form + .stream-scroll-note {
+  margin-top: 4px;
+  margin-bottom: 6px;
+}
 .watch-community .sub-head {
   margin-top: 0;
 }
@@ -251,7 +255,7 @@ img {
   flex-wrap: wrap;
   align-items: stretch;
   gap: 10px;
-  margin: 16px 0 14px;
+  margin: 16px 0 18px;
   padding: 14px;
   border-radius: 12px;
   border: 1px solid var(--border);
