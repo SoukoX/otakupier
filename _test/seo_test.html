@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>SEO Test Harness</title>
+</head>
+<body>
+  <!-- Replicates the SEO helper behavior against a real anime object to
+       verify meta injection, JSON-LD, and share-link generation without
+       needing Jikan network access. -->
+  <pre id="out"></pre>
+  <script src="../js/seo.js"></script>
+  <script>
+    try {
+    const results = [];
+    function check(name, cond) { results.push((cond ? "PASS" : "FAIL") + " | " + name); }
+
+    // Simulate a Jikan anime payload
+    const fakeAnime = {
+      mal_id: 5114,
+      title: "Fullmetal Alchemist: Brotherhood",
+      title_english: "Fullmetal Alchemist: Brotherhood",
+      title_japanese: "鋼の錬金術師 FULLMETAL ALCHEMIST",
+      synopsis: "After a failed alchemical transmutation <b>attempts</b> to bring their mother back, Edward and Alphonse Elric search for the Philosopher's Stone.  [Written by MAL Rewrite]",
+      score: 9.1,
+      rank: 1,
+      type: "TV",
+      year: 2009,
+      episodes: 64,
+      genres: [{ name: "Action" }, { name: "Adventure" }, { name: "Drama" }],
+      images: { jpg: { large_image_url: "https://cdn.myanimelist.net/images/anime/1223/96541l.jpg", image_url: "https://cdn.myanimelist.net/images/anime/1223/96541.jpg" } },
+      status: "Finished Airing",
+    };
+
+    SEO.setAnimeMeta(fakeAnime);
+
+    // 1. Title
+    check("document.title updated", document.title === "Fullmetal Alchemist: Brotherhood - Reviews, Ranking & Where to Watch | OtakuPier");
+
+    // 2. Meta description cleaned (no HTML, truncated to 200)
+    const desc = document.querySelector('meta[name="description"]').content;
+    check("description set", desc.includes("Philosopher's Stone"));
+    check("description no HTML tags", !desc.includes("<b>") && !desc.includes("</b>"));
+    check("description stripped MAL Rewrite", !desc.includes("[Written by MAL Rewrite]"));
+    check("description <= 200 chars", desc.length <= 200);
+
+    // 3. OG tags
+    check("og:title", document.querySelector('meta[property="og:title"]').content === "Fullmetal Alchemist: Brotherhood");
+    check("og:url", document.querySelector('meta[property="og:url"]').content === "https://otakupier.2bd.net/pages/anime.html?id=5114");
+    check("og:image", document.querySelector('meta[property="og:image"]').content === "https://cdn.myanimelist.net/images/anime/1223/96541l.jpg");
+    check("og:type article", document.querySelector('meta[property="og:type"]').content === "article");
+
+    // 4. Canonical
+    check("canonical set", document.querySelector('link[rel="canonical"]').getAttribute("href") === "https://otakupier.2bd.net/pages/anime.html?id=5114");
+
+    // 5. JSON-LD
+    const ld = JSON.parse(document.getElementById("seo-jsonld").textContent);
+    check("JSON-LD type TVSeries", ld["@type"] === "TVSeries");
+    check("JSON-LD name", ld.name === "Fullmetal Alchemist: Brotherhood");
+    check("JSON-LD genre", Array.isArray(ld.genre) && ld.genre.length === 3);
+    check("JSON-LD aggregateRating", ld.aggregateRating && ld.aggregateRating.ratingValue === 9.1);
+    check("JSON-LD datePublished", ld.datePublished === "2009");
+
+    // 6. Movie detection
+    SEO.setAnimeMeta({ ...fakeAnime, type: "Movie" });
+    check("JSON-LD type Movie for movies", JSON.parse(document.getElementById("seo-jsonld").textContent)["@type"] === "Movie");
+
+    // 7. Share links
+    const links = SEO.shareLinks(fakeAnime);
+    check("share has 3 links", links.length === 3);
+    check("twitter link", links[0].href.includes("twitter.com/intent/tweet"));
+    check("reddit link", links[1].href.includes("reddit.com/submit"));
+    check("copy link carries URL", links[2].copy === "https://otakupier.2bd.net/pages/anime.html?id=5114");
+
+    // 8. Re-injection replaces old JSON-LD (no duplicates)
+    SEO.setAnimeMeta(fakeAnime);
+    check("single JSON-LD block", document.querySelectorAll("#seo-jsonld").length === 1);
+
+    // 9. Default meta fallback
+    SEO.setDefaultMeta("Anime not found - OtakuPier", "This anime could not be loaded.");
+    check("default title", document.title === "Anime not found - OtakuPier");
+
+    // 10. XSS safety: evil title/synopsis escaped
+    SEO.setAnimeMeta({ ...fakeAnime, title: '"><scr'+'ipt>alert(1)</scr'+'ipt>', synopsis: '<img onerror="alert(1)"> x' });
+    const ldText = document.getElementById("seo-jsonld").textContent;
+    check("JSON-LD has no raw <script>", !ldText.includes("<script>"));
+    check("JSON-LD script-breakout neutralized", !ldText.includes("</scr" + "ipt>"));
+    check("JSON-LD still valid JSON after escaping", (() => { try { JSON.parse(ldText); return true; } catch (e) { return false; } })());
+
+    document.getElementById("out").textContent = results.join("\n") + "\n\n" + (results.every(r => r.startsWith("PASS")) ? "ALL PASS" : "SOME FAILED");
+    document.title = (results.every(r => r.startsWith("PASS")) ? "PASS" : "FAIL") + " " + results.length;
+  } catch (e) {
+    document.getElementById("out").textContent = "EXCEPTION: " + (e && e.stack || e) + "\n\n" + results.join("\n");
+    document.title = "EXC";
+  }
+  </script>
+</body>
+</html>
