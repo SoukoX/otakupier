@@ -252,7 +252,8 @@ revoke execute on function public.add_xp(integer) from public;
 grant execute on function public.add_xp(integer) to authenticated;
 
 -- 10b. Award XP to a specific user (used for review-likes etc.)
--- Only the whitelisted amounts are accepted; callers cannot grant arbitrary XP.
+-- Only the whitelisted amounts are accepted; callers cannot grant arbitrary
+-- XP, and a user can never award XP to themselves (prevents self-farming).
 create or replace function public.award_xp_to(recipient uuid, amount integer)
 returns void
 language plpgsql
@@ -260,6 +261,7 @@ security definer set search_path = public
 as $$
 begin
   if recipient is null or auth.uid() is null then return; end if;
+  if recipient = auth.uid() then return; end if; -- no self-awards
   if amount not in (5, 10) then return; end if;
   update public.profiles set xp = xp + amount where id = recipient;
 end;
@@ -354,7 +356,8 @@ create policy "Rankings are viewable by everyone"
 
 drop policy if exists "Users can insert their own rankings" on public.rankings;
 create policy "Users can insert their own rankings"
-  on public.rankings for insert with check (auth.uid() = user_id);
+  on public.rankings for insert
+  with check (auth.uid() = user_id and not exists (select 1 from public.bans b where b.user_id = auth.uid()));
 
 drop policy if exists "Users can update their own rankings" on public.rankings;
 create policy "Users can update their own rankings"
@@ -385,7 +388,8 @@ create policy "Saved anime are viewable by everyone"
 
 drop policy if exists "Users can insert their own saved anime" on public.saved_anime;
 create policy "Users can insert their own saved anime"
-  on public.saved_anime for insert with check (auth.uid() = user_id);
+  on public.saved_anime for insert
+  with check (auth.uid() = user_id and not exists (select 1 from public.bans b where b.user_id = auth.uid()));
 
 drop policy if exists "Users can delete their own saved anime" on public.saved_anime;
 create policy "Users can delete their own saved anime"
@@ -428,6 +432,12 @@ create policy "Recipients can mark messages read"
   on public.messages for update
   using (auth.uid() = recipient_id);
 
+-- Recipients may ONLY update read_at on their inbox messages. Every other
+-- column (sender_id, recipient_id, body, created_at) is unmodifiable by the
+-- public API, so a recipient can't rewrite the conversation or its history.
+revoke update on public.messages from anon, authenticated;
+grant update (read_at) on public.messages to authenticated;
+
 -- Review likes
 drop policy if exists "Review likes are viewable by everyone" on public.review_likes;
 create policy "Review likes are viewable by everyone"
@@ -435,7 +445,8 @@ create policy "Review likes are viewable by everyone"
 
 drop policy if exists "Users can like reviews" on public.review_likes;
 create policy "Users can like reviews"
-  on public.review_likes for insert with check (auth.uid() = user_id);
+  on public.review_likes for insert
+  with check (auth.uid() = user_id and not exists (select 1 from public.bans b where b.user_id = auth.uid()));
 
 drop policy if exists "Users can unlike reviews" on public.review_likes;
 create policy "Users can unlike reviews"
@@ -489,7 +500,8 @@ create policy "Club members are viewable by everyone"
 
 drop policy if exists "Users can join clubs" on public.club_members;
 create policy "Users can join clubs"
-  on public.club_members for insert with check (auth.uid() = user_id);
+  on public.club_members for insert
+  with check (auth.uid() = user_id and not exists (select 1 from public.bans b where b.user_id = auth.uid()));
 
 drop policy if exists "Users can leave clubs" on public.club_members;
 create policy "Users can leave clubs"
@@ -618,24 +630,30 @@ revoke execute on function public.ensure_admin_can_change_admin_flag() from anon
 -- (default 24 hours) to keep the table small. SECURITY DEFINER + owner-only
 -- delete so any logged-in user can trigger it from the chat page without
 -- being able to delete specific (e.g. recent) messages themselves.
-create or replace function public.prune_chat_messages(older_than interval default interval '24 hours')
+-- The caller-facing `minute` argument is CLAMPED server-side to a minimum
+-- of 60 minutes so a caller cannot pass a tiny interval (e.g. 1 microsecond)
+-- and wipe the entire chat history.
+create or replace function public.prune_chat_messages(minutes integer default 1440)
 returns integer
 language plpgsql
 security definer set search_path = public
 as $$
 declare
   deleted integer;
+  cutoff timestamptz;
 begin
   if auth.uid() is null then return 0; end if;
+  if minutes is null or minutes < 60 then minutes := 60; end if;
+  cutoff := now() - make_interval(mins => minutes);
   delete from public.chat_messages
-    where created_at < now() - coalesce(older_than, interval '24 hours');
+    where created_at < cutoff;
   get diagnostics deleted = row_count;
   return coalesce(deleted, 0);
 end;
 $$;
 
-revoke execute on function public.prune_chat_messages(interval) from public, anon;
-grant execute on function public.prune_chat_messages(interval) to authenticated;
+revoke execute on function public.prune_chat_messages(integer) from public, anon, authenticated;
+grant execute on function public.prune_chat_messages(integer) to authenticated;
 
 -- Optional: nightly purge via pg_cron (best-effort; enabled on Supabase free tier).
 -- If pg_cron isn't available this block is skipped, and the chat page's
@@ -645,7 +663,7 @@ begin
   if exists (select 1 from pg_extension where extname = 'pg_cron') then
     if not exists (select 1 from cron.job where jobname = 'otakupier-chat-prune') then
       perform cron.schedule('otakupier-chat-prune', '0 4 * * *',
-        'select public.prune_chat_messages(interval ''24 hours'')');
+        'select public.prune_chat_messages(1440)');
     end if;
   end if;
 exception when others then
