@@ -14,8 +14,11 @@
   <link rel="stylesheet" href="../css/style.css">
   <style>
     .admin-tabs { display:flex; gap:8px; flex-wrap:wrap; margin-bottom:18px; }
-    .admin-tab { padding:8px 16px; border-radius:999px; border:1px solid var(--border); background:var(--bg-alt); color:var(--text); cursor:pointer; font-weight:600; font-size:.9rem; }
+    .admin-tab { padding:8px 16px; border-radius:999px; border:1px solid var(--border); background:var(--bg-alt); color:var(--text); cursor:pointer; font-weight:600; font-size:.9rem; position:relative; }
     .admin-tab.active { background:var(--accent); color:#fff; border-color:var(--accent); }
+    .admin-tab .tab-badge { display:none; align-items:center; justify-content:center; min-width:18px; height:18px; padding:0 5px; margin-left:6px; border-radius:999px; background:var(--accent-2); color:#fff; font-size:.72rem; font-weight:700; }
+    .admin-tab.active .tab-badge { background:var(--danger); }
+    .admin-tab .tab-badge.show { display:inline-flex; }
     .stat-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(160px,1fr)); gap:12px; margin-bottom:20px; }
     .stat-card { background:var(--bg-card); border:1px solid var(--border); border-radius:12px; padding:16px; }
     .stat-card b { font-size:1.6rem; color:var(--accent-3); }
@@ -77,7 +80,7 @@
           <button class="admin-tab" data-t="dash">Dashboard</button>
           <button class="admin-tab" data-t="anime">Anime editor</button>
           <button class="admin-tab" data-t="custom">Custom anime</button>
-          <button class="admin-tab" data-t="links">Watch links</button>
+          <button class="admin-tab" data-t="links">Watch links<span class="tab-badge" id="linkBadge"></span></button>
           <button class="admin-tab" data-t="users">Users &amp; bans</button>
           <button class="admin-tab" data-t="mod">Moderation</button>
         </div>
@@ -95,12 +98,27 @@
     async function loadTab() {
       const panel = document.getElementById("panel");
       panel.innerHTML = `<div class="loading"><div class="spinner"></div>Loading...</div>`;
+      refreshLinkBadge();
       if (activeTab === "dash") await loadDash();
       else if (activeTab === "anime") await loadAnimeEditor();
       else if (activeTab === "custom") await loadCustomAnime();
       else if (activeTab === "links") await loadWatchLinks();
       else if (activeTab === "users") await loadUsers();
       else if (activeTab === "mod") await loadModeration();
+    }
+
+    async function refreshLinkBadge() {
+      try {
+        const badge = document.getElementById("linkBadge");
+        if (!badge) return;
+        const { count } = await supabase
+          .from("watch_links")
+          .select("id", { count: "exact", head: true })
+          .eq("approved", false);
+        const n = count || 0;
+        badge.textContent = n > 99 ? "99+" : String(n);
+        badge.classList.toggle("show", n > 0);
+      } catch (e) {}
     }
 
     // ---------- Dashboard ----------
@@ -285,7 +303,7 @@
       const panel = document.getElementById("panel");
       panel.innerHTML = `
         <div class="section-head"><h3>Watch links approval</h3>
-          <span style="color:var(--text-dim); font-size:.85rem;">Users submit "where to watch" links; approve the good ones and they appear on the anime page.</span>
+          <span style="color:var(--text-dim); font-size:.85rem;">Users submit community watch links; approve the good ones and they appear on the anime page.</span>
         </div>
         <div id="linkList"><div class="loading"><div class="spinner"></div></div></div>`;
       const box = document.getElementById("linkList");
@@ -325,6 +343,7 @@
         await supabase.from("watch_links").update({ approved }).eq("id", linkId);
         showToast(approved ? "Link approved" : "Link unapproved");
         loadWatchLinks();
+        refreshLinkBadge();
       } catch (e) { showToast("Could not update link"); }
     }
 
@@ -333,6 +352,7 @@
         await supabase.from("watch_links").delete().eq("id", linkId);
         showToast("Link rejected");
         loadWatchLinks();
+        refreshLinkBadge();
       } catch (e) { showToast("Could not delete link"); }
     }
 
