@@ -520,16 +520,36 @@
       const provider = document.getElementById("clProvider").value.trim();
       const url = document.getElementById("clUrl").value.trim();
       if (!/^https?:\/\//i.test(url)) { showToast("URL must start with http:// or https://"); return; }
-      dbInsert("watch_links", {
-        anime_mal_id: Number(id),
-        user_id: currentUser.id,
-        provider_name: provider,
-        url,
-        approved: false,
-      }).then(() => {
-        showToast("Link submitted for admin approval");
-        renderCommunityLinks();
-      }).catch((err) => showToast("Could not submit: " + err.message));
+      const seasonLabel = (() => {
+        if (!animeData) return "";
+        const s = (animeData.season || "").toString();
+        const y = animeData.year || "";
+        return s ? `${s.charAt(0).toUpperCase() + s.slice(1)} ${y}`.trim() : (y ? String(y) : "");
+      })();
+      supabase
+        .from("watch_links")
+        .select("id", { count: "exact", head: true })
+        .eq("anime_mal_id", Number(id))
+        .eq("user_id", currentUser.id)
+        .then(({ count }) => {
+          if ((count || 0) >= 5) {
+            showToast("You can only submit up to 5 links per anime");
+            return;
+          }
+          dbInsert("watch_links", {
+            anime_mal_id: Number(id),
+            user_id: currentUser.id,
+            provider_name: provider,
+            url,
+            approved: false,
+            anime_title: JIKAN.title(animeData) || "",
+            season: seasonLabel,
+          }).then(() => {
+            showToast("Link submitted for admin approval");
+            renderCommunityLinks();
+          }).catch((err) => showToast("Could not submit: " + err.message));
+        })
+        .catch(() => showToast("Could not submit link"));
     }
 
     async function deleteCommunityLink(linkId) {
