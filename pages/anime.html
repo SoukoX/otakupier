@@ -25,6 +25,7 @@
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="https://cdn.jsdelivr.net/npm/hls.js@1/dist/hls.min.js"></script>
   <script src="../js/config.js"></script>
+  <script src="../js/seo.js" defer></script>
   <script src="../js/api.js"></script>
   <script src="../js/app.js"></script>
   <script>
@@ -68,7 +69,9 @@
         }
 
         renderHeader();
+        renderShareRow();
         renderTrailer();
+        SEO.setAnimeMeta(animeData);
         loadCommunityRating();
         loadSavedState();
         loadReviews();
@@ -76,6 +79,7 @@
         // Characters + episodes fetch in parallel (they're independent)
         await Promise.all([loadCharacters(), loadEpisodes()]);
       } catch (err) {
+        SEO.setDefaultMeta("Anime not found - OtakuPier", "This anime could not be loaded.");
         main.innerHTML = `<div class="empty-state">Could not load this anime.</div>`;
       }
     }
@@ -115,6 +119,7 @@
             </div>
             <p class="detail-synopsis">${JIKAN.esc(c.synopsis || "No description yet.")}</p>
             <span class="pill" style="background:rgba(255,196,0,.15); color:#ffc400;">Community entry</span>
+            <div class="share-row" id="shareRow"></div>
           </div>
         </div>
 
@@ -127,6 +132,8 @@
           <div id="reviewList"></div>
         </div>`;
 
+      SEO.setAnimeMeta(animeData);
+      renderShareRow();
       loadSavedState();
       loadCommunityRating();
       loadReviews();
@@ -177,6 +184,7 @@
             </div>
             <p class="detail-synopsis">${JIKAN.esc(synopsis)}</p>
             <div class="detail-genres">${genres}</div>
+            <div class="share-row" id="shareRow"></div>
             <div id="watchSlot"></div>
             <div id="mangaLinks"></div>
           </div>
@@ -205,6 +213,22 @@
       loadMangaLinks();
       renderWatchPanel();
       loadRelated();
+    }
+
+    // Render social share buttons (X/Twitter, Reddit, copy link) for this anime
+    function renderShareRow() {
+      const row = document.getElementById("shareRow");
+      if (!row || !animeData) return;
+      const links = SEO.shareLinks(animeData);
+      row.innerHTML = links.map((l) => l.copy
+        ? `<button class="share-btn" onclick="copyShareLink()">${l.label}</button>`
+        : `<a class="share-btn" href="${l.href}" target="_blank" rel="noopener">${l.label}</a>`
+      ).join("");
+    }
+
+    function copyShareLink() {
+      const url = SEO.BASE + "/pages/anime.html?id=" + encodeURIComponent(animeData.mal_id);
+      navigator.clipboard?.writeText(url).then(() => showToast("Link copied!")).catch(() => showToast("Could not copy link"));
     }
 
     // ---------- Seasons & related anime (sequels, movies, OVAs) ----------
