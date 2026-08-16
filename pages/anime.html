@@ -480,7 +480,7 @@
         const approved = (data || []).filter((l) => l.approved);
         const pending = (data || []).filter((l) => !l.approved && isLoggedIn() && l.user_id === currentUser.id);
 
-        let html = `<h3 class="sub-head" style="margin-top:22px;">Community Watch Links</h3>
+        let html = `<h3 class="sub-head">Community Watch Links</h3>
           <div class="watch-panel">`;
         if (!approved.length) {
           html += `<div class="watch-note">No community links yet. Know a place to watch this? Add one below.</div>`;
