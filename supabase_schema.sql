@@ -180,6 +180,34 @@ create table if not exists public.club_posts (
   created_at timestamptz default now()
 );
 
+-- 8f2. Community "where to watch" links (user-submitted, admin-approved).
+-- Only approved rows are visible to everyone; the submitter sees their own
+-- pending rows so they know the link is awaiting review.
+create table if not exists public.watch_links (
+  id bigint generated always as identity primary key,
+  anime_mal_id integer not null,
+  user_id uuid references auth.users on delete cascade not null,
+  provider_name text not null default '',
+  url text not null,
+  approved boolean default false,
+  created_at timestamptz default now()
+);
+
+-- Server-side URL safety: only absolute http(s) URLs are accepted so users
+-- can't inject javascript: or other dangerous schemes via the approval flow.
+alter table public.watch_links drop constraint if exists watch_links_url_ok;
+alter table public.watch_links add constraint watch_links_url_ok
+  check (url ~ '^https?://');
+
+-- Optional de-dup: one link per provider per anime per user.
+alter table public.watch_links add column if not exists provider_name text default '';
+alter table public.watch_links drop constraint if exists watch_links_provider_required;
+alter table public.watch_links add constraint watch_links_provider_required
+  check (btrim(provider_name) <> '');
+alter table public.watch_links drop constraint if exists watch_links_unique_provider;
+alter table public.watch_links add constraint watch_links_unique_provider
+  unique (anime_mal_id, provider_name, user_id);
+
 -- 8g. Anime metadata overrides (admin-curated; overrides Jikan API data)
 create table if not exists public.anime_edits (
   mal_id integer primary key,
@@ -315,6 +343,7 @@ alter table public.forum_replies enable row level security;
 alter table public.clubs enable row level security;
 alter table public.club_members enable row level security;
 alter table public.club_posts enable row level security;
+alter table public.watch_links enable row level security;
 alter table public.anime_edits enable row level security;
 alter table public.custom_anime enable row level security;
 alter table public.bans enable row level security;
@@ -539,6 +568,38 @@ drop policy if exists "Authors can delete club posts" on public.club_posts;
 create policy "Authors can delete club posts"
   on public.club_posts for delete using (auth.uid() = user_id);
 
+-- Watch links (user-submitted, admin-approved)
+-- Everyone can read approved links; submitters can read their own pending ones.
+drop policy if exists "Approved watch links are viewable by everyone" on public.watch_links;
+create policy "Approved watch links are viewable by everyone"
+  on public.watch_links for select
+  using (approved or auth.uid() = user_id);
+
+-- Logged-in (non-banned) users may submit a link for an anime.
+drop policy if exists "Users can submit watch links" on public.watch_links;
+create policy "Users can submit watch links"
+  on public.watch_links for insert
+  with check (
+    auth.uid() = user_id
+    and not exists (select 1 from public.bans b where b.user_id = auth.uid())
+  );
+
+-- Submitters can delete their own pending links (retract a submission).
+drop policy if exists "Users can delete their own pending watch links" on public.watch_links;
+create policy "Users can delete their own pending watch links"
+  on public.watch_links for delete using (auth.uid() = user_id and not approved);
+
+-- Admins approve / reject / delete any link.
+drop policy if exists "Admins can update watch links" on public.watch_links;
+create policy "Admins can update watch links"
+  on public.watch_links for update
+  using (exists (select 1 from public.profiles p where p.id = auth.uid() and p.is_admin));
+
+drop policy if exists "Admins can delete watch links" on public.watch_links;
+create policy "Admins can delete watch links"
+  on public.watch_links for delete
+  using (exists (select 1 from public.profiles p where p.id = auth.uid() and p.is_admin));
+
 -- Admins can remove any violating content (moderation)
 drop policy if exists "Admins can delete reviews" on public.reviews;
 create policy "Admins can delete reviews"
@@ -700,6 +761,7 @@ create index if not exists idx_forum_threads_created on public.forum_threads (cr
 create index if not exists idx_forum_replies_thread on public.forum_replies (thread_id, created_at);
 create index if not exists idx_club_members_club on public.club_members (club_id);
 create index if not exists idx_club_posts_club on public.club_posts (club_id, created_at);
+create index if not exists idx_watch_links_anime on public.watch_links (anime_mal_id, approved);
 create index if not exists idx_bans_user on public.bans (user_id);
 create index if not exists idx_custom_anime_created on public.custom_anime (created_at desc);
 
