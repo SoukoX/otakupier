@@ -2,8 +2,9 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
+  <meta name="referrer" content="strict-origin-when-cross-origin">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Anime Details & Reviews — OtakuPier</title>
+  <title>Anime Details & Reviews - OtakuPier</title>
   <meta name="robots" content="index, follow">
   <meta name="description" content="Full anime details on OtakuPier — synopsis, episodes, characters, trailers, community rankings and user reviews.">
   <link rel="canonical" href="https://otakupier.2bd.net/pages/anime.html">
@@ -22,6 +23,7 @@
   <footer id="siteFooter"></footer>
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="https://cdn.jsdelivr.net/npm/hls.js@1/dist/hls.min.js"></script>
   <script src="../js/config.js"></script>
   <script src="../js/api.js"></script>
   <script src="../js/app.js"></script>
@@ -30,6 +32,7 @@
     let animeData = null;
     let myRank = null;
     let communityRating = null;
+    let episodeCount = 0;
 
     async function loadAnime() {
       const main = document.getElementById("main");
@@ -80,7 +83,7 @@
     // Render an admin-added custom anime entry
     function renderCustom(c) {
       const main = document.getElementById("main");
-      document.title = `${c.title} — OtakuPier`;
+      document.title = `${c.title} - OtakuPier`;
       animeData = {
         mal_id: c.id,
         title: c.title,
@@ -135,7 +138,7 @@
       const synopsis = (a.synopsis || "No synopsis available.").replace(/\[Written by MAL Rewrite\]/, "");
       const mainTitle = a.title_english || a.title;
       const jpTitle = a.title_japanese || (a.title_english ? a.title : "");
-      document.title = `${mainTitle} — OtakuPier`;
+      document.title = `${mainTitle} - OtakuPier`;
 
       const genres = (a.genres || []).map((g) => `<span class="genre-tag">${g.name}</span>`).join("");
       const studios = (a.studios || []).map((s) => s.name).join(", ") || "N/A";
@@ -200,7 +203,7 @@
         </div>`;
 
       loadMangaLinks();
-      loadWatchLinks();
+      renderWatchPanel();
       loadRelated();
     }
 
@@ -366,13 +369,36 @@
       })();
     }
 
-    // ---------- Where to Watch (official platforms + search fallbacks) ----------
-    async function loadWatchLinks() {
+    // ---------- Where to Watch (single combined panel) ----------
+    // One panel that merges: the free streaming providers from CONFIG.STREAMING
+    // (with in-site episode picker), the official platforms reported by MAL,
+    // and open search gateways — so visitors see everything in one place.
+    async function renderWatchPanel() {
       const slot = document.getElementById("watchSlot");
       if (!slot) return;
       const a = animeData;
       const mainTitle = JIKAN.title(a);
       const q = encodeURIComponent(mainTitle);
+      const providers = getStreamingProviders();
+      const epCount = animeData?.episodes || episodeCount || 0;
+
+      // Free/watch-on providers from config (Tubi, Pluto TV, RetroCrush...)
+      let streamHtml = "";
+      if (providers.length) {
+        streamHtml = `
+          <div class="stream-panel">
+            <div class="watch-search" style="margin:0 0 2px;"><strong>Watch for free</strong></div>
+            <div class="stream-providers">
+              ${providers.map((p, i) =>
+                `<button class="watch-btn ep-chip" data-provider="${i}" onclick="onPickProvider(${i})">${JIKAN.esc(p.name)}</button>`
+              ).join("")}
+            </div>
+            ${epCount > 0
+              ? `<div class="episodes-row" id="epRow"></div>
+                 <div class="stream-scroll-note">Click an episode to open the player.</div>`
+              : `<div class="stream-notice">This title has no episode list yet.</div>`}
+          </div>`;
+      }
 
       // Official streaming platforms reported by MAL (via Jikan /full).
       const seen = new Set();
@@ -382,6 +408,11 @@
         seen.add(k);
         return true;
       });
+      const officialHtml = official.length
+        ? `<div class="watch-btns">` +
+          official.map((s) => `<a class="watch-btn" href="${s.url}" target="_blank" rel="noopener">${JIKAN.esc(s.name)} <span class="watch-ext">&nearr;</span></a>`).join("") +
+          `</div>`
+        : `<div class="watch-note">No official stream is listed on MyAnimeList for this title.</div>`;
 
       // Search gateways as a fallback (all legal, open in a new tab).
       const searches = [
@@ -392,18 +423,164 @@
         { name: "MyAnimeList", url: a.url || `https://myanimelist.net/search/all?q=${q}` },
       ];
 
-      let html = `<h3 class="sub-head">Where to Watch</h3><div class="watch-panel">`;
-      if (official.length) {
-        html += `<div class="watch-btns">` +
-          official.map((s) => `<a class="watch-btn" href="${s.url}" target="_blank" rel="noopener">${JIKAN.esc(s.name)} <span class="watch-ext">&nearr;</span></a>`).join("") +
-          `</div>`;
-      } else {
-        html += `<div class="watch-note">No official stream is listed on MyAnimeList for this title.</div>`;
+      slot.innerHTML = `
+        <h3 class="sub-head">Where to Watch</h3>
+        <div class="watch-panel">
+          ${streamHtml}
+          ${official.length ? `<div class="watch-divider">Official</div>` : ""}
+          ${officialHtml}
+          <div class="watch-search">Still can't find it? Search:
+            ${searches.map((s) => `<a href="${s.url}" target="_blank" rel="noopener">${JIKAN.esc(s.name)}</a>`).join(" · ")}
+          </div>
+        </div>`;
+      if (epCount > 0) renderEpRow(listOfEpisodes());
+    }
+
+    // ---------- Watch Online (third-party streaming providers) ----------
+    function getStreamingProviders() {
+      return JIKAN.streamingProviders();
+    }
+
+    let activeProviderIndex = 0;
+    function renderEpRow(list) {
+      const row = document.getElementById("epRow");
+      if (!row) return;
+      row.innerHTML = list.map((n) =>
+        `<button class="ep-chip" data-ep="${n}" onclick="openStream(${n})">${n}</button>`
+      ).join("");
+      // mark the previously active episode (if any) + provider button active
+      document.querySelectorAll(".stream-panel .ep-chip").forEach((c) => {
+        const isEp = c.dataset.ep;
+        const isProv = c.dataset.provider !== undefined;
+        c.classList.toggle("is-active",
+          isEp ? Number(c.dataset.ep) === (lastStreamEpisode || 0)
+               : (isProv && c.dataset.provider == activeProviderIndex));
+      });
+    }
+
+    function onPickProvider(i) {
+      activeProviderIndex = i;
+      document.querySelectorAll(".stream-panel .ep-chip[data-provider]").forEach((c, idx) =>
+        c.classList.toggle("is-active", idx === i));
+    }
+
+    // Open the streaming player modal for a given episode number.
+    function openStream(ep) {
+      const providers = getStreamingProviders();
+      if (!providers.length) {
+        showToast("Streaming isn't configured yet.");
+        return;
       }
-      html += `<div class="watch-search">Also try searching:
-        ${searches.map((s) => `<a href="${s.url}" target="_blank" rel="noopener">${JIKAN.esc(s.name)}</a>`).join(" · ")}</div>
-      </div>`;
-      slot.innerHTML = html;
+      const provider = providers[activeProviderIndex] || providers[0];
+      const url = JIKAN.streamingUrl(provider, {
+        mal_id: animeData?.mal_id,
+        ep,
+        title: JIKAN.title(animeData),
+      });
+      if (!url) {
+        showToast("This provider could not build a link for this episode.");
+        return;
+      }
+      lastStreamEpisode = ep;
+      renderEpRow(listOfEpisodes());
+      const title = (animeData?.title_english || animeData?.title || "Anime") + " — Episode " + ep;
+      openStreamModal({ provider, url, title, ep });
+    }
+
+    function listOfEpisodes() {
+      return Array.from({ length: Math.min(animeData?.episodes || episodeCount || 1, 500) }, (_, i) => i + 1);
+    }
+
+    let lastStreamEpisode = 0;
+
+    // Modal with an <iframe> embed (mode "embed"), a direct video file
+    // (mode "video"), or an external link (mode "link"). The iframe sandbox
+    // is kept deliberately restrictive: scripts allowed (players usually need
+    // them), but no popups/forms to the parent and no top-navigation, so a
+    // provider can't drive the host page.
+    function openStreamModal({ provider, url, title, ep }) {
+      closeStreamModal();
+      const overlay = document.createElement("div");
+      overlay.className = "stream-modal-overlay";
+
+      let frame = "";
+      let link = "";
+      let usesVideo = false;
+      if (provider.mode === "embed") {
+        frame = `<div class="stream-frame-wrap"><iframe src="${JIKAN.esc(url)}" title="${JIKAN.esc(title)}"
+             referrerpolicy="no-referrer" allow="autoplay; fullscreen; encrypted-media; picture-in-picture"
+             sandbox="allow-scripts allow-same-origin" loading="lazy" allowfullscreen></iframe></div>`;
+        link = `<a class="btn btn-primary" href="${JIKAN.esc(url)}" target="_blank" rel="noopener noreferrer">▶ Watch on ${JIKAN.esc(provider.name)}</a>`;
+      } else if (provider.mode === "video") {
+        usesVideo = true;
+        frame = `<div class="stream-frame-wrap"><video id="streamVideo" controls playsinline preload="metadata"
+             style="position:absolute; inset:0; width:100%; height:100%; background:#000;"></video></div>`;
+        link = `<a class="btn btn-primary" href="${JIKAN.esc(url)}" target="_blank" rel="noopener noreferrer">Open video file</a>`;
+      } else {
+        frame = `<div class="stream-notice" style="padding:8px 2px;">This provider opens in a new tab.</div>`;
+        link = `<a class="btn btn-primary" href="${JIKAN.esc(url)}" target="_blank" rel="noopener noreferrer">▶ Watch on ${JIKAN.esc(provider.name)}</a>`;
+      }
+
+      overlay.innerHTML = `
+        <div class="stream-modal" role="dialog" aria-modal="true" aria-label="${JIKAN.esc(title)}">
+          <div class="stream-modal-head">
+            <div class="stream-modal-title">${JIKAN.esc(title)}</div>
+            <button class="stream-modal-close" onclick="closeStreamModal()" aria-label="Close player">&times;</button>
+          </div>
+          ${frame}
+          <div class="stream-modal-actions">
+            ${link}
+            <button class="btn btn-outline btn-small" onclick="closeStreamModal()">Close</button>
+          </div>
+        </div>`;
+      overlay.addEventListener("click", (e) => { if (e.target === overlay) closeStreamModal(); });
+      document.addEventListener("keydown", streamEscKey);
+      document.body.appendChild(overlay);
+
+      // mode "video": attach the direct MP4/HLS source to the <video>.
+      if (usesVideo) {
+        const vid = document.getElementById("streamVideo");
+        if (vid) loadVideoSource(vid, url);
+      }
+    }
+
+    // Attach an MP4 or HLS (m3u8) source to a <video>. HLS needs hls.js
+    // (loaded above); plain MP4/WebM plays natively. Appending a fresh
+    // <source> guarantees a clean reload when switching episodes.
+    function loadVideoSource(video, src) {
+      if (!video || !src) return;
+      while (video.firstChild) video.removeChild(video.firstChild);
+      const isHls = /\.m3u8(\?|$)/i.test(src);
+      if (isHls && window.Hls && Hls.isSupported()) {
+        const hls = new Hls();
+        hls.loadSource(src);
+        hls.attachMedia(video);
+        video.dataset.hls = hls;
+      } else if (isHls && video.canPlayType("application/vnd.apple.mpegurl")) {
+        video.src = src;
+      } else {
+        const s = document.createElement("source");
+        s.src = src;
+        video.appendChild(s);
+        video.load();
+      }
+      video.play().catch(() => {});
+    }
+
+    function streamEscKey(e) {
+      if (e.key === "Escape") closeStreamModal();
+    }
+
+    function closeStreamModal() {
+      const vid = document.querySelector("#streamVideo");
+      if (vid) {
+        if (vid.dataset.hls) { try { vid.dataset.hls.destroy(); } catch (e) {} }
+        vid.pause();
+        vid.removeAttribute("src");
+      }
+      const ov = document.querySelector(".stream-modal-overlay");
+      if (ov) ov.remove();
+      document.removeEventListener("keydown", streamEscKey);
     }
 
     function renderTrailer() {
@@ -474,6 +651,10 @@
           const score = ep.score ? `<span class="ep-score">★ ${ep.score.toFixed(2)}</span>` : "";
           const badges = (ep.filler ? `<span class="ep-badge">Filler</span>` : "")
                        + (ep.recap ? `<span class="ep-badge">Recap</span>` : "");
+          const epNum = ep.episode || ep.mal_id;
+          const watchChip = (epNum && getStreamingProviders().length)
+            ? `<button class="btn btn-outline btn-small" style="padding:4px 10px;" onclick="openStream(${epNum})">▶ Watch</button>`
+            : "";
           el.innerHTML = `
             <div class="ep-num">Episode ${ep.mal_id || "?"} ${badges}</div>
             <div class="ep-title">${JIKAN.esc(ep.title || "Untitled")}</div>
@@ -481,10 +662,13 @@
             <div class="ep-meta">
               ${score}
               ${ep.aired ? `<span class="char-role">${JIKAN.esc(String(ep.aired).slice(0, 10))}</span>` : ""}
+              ${watchChip}
               ${ep.url ? `<a class="ep-link" href="${ep.url}" target="_blank" rel="noopener">MAL &nearr;</a>` : ""}
             </div>`;
           list.appendChild(el);
         });
+        episodeCount = (animeData?.episodes) || all.length;
+        renderWatchPanel();
       } catch (err) {
         list.innerHTML = `<div class="empty-state">Could not load episodes.</div>`;
       }
