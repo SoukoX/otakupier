@@ -926,6 +926,37 @@ section {
   font-size: 0.8rem;
 }
 
+.review-reply {
+  margin: 8px 0 14px 22px;
+  border-left: 3px solid var(--border);
+  padding-left: 14px;
+}
+
+.reply-children {
+  margin-top: 8px;
+}
+
+.reply-box {
+  margin-top: 10px;
+  padding: 10px;
+  background: var(--bg-alt);
+  border: 1px dashed var(--border);
+  border-radius: 10px;
+}
+
+.reply-textarea {
+  width: 100%;
+  min-height: 60px;
+  padding: 10px;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: var(--bg-card);
+  color: var(--text);
+  font-family: inherit;
+  resize: vertical;
+  margin-bottom: 8px;
+}
+
 .review p {
   color: var(--text-dim);
 }
