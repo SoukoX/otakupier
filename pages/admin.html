@@ -77,6 +77,7 @@
           <button class="admin-tab" data-t="dash">Dashboard</button>
           <button class="admin-tab" data-t="anime">Anime editor</button>
           <button class="admin-tab" data-t="custom">Custom anime</button>
+          <button class="admin-tab" data-t="links">Watch links</button>
           <button class="admin-tab" data-t="users">Users &amp; bans</button>
           <button class="admin-tab" data-t="mod">Moderation</button>
         </div>
@@ -97,6 +98,7 @@
       if (activeTab === "dash") await loadDash();
       else if (activeTab === "anime") await loadAnimeEditor();
       else if (activeTab === "custom") await loadCustomAnime();
+      else if (activeTab === "links") await loadWatchLinks();
       else if (activeTab === "users") await loadUsers();
       else if (activeTab === "mod") await loadModeration();
     }
@@ -276,6 +278,62 @@
         showToast("Deleted");
         loadCustomAnime();
       } catch (err) { showToast("Delete failed"); }
+    }
+
+    // ---------- Watch links (approve/reject user-submitted) ----------
+    async function loadWatchLinks() {
+      const panel = document.getElementById("panel");
+      panel.innerHTML = `
+        <div class="section-head"><h3>Watch links approval</h3>
+          <span style="color:var(--text-dim); font-size:.85rem;">Users submit "where to watch" links; approve the good ones and they appear on the anime page.</span>
+        </div>
+        <div id="linkList"><div class="loading"><div class="spinner"></div></div></div>`;
+      const box = document.getElementById("linkList");
+      try {
+        const { data } = await supabase.from("watch_links").select("*").order("created_at", { ascending: false }).limit(100);
+        box.innerHTML = "";
+        if (!data?.length) { box.innerHTML = `<div class="empty-state">No watch links submitted yet.</div>`; return; }
+        data.forEach((l) => {
+          const el = document.createElement("div");
+          el.className = "admin-list-item";
+          const status = l.approved
+            ? `<span style="color:var(--accent-3); font-size:.8rem;">✓ Approved</span>`
+            : `<span style="color:#ffc400; font-size:.8rem;">⏳ Pending</span>`;
+          el.innerHTML = `
+            <div class="grow">
+              <div><b>${JIKAN.esc(l.provider_name)}</b> ${status} <span style="color:var(--text-dim); font-size:.8rem;">MAL ${l.anime_mal_id}</span></div>
+              <div style="color:var(--text-dim); font-size:.85rem;"><a href="${JIKAN.safeImg(l.url)}" target="_blank" rel="noopener">${JIKAN.safeAttr(l.url)}</a></div>
+              <div id="linkOwner-${l.id}" style="color:var(--text-dim); font-size:.8rem;"></div>
+            </div>
+            ${l.approved
+              ? `<button class="btn btn-danger btn-small" onclick="setLinkApproved(${l.id}, false)">Unapprove</button>`
+              : `<button class="btn btn-primary btn-small" onclick="setLinkApproved(${l.id}, true)">Approve</button>
+                 <button class="btn btn-danger btn-small" onclick="deleteLink(${l.id})">Reject</button>`}`;
+          box.appendChild(el);
+          fetchProfileRow(l.user_id).then((p) => {
+            const o = document.getElementById(`linkOwner-${l.id}`);
+            if (o && p) o.textContent = `by ${p.name || "user"}`;
+          });
+        });
+      } catch (e) {
+        box.innerHTML = `<div class="empty-state">Could not load watch links.</div>`;
+      }
+    }
+
+    async function setLinkApproved(linkId, approved) {
+      try {
+        await supabase.from("watch_links").update({ approved }).eq("id", linkId);
+        showToast(approved ? "Link approved" : "Link unapproved");
+        loadWatchLinks();
+      } catch (e) { showToast("Could not update link"); }
+    }
+
+    async function deleteLink(linkId) {
+      try {
+        await supabase.from("watch_links").delete().eq("id", linkId);
+        showToast("Link rejected");
+        loadWatchLinks();
+      } catch (e) { showToast("Could not delete link"); }
     }
 
     // ---------- Users & bans ----------
