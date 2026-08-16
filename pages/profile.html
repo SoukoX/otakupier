@@ -173,6 +173,7 @@
           .from("reviews")
           .select("*")
           .eq("user_id", userId)
+          .is("parent_id", null)
           .order("created_at", { ascending: false })
           .limit(50);
         if (error) throw error;
