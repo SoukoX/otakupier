@@ -194,6 +194,14 @@ img {
   margin: 4px 0 6px;
   padding: 18px 0 6px;
 }
+.watch-community {
+  margin-top: 26px;
+  padding-top: 20px;
+  border-top: 1px solid var(--border);
+}
+.watch-community .sub-head {
+  margin-top: 0;
+}
 .watch-panel .sub-head {
   margin-top: 26px;
 }
@@ -241,6 +249,7 @@ img {
 .watch-add-form {
   display: flex;
   flex-wrap: wrap;
+  align-items: stretch;
   gap: 10px;
   margin: 16px 0 14px;
   padding: 14px;
@@ -249,6 +258,8 @@ img {
   background: linear-gradient(180deg, var(--bg-alt), var(--bg-card));
 }
 .watch-add-form input {
+  flex: 1;
+  min-width: 160px;
   padding: 12px 14px;
   border-radius: 10px;
   border: 1px solid var(--border);
@@ -256,6 +267,8 @@ img {
   color: var(--text);
   font-family: inherit;
   font-size: 0.95rem;
+  height: 44px;
+  box-sizing: border-box;
   transition: border-color 0.2s, box-shadow 0.2s, background 0.2s;
 }
 .watch-add-form input::placeholder {
