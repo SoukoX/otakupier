@@ -26,8 +26,12 @@ create table if not exists public.reviews (
   rating integer check (rating between 1 and 10),
   text text not null,
   is_comment boolean default false,
+  parent_id bigint references public.reviews on delete cascade,
   created_at timestamptz default now()
 );
+
+-- Idempotent upgrade: add reply column to existing databases (replies to reviews)
+alter table public.reviews add column if not exists parent_id bigint references public.reviews on delete cascade;
 
 -- 3. Rankings (one entry per user per anime; admins may vote multiple times)
 create table if not exists public.rankings (
@@ -685,6 +689,7 @@ $$;
 
 -- 14. Indexes for faster lookups
 create index if not exists idx_reviews_anime on public.reviews (anime_mal_id);
+create index if not exists idx_reviews_parent on public.reviews (parent_id);
 create index if not exists idx_rankings_anime on public.rankings (anime_mal_id);
 create index if not exists idx_chat_created on public.chat_messages (created_at desc);
 create index if not exists idx_saved_user on public.saved_anime (user_id);
