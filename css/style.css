@@ -203,6 +203,29 @@ img {
   margin-top: 4px;
   margin-bottom: 6px;
 }
+.watch-pending {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 6px 0 10px;
+}
+.watch-pending-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--bg-alt);
+  font-size: 0.85rem;
+  color: var(--text);
+  white-space: nowrap;
+}
+.watch-pending-item .btn-small {
+  padding: 2px 8px;
+  font-size: 0.75rem;
+  line-height: 1;
+}
 .watch-community .sub-head {
   margin-top: 0;
 }
