@@ -387,7 +387,7 @@
 
     async function loadModReviews() {
       const box = document.getElementById("modReviews");
-      const { data } = await supabase.from("reviews").select("id, user_id, anime_mal_id, anime_title, rating, text, created_at").order("created_at", { ascending: false }).limit(20);
+      const { data } = await supabase.from("reviews").select("id, user_id, anime_mal_id, anime_title, rating, text, parent_id, created_at").order("created_at", { ascending: false }).limit(20);
       box.innerHTML = "";
       if (!data?.length) { box.innerHTML = `<div class="empty-state">None.</div>`; return; }
       data.forEach(async (r) => {
@@ -396,7 +396,7 @@
         el.className = "admin-list-item";
         el.innerHTML = `
           <div class="grow">
-            <div>${adminNameHTML(p)} <span style="color:var(--text-dim); font-size:.8rem;">rated ${r.rating ?? "—"} on ${JIKAN.esc(r.anime_title || r.anime_mal_id)}</span></div>
+            <div>${adminNameHTML(p)} <span style="color:var(--text-dim); font-size:.8rem;">${r.parent_id ? "replied to a review on" : `rated ${r.rating ?? "—"} on`} ${JIKAN.esc(r.anime_title || r.anime_mal_id)}</span></div>
             <div style="color:var(--text-dim); font-size:.85rem;">${JIKAN.esc((r.text || "").slice(0, 140))}</div>
           </div>
           <button class="btn btn-danger btn-small" onclick="modDelete('reviews', ${r.id})">Delete</button>`;
