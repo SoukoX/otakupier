@@ -2,8 +2,9 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
+  <meta name="referrer" content="strict-origin-when-cross-origin">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Admin Panel — OtakuPier</title>
+  <title>Admin Panel - OtakuPier</title>
   <meta name="robots" content="index, follow">
   <meta name="description" content="Site administration for OtakuPier.">
   <link rel="canonical" href="https://otakupier.2bd.net/pages/admin.html">
@@ -67,7 +68,7 @@
     }
 
     function renderPanel() {
-      document.title = "Admin Panel — OtakuPier";
+      document.title = "Admin Panel - OtakuPier";
       main.innerHTML = `
         <div class="section-head"><h2>⚙ Admin Panel</h2>
           <span style="color:var(--text-dim); font-size:.9rem;">Signed in as ${JIKAN.esc(getProfile().name)}</span>
@@ -318,8 +319,8 @@
             </div>
             <a class="btn btn-outline btn-small" href="profile.html?id=${u.id}">Profile</a>
             ${ban
-              ? `<button class="btn btn-primary btn-small" onclick="unbanUser('${u.id}')">Unban</button>`
-              : `<button class="btn btn-danger btn-small" onclick="banUser('${u.id}','${JIKAN.esc(u.name || "User")}')">Ban</button>`}
+              ? `<button class="btn btn-primary btn-small" data-uid="${JIKAN.safeAttr(u.id)}" onclick="unbanUser(this)">Unban</button>`
+              : `<button class="btn btn-danger btn-small" data-uid="${JIKAN.safeAttr(u.id)}" data-name="${JIKAN.safeAttr(u.name || "User")}" onclick="banUser(this)">Ban</button>`}
             ${u.is_admin
               ? `<button class="btn btn-outline btn-small" onclick="demoteAdmin('${u.id}')">Remove admin</button>`
               : `<button class="btn btn-outline btn-small" onclick="promoteAdmin('${u.id}')">Make admin</button>`}`;
@@ -330,7 +331,9 @@
       }
     }
 
-    async function banUser(uid, name) {
+    async function banUser(btn) {
+      const uid = btn.getAttribute("data-uid");
+      const name = btn.getAttribute("data-name") || "User";
       const reason = prompt(`Ban ${name}? Enter a reason (optional):`, "Policy violation");
       if (reason === null) return;
       try {
@@ -340,7 +343,8 @@
       } catch (err) { showToast("Ban failed: " + (err.message || "")); }
     }
 
-    async function unbanUser(uid) {
+    async function unbanUser(btn) {
+      const uid = btn.getAttribute("data-uid");
       try {
         await supabase.from("bans").delete().eq("user_id", uid);
         showToast("User unbanned");
