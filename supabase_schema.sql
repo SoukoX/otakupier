@@ -208,6 +208,29 @@ alter table public.watch_links drop constraint if exists watch_links_unique_prov
 alter table public.watch_links add constraint watch_links_unique_provider
   unique (anime_mal_id, provider_name, user_id);
 
+-- Store what the link is for so the admin can verify it matches without an API call.
+alter table public.watch_links add column if not exists anime_title text default '';
+alter table public.watch_links add column if not exists season text default '';
+
+-- Cap: one user may submit at most 5 pending watch links per anime.
+create or replace function public.watch_links_limit()
+returns trigger
+language plpgsql
+security definer set search_path = public
+as $$
+begin
+  if (select count(*) from public.watch_links
+      where user_id = new.user_id and anime_mal_id = new.anime_mal_id) >= 5 then
+    raise exception 'You can only submit up to 5 watch links per anime.';
+  end if;
+  return new;
+end;
+$$;
+drop trigger if exists trg_watch_links_limit on public.watch_links;
+create trigger trg_watch_links_limit
+  before insert on public.watch_links
+  for each row execute function public.watch_links_limit();
+
 -- 8g. Anime metadata overrides (admin-curated; overrides Jikan API data)
 create table if not exists public.anime_edits (
   mal_id integer primary key,
