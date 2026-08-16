@@ -490,9 +490,11 @@
           ).join("") + `</div>`;
         }
         if (pending.length) {
-          html += `<div class="stream-notice" style="margin-top:8px;">Your link is pending (awaiting admin approval):
-            ${pending.map((l) => `${JIKAN.esc(l.provider_name)} <button class="btn btn-danger btn-small" onclick="deleteCommunityLink(${l.id})">x</button>`).join(" · ")}
-          </div>`;
+          html += `<div class="watch-note" style="margin-top:10px;">Your link is pending (awaiting admin approval):</div>
+            <div class="watch-pending">
+              ${pending.map((l) => `<span class="watch-pending-item">${JIKAN.esc(l.provider_name)}
+                <button class="btn btn-danger btn-small" onclick="deleteCommunityLink(${l.id})">x</button></span>`).join("")}
+            </div>`;
         }
         if (isLoggedIn()) {
           html += `
