@@ -317,12 +317,17 @@
           const status = l.approved
             ? `<span style="color:var(--accent-3); font-size:.8rem;">✓ Approved</span>`
             : `<span style="color:#ffc400; font-size:.8rem;">⏳ Pending</span>`;
+          const title = JIKAN.esc(l.anime_title || `Anime #${l.anime_mal_id}`);
+          const season = l.season ? ` · <span style="color:var(--accent);">${JIKAN.esc(l.season)}</span>` : "";
           el.innerHTML = `
             <div class="grow">
-              <div><b>${JIKAN.esc(l.provider_name)}</b> ${status} <span style="color:var(--text-dim); font-size:.8rem;">MAL ${l.anime_mal_id}</span></div>
-              <div style="color:var(--text-dim); font-size:.85rem;"><a href="${JIKAN.safeImg(l.url)}" target="_blank" rel="noopener">${JIKAN.safeAttr(l.url)}</a></div>
-              <div id="linkOwner-${l.id}" style="color:var(--text-dim); font-size:.8rem;"></div>
+              <div><b>${JIKAN.esc(l.provider_name)}</b> ${status}</div>
+              <div style="color:var(--text); font-size:.9rem; margin-top:2px;">${title}${season}</div>
+              <div style="color:var(--text-dim); font-size:.8rem; margin-top:2px;">MAL ${l.anime_mal_id}</div>
+              <div id="linkOwner-${l.id}" style="color:var(--text-dim); font-size:.8rem; margin-top:2px;"></div>
             </div>
+            <a class="btn btn-outline btn-small" href="${JIKAN.safeImg(l.url)}" target="_blank" rel="noopener">Open link &nearr;</a>
+            <a class="btn btn-outline btn-small" href="anime.html?id=${encodeURIComponent(l.anime_mal_id)}" target="_blank" rel="noopener">View anime</a>
             ${l.approved
               ? `<button class="btn btn-danger btn-small" onclick="setLinkApproved(${l.id}, false)">Unapprove</button>`
               : `<button class="btn btn-primary btn-small" onclick="setLinkApproved(${l.id}, true)">Approve</button>
