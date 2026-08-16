@@ -347,4 +347,64 @@ const JIKAN = {
     div.textContent = str;
     return div.innerHTML;
   },
+
+  // Sanitize a user-controlled image/avatar URL for safe use in an HTML
+  // attribute (e.g. src="..."). Only absolute http(s) URLs pass; every
+  // attribute-breaking character is HTML-escaped (&, ", ', <, >, `, \).
+  // Returns "" for anything that isn't a safe http(s) URL, so callers can
+  // fall back to their letter-avatar. This closes the stored-XSS vector
+  // where a user could set avatar_url to `x" onerror=alert(1)`.
+  safeImg(url) {
+    if (!url) return "";
+    const s = String(url).trim();
+    if (!/^https?:\/\//i.test(s)) return "";
+    return s.replace(/[&"'<>`\\]/g, (ch) => ({
+      "&": "&amp;", '"': "&quot;", "'": "&#39;",
+      "<": "&lt;", ">": "&gt;", "`": "&#96;", "\\": "&#92;",
+    }[ch]));
+  },
+
+  // Escape a value for insertion inside an HTML attribute. Prevents both
+  // attribute-breakout (">...) and JS-string breakout (') for raw user data
+  // that is later read via dataset / getAttribute in event handlers.
+  safeAttr(str) {
+    if (str === null || str === undefined) return "";
+    return String(str).replace(/[&"'<>`\\]/g, (ch) => ({
+      "&": "&amp;", '"': "&quot;", "'": "&#39;",
+      "<": "&lt;", ">": "&gt;", "`": "&#96;", "\\": "&#92;",
+    }[ch]));
+  },
+
+  // ---------- Watch Online (third-party streaming providers) ----------
+  // Enabled streaming providers configured in CONFIG.STREAMING.
+  streamingProviders() {
+    return (CONFIG.STREAMING || []).filter((s) => s && s.enabled);
+  },
+
+  // Zero-pad an episode number (Jikan gives "012" for ep 12 in some fields).
+  padEpisode(n) {
+    const num = Number(n);
+    if (Number.isNaN(num) || num < 1) return "";
+    return String(num).padStart(3, "0");
+  },
+
+  // Build a provider's watch/embed URL for a given anime + episode number.
+  // Returns null if the provider is disabled or no URL can be built.
+  // Only https/http URLs are allowed (protects against javascript: etc.).
+  streamingUrl(provider, { mal_id, ep, title }) {
+    if (!provider || !provider.url) return null;
+    const epNum = this.padEpisode(ep);
+    const url = provider.url
+      .replace("{mal_id}", String(mal_id || ""))
+      .replace("{ep}", epNum)
+      .replace("{ep_num}", String(ep || ""))
+      .replace("{title}", encodeURIComponent(title || ""));
+    try {
+      const u = new URL(url, "https://unknown.invalid");
+      if (u.protocol !== "https:" && u.protocol !== "http:") return null;
+    } catch (e) {
+      return null;
+    }
+    return url;
+  },
 };
