@@ -2,8 +2,9 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
+  <meta name="referrer" content="strict-origin-when-cross-origin">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Forum Thread — OtakuPier</title>
+  <title>Forum Thread - OtakuPier</title>
   <meta name="robots" content="index, follow">
   <meta name="description" content="Join the discussion on OtakuPier forums.">
   <link rel="canonical" href="https://otakupier.2bd.net/pages/forum-thread.html">
@@ -40,7 +41,7 @@
           main.innerHTML = `<div class="empty-state">Thread not found.</div>`;
           return;
         }
-        document.title = `${thread.title} — OtakuPier`;
+        document.title = `${thread.title} - OtakuPier`;
         const author = await fetchProfile(thread.user_id);
         main.innerHTML = `
           <a href="forums.html" class="btn btn-outline btn-small" style="margin-bottom:16px;">&larr; All threads</a>
