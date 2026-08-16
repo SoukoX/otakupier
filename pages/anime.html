@@ -186,7 +186,7 @@
             <div class="detail-genres">${genres}</div>
             <div class="share-row" id="shareRow"></div>
             <div id="watchSlot"></div>
-            <div id="mangaLinks"></div>
+            <div id="mangaLinks" style="margin-top:20px; padding-top:18px; border-top:1px solid var(--border);"></div>
           </div>
         </div>
 
@@ -418,8 +418,7 @@
               ).join("")}
             </div>
             ${epCount > 0
-              ? `<div class="episodes-row" id="epRow"></div>
-                 <div class="stream-scroll-note">Click an episode to open the player.</div>`
+              ? `<div class="episodes-row" id="epRow"></div>`
               : `<div class="stream-notice">This title has no episode list yet.</div>`}
           </div>`;
       }
@@ -480,7 +479,8 @@
         const approved = (data || []).filter((l) => l.approved);
         const pending = (data || []).filter((l) => !l.approved && isLoggedIn() && l.user_id === currentUser.id);
 
-        let html = `<h3 class="sub-head">Community Watch Links</h3>
+        let html = `<div class="watch-community">
+          <h3 class="sub-head">Community Watch Links</h3>
           <div class="watch-panel">`;
         if (!approved.length) {
           html += `<div class="watch-note">No community links yet. Know a place to watch this? Add one below.</div>`;
@@ -505,7 +505,7 @@
         } else {
           html += `<div class="watch-note"><a href="login.html" style="color:var(--accent)">Login</a> to suggest a watch link.</div>`;
         }
-        html += `</div>`;
+        html += `</div></div>`;
         box.innerHTML = html;
       } catch (e) {
         box.innerHTML = "";
