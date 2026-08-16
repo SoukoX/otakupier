@@ -39,6 +39,34 @@ otakupier/
 └── supabase_schema.sql # Run once in Supabase
 ```
 
+## Watch Online (third-party streaming)
+
+OtakuPier doesn't host video — it surfaces legal streaming providers you choose to integrate. Each anime page shows a **Watch On** panel (provider buttons + an episode picker) and a ▶ Watch button next to every episode. Clicking opens the player in a safe, sandboxed modal overlay.
+
+### How streaming works
+1. Open `js/config.js` → the `STREAMING` array.
+2. Add one entry per provider you legally use:
+   ```js
+   { id: "provider-id", name: "Provider Name", mode: "link", url: "https://provider.example/watch?anime={mal_id}&ep={ep}", enabled: true }
+   ```
+3. Placeholders in `url`:
+   - `{mal_id}` — the anime's MyAnimeList id
+   - `{ep}` — episode number zero-padded (e.g. `012`)
+   - `{ep_num}` — plain episode number (e.g. `12`)
+   - `{title}` — URL-encoded anime title
+4. `mode` selects how the player opens:
+   - `"link"` — opens the provider site in a new tab (used by the bundled Tubi / Pluto TV / RetroCrush entries, which are free, ad-supported, and legal)
+   - `"embed"` — renders the provider's player in a sandboxed `<iframe>`
+   - `"video"` — plays a direct MP4/HLS file inline with the built-in player (hls.js). For media you host yourself, e.g. `https://your-cdn.example/anime/{mal_id}/{ep_num}.mp4`
+
+### Bundled providers
+`STREAMING` comes pre-populated with **Tubi**, **Pluto TV**, and **RetroCrush** in link mode — free legal ad-supported services, no viewer account needed. They open each title's search page for the clicked episode.
+
+### Security notes for providers
+- Only add providers whose embeds you have verified are legally licensed in your country and permitted by your host/domain.
+- The player modal sandboxes embed iframes (`allow-scripts allow-same-origin`), strips the referrer, and blocks popups/top-navigation. If a provider refuses to embed, switch its `mode` to `"link"`.
+- No streaming URLs are ever stored in the database — they are built on the client from this config, so there's no data to leak.
+
 ## Admin system
 Verified admins get a red name + "✓ Admin" badge site-wide and access to the **Admin** page (link in the top nav, or `pages/admin.html`).
 
@@ -110,6 +138,22 @@ Note: if you deploy the repo at a different name, the site URL changes according
 ### Expected Supabase linter warnings (safe to dismiss)
 The Database Linter shows WARN findings named `authenticated_security_definer_function_executable` for the `SECURITY DEFINER` functions. These are **intentional** and should be marked as accepted in the linter UI:
 
-- `add_xp`, `award_xp_to`, `claim_daily_xp` — the only path that writes the `xp` column (direct column updates are revoked for users via `revoke update (xp, last_daily_xp) on profiles`). They are login-only (`anon` EXECUTE is revoked) and amount-clamped server-side (whitelist `1,5,10,15,20` / `5,10`).
+- `add_xp`, `award_xp_to`, `claim_daily_xp` — the only path that writes the `xp` column (direct column updates are revoked for users via `revoke update (xp, last_daily_xp) on profiles`). They are login-only (`anon` EXECUTE is revoked), amount-clamped server-side (whitelist `1,5,10,15,20` / `5,10`), and `award_xp_to` rejects self-awards so nobody can farm their own XP.
+- `prune_chat_messages` — the sole path that deletes old chat rows. The retention interval is now `integer` MINUTES, clamped server-side to a minimum of 60, so a caller can't pass a tiny value and wipe the whole chat table. It is login-only.
 - `ensure_admin_can_change_admin_flag` (trigger function) — enforces that only a verified admin can flip `is_admin`. It is never executable via the API (no EXECUTE grant).
 - Switching these to `SECURITY INVOKER` would break their purpose — the warning is the correct trade-off.
+
+## Security hardening (applied)
+- **Stored-XSS via avatar URLs fixed:** all avatar/`<img>` rendering now goes through `JIKAN.safeImg()` (only `http(s)` URLs pass; quotes/`<>`/backtick escaped) and attribute text through `JIKAN.safeAttr()`. Covers nav, profile, friends, DMs, chat.
+- **Admin-panel JS-injection fixed:** the Ban button no longer embeds the target's name inside an inline `onclick="..."` string (which could break out via a `'` in the name). It passes ids via `data-*` attributes and reads them with `getAttribute()`.
+- **Chat-wipe hole closed (DB):** `prune_chat_messages` only accepts minutes ≥ 60 and is login-only.
+- **DM tampering closed (DB):** recipients can update *only* `read_at` on inbox messages (`grant update (read_at)`); `body`/`sender_id`/`created_at` are unmodifiable via the API.
+- **Ban enforcement completed (DB):** banned users are also blocked from voting, saving anime, liking reviews, and joining clubs (previously only posting/chat/DM were blocked).
+- **Password minimum raised** from 6 → 8 client-side (enforced on login + signup).
+- **stricter referrer policy** (`strict-origin-when-cross-origin`) added to every page so full URLs (and any tokens in them) aren't leaked to third parties (Jikan, streaming embeds).
+
+## Recommended user-side actions
+- **Rotate / stop using `pass.txt`** — it contained a plaintext password (`i0dT!h5YSfo42tUV`, likely the Supabase DB password) and is gitignored but still on disk.
+- **Keep the Supabase `anon` key publishable-only** (it is public by design — never put the `service_role` key in `js/config.js`; it would grant full DB control). Verify no `service_role`/secret lives in the repo.
+- **Enable Supabase "Confirm email"** (or a custom SMTP) before real users sign up, so accounts can't be created/abused anonymously.
+- **Keep Supabase CAPTCHA disabled or set a real site key** — otherwise signup breaks (see the email/account status notes).
