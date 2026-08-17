@@ -217,9 +217,12 @@
 
     // ---------- Reward Shop ----------
     async function renderRewardShop() {
-      const slot = document.createElement("div");
-      slot.id = "rewardShop";
-      document.getElementById("main").insertAdjacentElement("beforeend", slot);
+      let slot = document.getElementById("rewardShop");
+      if (!slot) {
+        slot = document.createElement("div");
+        slot.id = "rewardShop";
+        document.getElementById("main").insertAdjacentElement("beforeend", slot);
+      }
 
       const [profRes, spendRes, txRes] = await Promise.all([
         supabase.from("profiles").select("rp, rp_earned, xp").eq("id", currentUser.id).maybeSingle(),
