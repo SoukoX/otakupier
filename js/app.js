@@ -800,8 +800,28 @@ async function fetchProfileRow(id) {
   return error ? null : data;
 }
 
+// Clean URLs: hide the ".html" extension from the address bar so the live
+// site reads like a real app — "/" for home, "/pages/anime?id=5" instead of
+// "/pages/anime.html?id=5". Reloads of the clean path are remapped by the
+// custom 404 page, which forwards to the real file.
+function cleanUrl() {
+  try {
+    let path = window.location.pathname;
+    if (path.endsWith("index.html")) {
+      path = path.slice(0, -"index.html".length);
+      if (!path || path === "/") path = "/";
+    } else if (path.endsWith(".html")) {
+      path = path.slice(0, -5);
+    } else {
+      return;
+    }
+    history.replaceState(null, "", path + window.location.search + window.location.hash);
+  } catch (e) {}
+}
+
 // Boot
 document.addEventListener("DOMContentLoaded", () => {
+  cleanUrl();
   renderNav();
   renderFooter();
   initSupabase();
