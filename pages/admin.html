@@ -352,7 +352,7 @@
         // Reward the submitter with RP when their link is approved (+25 RP),
         // but don't double-pay on re-approval.
         if (approved && link && !link.approved && link.user_id && link.user_id !== currentUser.id) {
-          await supabase.rpc("award_rp_to", { recipient: link.user_id, amount: 25, reason: "link_approved" });
+          await supabase.rpc("award_rp_to", { recipient: link.user_id, amount: 10, reason: "link_approved" });
         }
         showToast(approved ? "Link approved" : "Link unapproved");
         loadWatchLinks();
