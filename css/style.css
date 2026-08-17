@@ -775,6 +775,20 @@ img {
   border-color: var(--accent);
   color: var(--accent);
 }
+.stream-panel .watch-btn {
+  min-width: 0;
+}
+.stream-panel .watch-btn:hover {
+  transform: none;
+  box-shadow: none;
+  border-color: var(--accent-3);
+  color: var(--accent-3);
+}
+.stream-panel .watch-btn.is-active {
+  border-color: var(--accent);
+  color: var(--accent);
+  background: rgba(230, 70, 92, 0.08);
+}
 .stream-panel .stream-notice {
   font-size: 0.8rem;
   color: var(--text-dim);
