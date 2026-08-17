@@ -2,11 +2,16 @@
 
 const SUPABASE_READY = CONFIG.SUPABASE_URL.includes("YOUR-PROJECT-REF") ? false : true;
 
+// Running straight off the filesystem (file://) has no pretty-URL
+// resolution and no history API — keep the real ".html" links there.
+const IS_LOCAL = /^(file|ftp):/.test(window.location.protocol);
+
 // Clean URLs: hide the ".html" extension from the address bar so the live
 // site reads like a real app — "/" for home, "/pages/anime?id=5" instead of
 // "/pages/anime.html?id=5". GitHub Pages serves the clean path natively and
 // the custom 404 page forwards any stragglers on reload.
 function cleanUrl() {
+  if (IS_LOCAL) return;
   try {
     let path = window.location.pathname;
     if (path.endsWith("index.html")) {
@@ -26,6 +31,7 @@ cleanUrl();
 // "pages/anime.html" -> "pages/anime", "index.html" -> "./", "../index.html" -> "../"
 function cleanHref(h) {
   if (!h) return h;
+  if (IS_LOCAL) return h;
   let out = h.replace(/\.html(?=\?|#|$)/, "").replace(/index$/, "");
   if (!out) return "./";
   return out;
@@ -34,6 +40,7 @@ function cleanHref(h) {
 // Rewrite every in-page link that still points at a .html file (static
 // markup, onclick strings) to its clean form once the page is up.
 function cleanLinks() {
+  if (IS_LOCAL) return;
   try {
     document.querySelectorAll("a[href]").forEach((a) => {
       const h = a.getAttribute("href");
@@ -598,18 +605,24 @@ async function dbSelect(table, match = {}, order = {}) {
 
 // ---------- Gamification: ranks, XP, badges ----------
 const RANKS = [
-  { name: "Newbie", icon: "🌱", min: 0 },
-  { name: "Watcher", icon: "👀", min: 100 },
-  { name: "Otaku", icon: "🎌", min: 300 },
-  { name: "Weeb", icon: "🔥", min: 700 },
-  { name: "Elite", icon: "⭐", min: 1500 },
-  { name: "Legend", icon: "👑", min: 3000 },
+  { name: "E", icon: "🌱", min: 0 },
+  { name: "D", icon: "👀", min: 100 },
+  { name: "C", icon: "🎌", min: 300 },
+  { name: "B", icon: "🔥", min: 700 },
+  { name: "A", icon: "⭐", min: 1500 },
+  { name: "S", icon: "👑", min: 3000 },
 ];
 
 function rankForXp(xp) {
   let cur = RANKS[0];
   RANKS.forEach((r) => { if ((xp || 0) >= r.min) cur = r; });
   return cur;
+}
+
+// Admins are always shown at S rank, no matter their XP.
+function effectiveRank(profile) {
+  if (profile && profile.is_admin) return RANKS[RANKS.length - 1];
+  return rankForXp(profile ? profile.xp : 0);
 }
 
 // How far (0..1) between the current rank and the next one
@@ -634,7 +647,7 @@ function rankIndex(xp) {
 
 // Does this XP qualify for highlighted chat messages / special styling?
 function hasChatPrivilege(xp) {
-  return rankIndex(xp) >= 3; // Weeb+
+  return rankIndex(xp) >= 3; // B rank+
 }
 
 // Award XP (fire-and-forget; never breaks the main action)
@@ -824,10 +837,10 @@ async function userStats(userId) {
   }
 }
 
-// Format a username with their rank icon
+// Format a username with their rank icon (admins show S rank)
 function rankTag(userId, profile) {
   const p = profile || {};
-  const r = rankForXp(p.xp);
+  const r = effectiveRank(p);
   const admin = p.is_admin
     ? `<span class="admin-badge" title="Verified administrator">✓ Admin</span>`
     : "";
