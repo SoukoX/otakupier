@@ -654,9 +654,9 @@
       // and play it inside the page player (no redirect).
       if (provider.id === "archive") {
         showToast("Searching Archive.org…");
-        const item = await findArchiveItem(JIKAN.title(animeData));
+        const item = await findArchiveItem(JIKAN.title(animeData), ep);
         if (!item) {
-          showToast("No on-site copy found on Archive.org — try a provider below.");
+          showToast(`Episode ${ep} not found on ${provider.name}.`);
           const slot = document.getElementById("watchSlot");
           if (slot) slot.scrollIntoView({ behavior: "smooth", block: "center" });
           return;
@@ -673,13 +673,18 @@
       openStreamModal({ provider, url, title, ep });
     }
 
-    // Find an Archive.org item whose title matches the anime. Tries a few
-    // query shapes (alphanumeric-clean title first to dodge Solr special
-    // chars, then the full title phrase) and prefers popular items.
-    async function findArchiveItem(title) {
+    // Find an Archive.org item for a specific episode. Episode-targeted
+    // queries run first (most accurate); if none match, the requested
+    // episode is simply reported as not found.
+    async function findArchiveItem(title, ep) {
       const base = title.replace(/\s*\([^)]*\)\s*/g, " ").trim();
       const clean = base.replace(/[^\p{L}\p{N}\s]/gu, " ").replace(/\s+/g, " ").trim();
-      const variants = [clean, base, title];
+      const epPad = String(ep || "").padStart(2, "0");
+      const variants = [];
+      if (ep) {
+        variants.push(`${clean} episode ${ep}`, `${clean} ep ${ep}`, `${clean} ${epPad}`, `${clean} - ${epPad}`);
+      }
+      variants.push(clean, base, title);
       const seen = new Set();
       for (const t of variants) {
         if (!t || seen.has(t)) continue;
@@ -690,7 +695,7 @@
           try {
             const r = await fetch(
               "https://archive.org/advancedsearch.php?q=" + encodeURIComponent(q) +
-              "&fl[]=identifier&rows=5&sort[]=downloads+desc&output=json", { cache: "force-cache" });
+              "&fl[]=identifier&rows=8&sort[]=downloads+desc&output=json", { cache: "force-cache" });
             if (!r.ok) continue;
             const j = await r.json();
             const docs = j?.response?.docs || [];
