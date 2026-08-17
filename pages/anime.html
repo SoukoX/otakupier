@@ -798,21 +798,34 @@
     }
 
     // ---------- OtakuPier community rating (avg of all user votes) ----------
+    // Users who bought "Voting Power 2x" have their vote count twice, so
+    // power users genuinely move the community score.
     async function loadCommunityRating() {
       if (!SUPABASE_READY || !supabase) return;
       try {
         const { data, error } = await supabase
           .from("rankings")
-          .select("position")
+          .select("user_id, position")
           .eq("anime_mal_id", Number(id));
         if (error) throw error;
         const n = data.length;
         if (!n) return;
-        const avg = data.reduce((s, r) => s + r.position, 0) / n;
+        const perkMap = await spendingsMap(data.map((r) => r.user_id));
+        let total = 0, weight = 0;
+        data.forEach((r) => {
+          const p = perkMap[r.user_id] || {};
+          const w = p.vote_power ? 2 : 1;
+          total += r.position * w;
+          weight += w;
+        });
+        const avg = total / weight;
         communityRating = { avg: avg.toFixed(2), count: n };
         const stat = document.getElementById("opScoreStat");
         if (stat) {
-          stat.innerHTML = `OtakuPier: <strong style="color:var(--accent-3)">${avg.toFixed(2)}</strong> (${n} vote${n === 1 ? "" : "s"})`;
+          const boost = Object.values(perkMap).some((p) => p.vote_power)
+            ? ` <span title="Some voters have Voting Power 2x" style="font-size:.72rem; color:#ffd54a;">⚡ weighted</span>`
+            : "";
+          stat.innerHTML = `OtakuPier: <strong style="color:var(--accent-3)">${avg.toFixed(2)}</strong> (${n} vote${n === 1 ? "" : "s"})${boost}`;
         }
       } catch (err) {
         // silently ignore; official score stays
@@ -888,7 +901,7 @@
           await supabase.from("rankings").update({ position: pos }).eq("id", myRank.id);
         } else {
           await dbInsert("rankings", payload);
-          if (!myRank) awardXp(5); // +5 XP for first vote
+          if (!myRank) { awardXp(5); awardRp("vote"); } // +5 XP +5 RP for first vote
         }
         showToast("Vote saved!");
         myRank = { ...myRank, position: pos, id: myRank?.id };
@@ -956,6 +969,7 @@
         });
         isSaved = true;
         awardXp(5); // +5 XP for saving an anime
+        awardRp("save"); // +3 RP
         showToast("Saved to My List! +5 XP");
         renderSaveButton(document.getElementById("saveSlot"));
       } catch (err) {
@@ -1044,7 +1058,8 @@
           is_comment: type === "comment",
         });
         awardXp(10); // +10 XP for posting
-        showToast((type === "review" ? "Review posted! +10 XP" : "Comment posted! +10 XP"));
+        awardRp("review"); // +10 RP
+        showToast((type === "review" ? "Review posted! +10 XP +10 RP" : "Comment posted! +10 XP +10 RP"));
         document.getElementById("reviewText").value = "";
         pickedRating = 0;
         buildStarPicker();
@@ -1172,25 +1187,27 @@
           parent_id: parentId,
         });
         awardXp(5); // +5 XP for replying
-        showToast("Reply posted! +5 XP");
+        awardRp("reply"); // +5 RP
+        showToast("Reply posted! +5 XP +5 RP");
         loadReviews();
       } catch (err) {
         showToast("Could not post reply: " + err.message);
       }
     }
 
-    // Fetch a reviewer's profile to display their name + rank badge
+    // Fetch a reviewer's profile to display their name + rank badge + prestige
     async function fetchReviewAuthor(userId, reviewId, fallback) {
       const tag = document.getElementById(`rankTag-${reviewId}`);
       if (!tag) return;
       try {
-        const { data } = await supabase.from("profiles").select("name, xp, is_admin").eq("id", userId).maybeSingle();
+        const [profRes, perks] = await Promise.all([
+          supabase.from("profiles").select("name, xp, is_admin").eq("id", userId).maybeSingle(),
+          spendingsMap([userId]),
+        ]);
+        const data = profRes.data;
         if (data) {
           const nameEl = tag.parentElement.querySelector("a");
-          if (nameEl && data.name) {
-            if (data.is_admin) nameEl.outerHTML = adminNameHTML(data);
-            else nameEl.textContent = data.name;
-          }
+          if (nameEl) nameEl.outerHTML = `<a href="profile.html?id=${userId}" style="color:var(--text); text-decoration:none;">${prestigeNameHTML(data, perks[userId])}</a>`;
           tag.innerHTML = rankTag(userId, data);
         } else {
           tag.innerHTML = rankTag(userId, { xp: 0 });
@@ -1218,11 +1235,12 @@
           await dbInsert("review_likes", { user_id: currentUser.id, review_id: reviewId });
           btn.classList.add("liked");
           btn.innerHTML = `♥ <span id="likeCount-${reviewId}">${Number(countEl.textContent) + 1}</span>`;
-          // +10 XP to the review author (fire-and-forget)
+          // +10 XP +5 RP to the review author (fire-and-forget)
           try {
             const { data: rev } = await supabase.from("reviews").select("user_id").eq("id", reviewId).single();
             if (rev && rev.user_id !== currentUser.id) {
               await supabase.rpc("award_xp_to", { recipient: rev.user_id, amount: 10 });
+              await supabase.rpc("award_rp_to", { recipient: rev.user_id, amount: 5, reason: "like_received" });
             }
           } catch (e) {}
         }
