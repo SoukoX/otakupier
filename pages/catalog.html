@@ -16,27 +16,34 @@
 <body>
   <nav class="navbar" id="navbar"></nav>
 
-  <main class="container">
-    <div class="section-head">
-      <h2>Anime Catalog</h2>
-    </div>
+  <main class="catalog-page">
+    <header class="catalog-hero">
+      <div class="catalog-hero-inner">
+        <p class="catalog-kicker">The full pier</p>
+        <h1>Anime Catalog</h1>
+        <p class="catalog-sub">Search thousands of titles, filter by genre, and find watch links for everything you love.</p>
+        <div class="catalog-searchbar">
+          <input type="text" id="searchBox" placeholder="Search anime..." onkeydown="if(event.key==='Enter')applyFilters(1)">
+          <select id="genreSelect" onchange="applyFilters(1)">
+            <option value="">All genres</option>
+          </select>
+          <button class="btn btn-primary" onclick="applyFilters(1)">Search</button>
+          <button class="btn btn-outline" onclick="clearFilters()">Clear</button>
+        </div>
+      </div>
+    </header>
 
-    <div class="filters">
-      <input type="text" id="searchBox" class="search-input" style="flex:1; min-width:220px;"
-             placeholder="Search anime..." onkeydown="if(event.key==='Enter')applyFilters(1)">
-      <select id="genreSelect" onchange="applyFilters(1)">
-        <option value="">All genres</option>
-      </select>
-      <button class="btn btn-primary" onclick="applyFilters(1)">Search</button>
-      <button class="btn btn-outline" onclick="clearFilters()">Clear</button>
-    </div>
+    <div class="catalog-body">
+      <div class="catalog-results-head">
+        <h2 id="resultsTitle">Latest titles</h2>
+      </div>
+      <div class="grid catalog-grid" id="catalogGrid"></div>
 
-    <div class="grid" id="catalogGrid"></div>
-
-    <div class="pagination">
-      <button class="btn btn-outline btn-small" id="prevBtn" onclick="goPage(-1)">&larr; Prev</button>
-      <span class="page-info" id="pageInfo"></span>
-      <button class="btn btn-outline btn-small" id="nextBtn" onclick="goPage(1)">Next &rarr;</button>
+      <div class="pagination">
+        <button class="btn btn-outline btn-small" id="prevBtn" onclick="goPage(-1)">&larr; Prev</button>
+        <span class="page-info" id="pageInfo"></span>
+        <button class="btn btn-outline btn-small" id="nextBtn" onclick="goPage(1)">Next &rarr;</button>
+      </div>
     </div>
   </main>
 
@@ -121,6 +128,14 @@
         const total = metaRes?.pagination?.items?.total;
         const apiLast = metaRes?.pagination?.last_visible_page || state.page;
         const lastPage = Math.max(state.page, Math.ceil(apiLast / PER_PAGE));
+        const rt = document.getElementById("resultsTitle");
+        if (rt) {
+          rt.textContent = state.q
+            ? `Results for "${state.q}"`
+            : state.genre
+              ? "By genre"
+              : "Latest titles";
+        }
         document.getElementById("pageInfo").textContent =
           total ? `Page ${state.page} of ${lastPage} (${total.toLocaleString()} titles)` : `Page ${state.page} of ${lastPage}`;
         document.getElementById("prevBtn").style.visibility = state.page > 1 ? "visible" : "hidden";
