@@ -185,7 +185,7 @@
             position: pos,
           });
           myVotes.set(malId, { ...r, anime_mal_id: malId });
-          if (!mine) awardXp(5); // +5 XP for first vote
+          if (!mine) { awardXp(5); awardRp("vote"); } // +5 XP +5 RP for first vote
         }
         showToast("Vote saved!");
         document.querySelector(".vote-pop")?.remove();
