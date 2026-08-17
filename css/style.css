@@ -440,6 +440,151 @@ img {
   50% { transform: scale(1.04); box-shadow: 0 0 0 14px rgba(230, 70, 92, 0); }
   100% { transform: scale(1); box-shadow: 0 0 0 0 rgba(230, 70, 92, 0); }
 }
+.watch-theater {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 240px;
+  gap: 14px;
+  margin: 4px 0 22px;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 12px;
+  background: var(--bg-card);
+}
+.watch-player {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.watch-player-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+.watch-player-title {
+  font-weight: 700;
+  font-size: 0.95rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.watch-hide {
+  flex: 0 0 auto;
+  border: none;
+  background: none;
+  color: var(--text-dim);
+  font-size: 1.3rem;
+  line-height: 1;
+  cursor: pointer;
+}
+.watch-hide:hover {
+  color: var(--text);
+}
+.watch-frame {
+  position: relative;
+  aspect-ratio: 16 / 9;
+  background: #000;
+  border-radius: 10px;
+  overflow: hidden;
+}
+.watch-frame iframe {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  border: none;
+}
+.watch-frame .loading,
+.watch-frame .stream-notice {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  text-align: center;
+  padding: 20px;
+}
+.watch-side {
+  min-width: 0;
+}
+.watch-side-title {
+  font-size: 0.75rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-dim);
+  margin: 0 0 6px;
+}
+.watch-providers {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 14px;
+}
+.watch-episodes {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(40px, 1fr));
+  gap: 6px;
+  max-height: 320px;
+  overflow-y: auto;
+  padding: 2px;
+}
+
+@media (max-width: 720px) {
+.watch-head {
+  display: flex;
+  gap: 18px;
+  align-items: flex-start;
+  margin: 8px 0 18px;
+  padding: 14px;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: var(--bg-card);
+}
+.watch-head-img {
+  width: 96px;
+  height: 138px;
+  object-fit: cover;
+  border-radius: 10px;
+  box-shadow: 0 8px 22px rgba(0, 0, 0, 0.45);
+  flex: 0 0 auto;
+}
+.watch-head-info {
+  min-width: 0;
+}
+.watch-head-info .detail-title {
+  font-size: 1.35rem;
+}
+.watch-head-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 12px;
+}
+@media (max-width: 560px) {
+  .watch-head-img {
+    width: 72px;
+    height: 104px;
+  }
+}
+
+.watch-theater {
+    grid-template-columns: 1fr;
+  }
+  .watch-episodes {
+    max-height: 200px;
+  }
+}
+
+@media (max-width: 960px) {
+  .watch-episodes {
+    max-height: 240px;
+  }
+}
+
 .watch-panel.watch-flash {
   animation: watchFlash 1.1s ease 1;
 }
