@@ -344,7 +344,7 @@ function renderNav() {
     // logo + menu button that reveals the links on demand.
     nav.className = "navbar navbar-home";
     nav.innerHTML = `
-      <a href="${homeHref}" class="logo logo-home"><span>Otaku</span>Pier</a>
+      <a href="${homeHref}" class="logo logo-home"><img class="logo-img" src="${p}logo.png" alt="${JIKAN.esc(CONFIG.SITE_NAME)}"><span>Otaku</span>Pier</a>
       <button class="nav-toggle nav-toggle-home" id="navToggle" aria-label="Toggle menu" aria-expanded="false">☰</button>
       <div class="nav-panel nav-panel-home">
         <ul class="nav-links">${links}</ul>
@@ -354,7 +354,7 @@ function renderNav() {
     nav.className = "navbar";
     nav.innerHTML = `
       <div class="navbar-inner">
-        <a href="${homeHref}" class="logo"><span>Otaku</span>Pier</a>
+        <a href="${homeHref}" class="logo"><img class="logo-img" src="${p}logo.png" alt="${JIKAN.esc(CONFIG.SITE_NAME)}"><span>Otaku</span>Pier</a>
         <button class="nav-toggle" id="navToggle" aria-label="Toggle menu" aria-expanded="false">☰</button>
         <div class="nav-panel">
           <ul class="nav-links">${links}</ul>
