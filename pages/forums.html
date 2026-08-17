@@ -128,7 +128,8 @@
           category: document.getElementById("threadCat").value,
         });
         awardXp(15); // +15 XP for creating a thread
-        showToast("Thread posted! +15 XP");
+        awardRp("thread"); // +15 RP
+        showToast("Thread posted! +15 XP +15 RP");
         loadThreads();
       } catch (err) {
         showToast("Could not post thread: " + err.message);
