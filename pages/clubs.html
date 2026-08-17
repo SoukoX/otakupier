@@ -102,7 +102,8 @@
         const club = await dbInsert("clubs", { created_by: currentUser.id, name, description });
         await dbInsert("club_members", { club_id: club.id, user_id: currentUser.id, role: "owner" });
         awardXp(20); // +20 XP for creating a club
-        showToast("Club created! +20 XP");
+        awardRp("club"); // +20 RP
+        showToast("Club created! +20 XP +20 RP");
         window.location.href = `club.html?id=${club.id}`;
       } catch (err) {
         showToast("Could not create club: " + err.message);
