@@ -343,7 +343,7 @@ const JIKAN = {
       </div>`;
     el.addEventListener("click", () => {
       const prefix = window.location.pathname.includes("/pages/") ? "" : "pages/";
-      window.location.href = `${prefix}anime.html?id=${anime.mal_id}`;
+      window.location.href = `${prefix}anime?id=${anime.mal_id}`;
     });
     return el;
   },
