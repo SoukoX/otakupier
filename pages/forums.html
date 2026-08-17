@@ -76,7 +76,7 @@
             </div>`;
           el.addEventListener("click", (e) => {
             if (e.target.closest("a")) return;
-            window.location.href = `forum-thread.html?id=${t.id}`;
+            window.location.href = `forum-thread?id=${t.id}`;
           });
           list.appendChild(el);
         });
@@ -88,7 +88,7 @@
     function showNewThread() {
       if (!isLoggedIn()) {
         showToast("Login to create a thread");
-        window.location.href = "login.html";
+        window.location.href = "login";
         return;
       }
       const list = document.getElementById("threadList");
