@@ -59,8 +59,13 @@ const CONFIG = {
       url: "https://www.hulu.com/search?q={title}", enabled: true },
     { id: "prime", name: "Prime Video", mode: "link",
       url: "https://www.primevideo.com/search/ref=atv_nb_sr?phrase={title}", enabled: true },
-    { id: "archive", name: "Internet Archive", mode: "link",
-      url: "https://archive.org/search?query={title}", enabled: true },
+
+    // On-site embed: plays inside the page player (no redirect). Archive.org
+    // hosts public-domain / Creative Commons anime and its /embed player
+    // works in an iframe. The {archive_id} is resolved by searching
+    // Archive.org for the anime title when the user picks this provider.
+    { id: "archive", name: "Archive.org Player", mode: "embed",
+      url: "https://archive.org/embed/{archive_id}", enabled: true },
     { id: "vudu", name: "Fandango at Home", mode: "link",
       url: "https://www.vudu.com/content/movies/search?q={title}", enabled: true },
 
