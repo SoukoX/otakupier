@@ -94,10 +94,12 @@
       let html = `<div class="section-head"><h2>Messages</h2></div>`;
       for (const [uid, lastMsg] of convos) {
         const p = await fetchProfile(uid);
+        const perks = await spendingsMap([uid]);
+        const perk = perks[uid] || {};
         html += `<div class="user-row" style="cursor:pointer;" onclick="openThread('${uid}')">
-          <div class="avatar">${p?.avatar_url ? `<img src="${JIKAN.safeImg(p.avatar_url)}" alt="">` : (p?.name || "U").charAt(0).toUpperCase()}</div>
+          <div class="avatar${perk.avatar_ring ? " avatar-ring" : ""}">${p?.avatar_url ? `<img src="${JIKAN.safeImg(p.avatar_url)}" alt="">` : (p?.name || "U").charAt(0).toUpperCase()}</div>
           <div style="flex:1;">
-            <b>${p?.is_admin ? adminNameHTML(p) : JIKAN.esc(p?.name || "User")}</b>
+            <b>${prestigeNameHTML(p || {}, perk)}</b>
             <div style="color:var(--text-dim); font-size:.8rem; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:60vw;">${JIKAN.esc(lastMsg.body)}</div>
           </div>
           <span style="color:var(--text-dim); font-size:.75rem;">${new Date(lastMsg.created_at).toLocaleDateString()}</span>
@@ -112,13 +114,15 @@
       const p = await fetchProfile(uid);
       activeUserName = p?.name || "User";
       markDmRead(uid);
+      const perks = await spendingsMap([uid]);
+      const perk = perks[uid] || {};
       const main = document.getElementById("main");
       main.innerHTML = `
         <div style="display:flex; align-items:center; gap:12px; margin-bottom:16px;">
           <button class="btn btn-outline btn-small" onclick="renderPicker()">&larr; All</button>
           <a href="profile.html?id=${uid}" class="review-author" style="color:var(--text); text-decoration:none; font-weight:700;">
-            <div class="avatar">${p?.avatar_url ? `<img src="${JIKAN.safeImg(p.avatar_url)}" alt="">` : activeUserName.charAt(0).toUpperCase()}</div>
-            ${p?.is_admin ? adminNameHTML(p) : JIKAN.esc(activeUserName)}</a>
+            <div class="avatar${perk.avatar_ring ? " avatar-ring" : ""}">${p?.avatar_url ? `<img src="${JIKAN.safeImg(p.avatar_url)}" alt="">` : activeUserName.charAt(0).toUpperCase()}</div>
+            ${prestigeNameHTML(p || {}, perk)}</a>
         </div>
         <div class="dm-thread">
           <div class="dm-messages" id="dmMessages"></div>
