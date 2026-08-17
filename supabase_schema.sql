@@ -852,18 +852,18 @@ declare
 begin
   if auth.uid() is null then return; end if;
   cap := case
-    when reason = 'review'    and amount = 10 then 5
-    when reason = 'reply'     and amount = 5  then 15
-    when reason = 'vote'      and amount = 5  then 10
-    when reason = 'save'      and amount = 3  then 15
-    when reason = 'thread'    and amount = 15 then 3
-    when reason = 'forum_reply' and amount = 5 then 15
-    when reason = 'club'      and amount = 20 then 2
-    when reason = 'club_join' and amount = 10 then 5
-    when reason = 'club_post' and amount = 5  then 10
-    when reason = 'friend'    and amount = 10 then 5
-    when reason = 'chat'      and amount = 1  then 50
-    when reason = 'link_approved' and amount = 25 then 5
+    when reason = 'review'    and amount = 2  then 5
+    when reason = 'reply'     and amount = 1  then 15
+    when reason = 'vote'      and amount = 1  then 10
+    when reason = 'save'      and amount = 1  then 10
+    when reason = 'thread'    and amount = 3  then 3
+    when reason = 'forum_reply' and amount = 1 then 15
+    when reason = 'club'      and amount = 5  then 2
+    when reason = 'club_join' and amount = 2  then 5
+    when reason = 'club_post' and amount = 1  then 10
+    when reason = 'friend'    and amount = 2  then 5
+    when reason = 'chat'      and amount = 1  then 20
+    when reason = 'link_approved' and amount = 10 then 5
     else 0
   end;
   if cap = 0 then return; end if;
@@ -880,8 +880,9 @@ $$;
 revoke execute on function public.add_rp(integer, text) from public;
 grant execute on function public.add_rp(integer, text) to authenticated;
 
--- 16c. Award RP to a SPECIFIC user (used for "review like received" etc.).
--- Rejects self-awards (no self-farm) and only accepts whitelisted amounts.
+-- 16c. Award RP to a SPECIFIC user (used for "review like received" and
+-- "watch link approved" — both are given to someone else). Rejects
+-- self-awards (no self-farm) and only accepts whitelisted amounts.
 create or replace function public.award_rp_to(recipient uuid, amount integer, reason text default 'like_received')
 returns void
 language plpgsql
@@ -889,14 +890,20 @@ security definer set search_path = public
 as $$
 declare
   used integer;
+  cap integer;
 begin
   if recipient is null or auth.uid() is null then return; end if;
   if recipient = auth.uid() then return; end if;
-  if reason <> 'like_received' or amount not in (5) then return; end if;
+  cap := case
+    when reason = 'like_received' and amount = 2  then 20
+    when reason = 'link_approved' and amount = 10 then 5
+    else 0
+  end;
+  if cap = 0 then return; end if;
   select count(*) into used from public.reward_transactions rt
     where rt.user_id = recipient and rt.reason = award_rp_to.reason and rt.amount > 0
       and rt.created_at > date_trunc('day', now());
-  if used >= 20 then return; end if;
+  if used >= cap then return; end if;
   update public.profiles set rp = rp + amount, rp_earned = rp_earned + amount
     where id = recipient;
   insert into public.reward_transactions (user_id, amount, reason)
@@ -923,13 +930,13 @@ begin
   if auth.uid() is null then return 'not logged in'; end if;
   price := 0; duration := null;
   case item_id
-    when 'name_color'    then price := 300; duration := null;
-    when 'custom_title'  then price := 500; duration := null;
-    when 'vote_power'    then price := 400; duration := interval '30 days';
+    when 'name_color'    then price := 15000; duration := null;
+    when 'custom_title'  then price := 25000; duration := null;
+    when 'vote_power'    then price := 10000; duration := interval '30 days';
     when 'vip_badge'     then price := 500000; duration := null;
-    when 'avatar_ring'   then price := 600; duration := null;
-    when 'profile_banner' then price := 700; duration := null;
-    when 'chat_glow'     then price := 350; duration := interval '30 days';
+    when 'avatar_ring'   then price := 40000; duration := null;
+    when 'profile_banner' then price := 50000; duration := null;
+    when 'chat_glow'     then price := 8000; duration := interval '30 days';
     else return 'unknown item';
   end case;
   if price = 0 then return 'unknown item'; end if;
