@@ -435,9 +435,9 @@
         ? `<div class="watch-btns">` +
           official.map((s) => `<a class="watch-btn" href="${s.url}" target="_blank" rel="noopener">${JIKAN.esc(s.name)} <span class="watch-ext">&nearr;</span></a>`).join("") +
           `</div>`
-        : `<div class="watch-note">No official stream is listed on MyAnimeList for this title.</div>`;
+        : `<div class="watch-note">No stream is listed on MyAnimeList for this title.</div>`;
 
-      // Search gateways as a fallback (all legal, open in a new tab).
+      // Search gateways as a fallback (open in a new tab).
       const searches = [
         { name: "Crunchyroll", url: `https://www.crunchyroll.com/search?q=${q}` },
         { name: "Netflix", url: `https://www.netflix.com/search?q=${q}` },
@@ -447,10 +447,10 @@
       ];
 
       slot.innerHTML = `
-        <h3 class="sub-head">Where to Watch</h3>
+        <h3 class="sub-head">Links to Watch</h3>
         <div class="watch-panel">
           ${streamHtml}
-          ${official.length ? `<div class="watch-divider">Official</div>` : ""}
+          ${official.length ? `<div class="watch-divider">Streaming</div>` : ""}
           ${officialHtml}
           <div class="watch-search">Still can't find it? Search:
             ${searches.map((s) => `<a href="${s.url}" target="_blank" rel="noopener">${JIKAN.esc(s.name)}</a>`).join(" · ")}
