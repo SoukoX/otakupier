@@ -196,6 +196,7 @@ function renderNav() {
 
   const p = pathPrefix();
   const current = window.location.pathname.split("/").pop();
+  const isHome = current === "index.html" || current === "";
 
   const loggedLinks = isLoggedIn()
     ? NAV_LINKS.concat([
@@ -203,9 +204,7 @@ function renderNav() {
         { label: "Friends", href: "pages/friends.html", file: "friends.html", inPages: true },
         { label: "Messages", href: "pages/dms.html", file: "dms.html", inPages: true },
         { label: "Profile", href: "pages/profile.html", file: "profile.html", inPages: true },
-      ].concat(isAdmin()
-        ? [{ label: "Admin", title: "Admin panel", href: "pages/admin.html", file: "admin.html", inPages: true }]
-        : []))
+      ])
     : NAV_LINKS;
 
   const links = loggedLinks.map((l) => {
@@ -219,6 +218,9 @@ function renderNav() {
   const authArea = isLoggedIn()
     ? `<div class="user-menu">
          <span class="rp-badge" title="Reward Points — spend these in the Reward Shop">⛁ ${currentProfile?.rp || 0}</span>
+         ${isAdmin()
+           ? `<a href="${p}pages/admin.html" class="btn btn-outline btn-small admin-btn" title="Admin panel">⚙ Admin</a>`
+           : ""}
          <a href="${p}pages/profile.html" class="user-avatar" title="${JIKAN.esc(getProfile().name)}">${getProfile().avatar
          ? `<img src="${JIKAN.safeImg(getProfile().avatar)}" alt="">`
          : JIKAN.esc(getProfile().name.charAt(0).toUpperCase())}</a>
@@ -227,17 +229,31 @@ function renderNav() {
     : `<a href="${p}pages/login.html" class="btn btn-outline btn-small">Login</a>
        <a href="${p}pages/signup.html" class="btn btn-primary btn-small">Sign up</a>`;
 
-  nav.innerHTML = `
-    <div class="navbar-inner">
-      <a href="${p}index.html" class="logo"><span>Otaku</span>Pier</a>
-      <button class="nav-toggle" id="navToggle" aria-label="Toggle menu" aria-expanded="false">☰</button>
-      <div class="nav-panel">
+  if (isHome) {
+    // Home page: immersive full-page hero — no navbar bar. A floating
+    // logo + menu button that reveals the links on demand.
+    nav.className = "navbar navbar-home";
+    nav.innerHTML = `
+      <a href="${p}index.html" class="logo logo-home"><span>Otaku</span>Pier</a>
+      <button class="nav-toggle nav-toggle-home" id="navToggle" aria-label="Toggle menu" aria-expanded="false">☰</button>
+      <div class="nav-panel nav-panel-home">
         <ul class="nav-links">${links}</ul>
-        <div class="nav-auth">
-          ${authArea}
+        <div class="nav-auth">${authArea}</div>
+      </div>`;
+  } else {
+    nav.className = "navbar";
+    nav.innerHTML = `
+      <div class="navbar-inner">
+        <a href="${p}index.html" class="logo"><span>Otaku</span>Pier</a>
+        <button class="nav-toggle" id="navToggle" aria-label="Toggle menu" aria-expanded="false">☰</button>
+        <div class="nav-panel">
+          <ul class="nav-links">${links}</ul>
+          <div class="nav-auth">
+            ${authArea}
+          </div>
         </div>
-      </div>
-    </div>`;
+      </div>`;
+  }
 
   const toggle = document.getElementById("navToggle");
   if (toggle) {
