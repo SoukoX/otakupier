@@ -926,7 +926,7 @@ begin
     when 'name_color'    then price := 300; duration := null;
     when 'custom_title'  then price := 500; duration := null;
     when 'vote_power'    then price := 400; duration := interval '30 days';
-    when 'vip_badge'     then price := 25000; duration := null;
+    when 'vip_badge'     then price := 500000; duration := null;
     when 'avatar_ring'   then price := 600; duration := null;
     when 'profile_banner' then price := 700; duration := null;
     when 'chat_glow'     then price := 350; duration := interval '30 days';
