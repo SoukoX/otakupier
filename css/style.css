@@ -2866,7 +2866,7 @@ footer .footer-links {
 
 .dm-bubble.mine {
   align-self: flex-end;
-  background: var(--accent-grad);
+  background: linear-gradient(135deg, #0084ff, #0072e6);
   color: #fff;
 }
 
