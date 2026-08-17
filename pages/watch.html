@@ -90,6 +90,7 @@
               <span class="stat">Episodes: <strong>${a.episodes || "?"}</strong></span>
               <span class="stat">Status: <strong>${JIKAN.esc(a.status || "N/A")}</strong></span>
             </div>
+            ${a.synopsis ? `<p class="detail-synopsis">${JIKAN.esc(a.synopsis)}</p>` : ""}
             <div class="watch-head-actions">
               <a class="btn btn-outline btn-small" href="${pageHref("anime")}?id=${a.mal_id}">Open in catalog</a>
               <button class="btn btn-outline btn-small" onclick="goBack()">&larr; Back</button>
@@ -171,8 +172,9 @@
       if (theater) theater.innerHTML = "";
     }
 
-    // Load an episode into the on-site player. Embed providers resolve a
-    // playable source (Archive.org item) and stream it inside the page.
+    // Load an episode into the on-site player. Embed providers resolve an
+    // episode-accurate playable source (Archive.org item) and stream it
+    // inside the page. If no accurate match exists, show a clear message.
     async function playEpisode(ep) {
       const embed = getStreamingProviders().filter((p) => p.mode === "embed");
       if (!embed.length) {
@@ -188,13 +190,17 @@
       }
       lastStreamEpisode = ep;
       markTheaterEpisode(ep);
-      if (titleEl) titleEl.textContent = `Now Playing — Episode ${ep}`;
+      if (titleEl) titleEl.textContent = `Episode ${ep} — ${JIKAN.esc(provider.name)}`;
       frame.innerHTML = `<div class="loading"><div class="spinner"></div>Searching ${JIKAN.esc(provider.name)}…</div>`;
 
       if (provider.id === "archive") {
-        const item = await findArchiveItem(JIKAN.title(animeData));
+        const item = await findArchiveItem(JIKAN.title(animeData), ep);
         if (!item) {
-          frame.innerHTML = `<div class="stream-notice">No on-site copy was found on Archive.org for this title.<br>Try the <a href="${pageHref("anime")}?id=${animeData.mal_id}#watchSlot" style="color:var(--accent)">Links to Watch</a> panel in the catalog for external providers.</div>`;
+          frame.innerHTML = `<div class="stream-notice">
+            <div class="not-found-title">Episode ${ep} not found</div>
+            <p>This episode isn't available on ${JIKAN.esc(provider.name)} for this title.</p>
+            <p style="margin-top:8px;">Try the <a href="${pageHref("anime")}?id=${animeData.mal_id}#watchSlot" style="color:var(--accent)">Links to Watch</a> panel in the catalog for external providers.</p>
+          </div>`;
           return;
         }
         const url = `https://archive.org/embed/${item}`;
@@ -213,13 +219,18 @@
       }
     }
 
-    // Find an Archive.org item whose title matches the anime. Tries a few
-    // query shapes (alphanumeric-clean title first to dodge Solr special
-    // chars, then the full title phrase) and prefers popular items.
-    async function findArchiveItem(title) {
+    // Find an Archive.org item for a specific episode. Episode-targeted
+    // queries run first (most accurate); if none match, the requested
+    // episode is simply reported as not found.
+    async function findArchiveItem(title, ep) {
       const base = title.replace(/\s*\([^)]*\)\s*/g, " ").trim();
       const clean = base.replace(/[^\p{L}\p{N}\s]/gu, " ").replace(/\s+/g, " ").trim();
-      const variants = [clean, base, title];
+      const epPad = String(ep || "").padStart(2, "0");
+      const variants = [];
+      if (ep) {
+        variants.push(`${clean} episode ${ep}`, `${clean} ep ${ep}`, `${clean} ${epPad}`, `${clean} - ${epPad}`);
+      }
+      variants.push(clean, base, title);
       const seen = new Set();
       for (const t of variants) {
         if (!t || seen.has(t)) continue;
@@ -230,7 +241,7 @@
           try {
             const r = await fetch(
               "https://archive.org/advancedsearch.php?q=" + encodeURIComponent(q) +
-              "&fl[]=identifier&rows=5&sort[]=downloads+desc&output=json", { cache: "force-cache" });
+              "&fl[]=identifier&rows=8&sort[]=downloads+desc&output=json", { cache: "force-cache" });
             if (!r.ok) continue;
             const j = await r.json();
             const docs = j?.response?.docs || [];
