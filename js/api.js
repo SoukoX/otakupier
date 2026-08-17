@@ -98,9 +98,11 @@ const JIKAN = {
     return this.get(`/seasons/upcoming?sfw=true`);
   },
 
-  // Search with optional filters
+  // Search with optional filters. Deliberately does NOT set order_by so the
+  // API returns results in MAL's native relevance order (the most accurate
+  // ranking for a title query) instead of a hard popularity sort.
   async search(query, page = 1, type = "", minScore = "") {
-    let q = `type=anime&order_by=popularity&page=${page}&q=${encodeURIComponent(query)}`;
+    let q = `type=anime&page=${page}&q=${encodeURIComponent(query)}`;
     if (type) q += `&type=${type}`;
     if (minScore) q += `&min_score=${minScore}`;
     try {
@@ -111,11 +113,17 @@ const JIKAN = {
       // top list so search keeps working even during outages.
       const top = await this.catalog(page);
       const needle = query.toLowerCase();
-      const matched = (top.data || []).filter((a) =>
-        [a.title, a.title_english, a.title_japanese, a.title_synonyms].flat().some(
-          (t) => t && String(t).toLowerCase().includes(needle)
-        )
-      );
+      const score = (t) => String(t).toLowerCase();
+      const matched = (top.data || []).filter((a) => {
+        const titles = [a.title, a.title_english, a.title_japanese, a.title_synonyms].flat();
+        return titles.some((t) => t && score(t).includes(needle));
+      }).sort((a, b) => {
+        // Rank closer title matches first: exact > starts-with > contains.
+        const aT = score(a.title || "");
+        const bT = score(b.title || "");
+        const rank = (t) => (t === needle ? 0 : t.startsWith(needle) ? 1 : 2);
+        return rank(aT) - rank(bT) || aT.length - bT.length;
+      });
       top.data = matched;
       top.pagination = top.pagination || {};
       top.pagination.last_visible_page = 1;
