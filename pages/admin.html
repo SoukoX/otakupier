@@ -82,6 +82,7 @@
           <button class="admin-tab" data-t="custom">Custom anime</button>
           <button class="admin-tab" data-t="links">Watch links<span class="tab-badge" id="linkBadge"></span></button>
           <button class="admin-tab" data-t="users">Users &amp; bans</button>
+          <button class="admin-tab" data-t="rewards">Rewards</button>
           <button class="admin-tab" data-t="mod">Moderation</button>
         </div>
         <div id="panel"></div>`;
@@ -104,6 +105,7 @@
       else if (activeTab === "custom") await loadCustomAnime();
       else if (activeTab === "links") await loadWatchLinks();
       else if (activeTab === "users") await loadUsers();
+      else if (activeTab === "rewards") await loadRewards();
       else if (activeTab === "mod") await loadModeration();
     }
 
@@ -345,7 +347,13 @@
 
     async function setLinkApproved(linkId, approved) {
       try {
+        const { data: link } = await supabase.from("watch_links").select("user_id, approved").eq("id", linkId).maybeSingle();
         await supabase.from("watch_links").update({ approved }).eq("id", linkId);
+        // Reward the submitter with RP when their link is approved (+25 RP),
+        // but don't double-pay on re-approval.
+        if (approved && link && !link.approved && link.user_id && link.user_id !== currentUser.id) {
+          await supabase.rpc("award_rp_to", { recipient: link.user_id, amount: 25, reason: "link_approved" });
+        }
         showToast(approved ? "Link approved" : "Link unapproved");
         loadWatchLinks();
         refreshLinkBadge();
@@ -452,6 +460,134 @@
         showToast("Admin privileges removed");
         searchUsers();
       } catch (err) { showToast("Demote failed"); }
+    }
+
+    // ---------- Rewards (grant/adjust RP, ledger) ----------
+    async function loadRewards() {
+      const panel = document.getElementById("panel");
+      panel.innerHTML = `
+        <div class="review-form">
+          <strong>Grant / adjust Reward Points</strong>
+          <div style="color:var(--text-dim); font-size:.85rem; margin:4px 0 10px;">Enter a user's ID, or search by name below. Positive adds points; negative removes them.</div>
+          <div class="admin-rp-form">
+            <input type="text" id="rpUid" class="search-input" placeholder="User ID" style="flex:1; min-width:200px;">
+            <input type="number" id="rpAmount" class="search-input" placeholder="Amount (e.g. 100 or -50)" style="flex:1; min-width:140px;">
+            <button class="btn btn-primary" onclick="grantPoints()">Apply</button>
+          </div>
+        </div>
+        <div class="review-form">
+          <strong>Find a user to reward</strong>
+          <div style="display:flex; gap:10px; flex-wrap:wrap; margin:10px 0;">
+            <input type="text" id="rpSearch" class="search-input" placeholder="Search by name..." style="flex:1; min-width:200px;" onkeydown="if(event.key==='Enter')searchRpUsers()">
+            <button class="btn btn-primary" onclick="searchRpUsers()">Search</button>
+          </div>
+        </div>
+        <div id="rpUserList"><div class="loading"><div class="spinner"></div>Loading...</div></div>
+
+        <h3 class="sub-head" style="margin-top:28px;">Top earners</h3>
+        <div id="rpTop"></div>
+
+        <h3 class="sub-head" style="margin-top:28px;">Recent transactions</h3>
+        <div id="rpLedger"></div>`;
+      searchRpUsers();
+      loadRpTop();
+      loadRpLedger();
+    }
+
+    async function searchRpUsers() {
+      const q = (document.getElementById("rpSearch")?.value || "").trim().toLowerCase();
+      const box = document.getElementById("rpUserList");
+      box.innerHTML = `<div class="loading"><div class="spinner"></div>Loading...</div>`;
+      try {
+        let query = supabase.from("profiles").select("id, name, xp, rp, rp_earned, is_admin").order("rp_earned", { ascending: false }).limit(100);
+        if (q) query = query.ilike("name", `%${q}%`);
+        const { data } = await query;
+        box.innerHTML = "";
+        if (!data.length) { box.innerHTML = `<div class="empty-state">No users found.</div>`; return; }
+        data.forEach((u) => {
+          const el = document.createElement("div");
+          el.className = "admin-list-item";
+          el.innerHTML = `
+            <div class="avatar">${(u.name || "U").charAt(0).toUpperCase()}</div>
+            <div class="grow">
+              <div>${JIKAN.esc(u.name || "User")} ${u.is_admin ? '<span class="admin-badge">✓ Admin</span>' : ""}</div>
+              <div style="color:var(--text-dim); font-size:.8rem;">⛁ ${u.rp || 0} balance • ${u.rp_earned || 0} earned • ${u.xp || 0} XP</div>
+            </div>
+            <a class="btn btn-outline btn-small" href="profile.html?id=${u.id}">Profile</a>
+            <button class="btn btn-outline btn-small" onclick="document.getElementById('rpUid').value='${JIKAN.safeAttr(u.id)}'; document.getElementById('rpAmount').focus(); showToast('User ID filled — enter an amount');">Reward</button>`;
+          box.appendChild(el);
+        });
+      } catch (err) {
+        box.innerHTML = `<div class="empty-state">Could not load users.</div>`;
+      }
+    }
+
+    async function grantPoints() {
+      const target = (document.getElementById("rpUid")?.value || "").trim();
+      const amount = parseInt(document.getElementById("rpAmount")?.value, 10);
+      if (!target) { showToast("Enter a user ID"); return; }
+      if (!amount || Math.abs(amount) > 100000) { showToast("Enter a valid amount (-100000 to 100000)"); return; }
+      try {
+        const { data, error } = await supabase.rpc("grant_rp", { target, amount, reason: "admin" });
+        if (error) throw error;
+        showToast(data === "ok" ? "Points updated" : data);
+        searchRpUsers();
+        loadRpTop();
+        loadRpLedger();
+      } catch (err) {
+        showToast("Grant failed: " + (err.message || ""));
+      }
+    }
+
+    async function loadRpTop() {
+      const box = document.getElementById("rpTop");
+      if (!box) return;
+      try {
+        const { data } = await supabase.from("profiles")
+          .select("id, name, rp, rp_earned, is_admin")
+          .order("rp_earned", { ascending: false }).limit(10);
+        box.innerHTML = "";
+        if (!data?.length) { box.innerHTML = `<div class="empty-state">No data yet.</div>`; return; }
+        data.forEach((u, i) => {
+          const el = document.createElement("div");
+          el.className = "admin-list-item";
+          el.innerHTML = `
+            <div style="font-weight:800; color:var(--accent-2); width:30px;">#${i + 1}</div>
+            <div class="grow">
+              <div>${JIKAN.esc(u.name || "User")}</div>
+              <div style="color:var(--text-dim); font-size:.8rem;">⛁ ${u.rp || 0} balance • ${u.rp_earned || 0} earned</div>
+            </div>
+            <a class="btn btn-outline btn-small" href="profile.html?id=${u.id}">Profile</a>`;
+          box.appendChild(el);
+        });
+      } catch (e) {
+        box.innerHTML = `<div class="empty-state">Could not load top earners.</div>`;
+      }
+    }
+
+    async function loadRpLedger() {
+      const box = document.getElementById("rpLedger");
+      if (!box) return;
+      try {
+        const { data } = await supabase.from("reward_transactions")
+          .select("*").order("created_at", { ascending: false }).limit(20);
+        box.innerHTML = "";
+        if (!data?.length) { box.innerHTML = `<div class="empty-state">No transactions yet.</div>`; return; }
+        for (const t of data) {
+          const p = await fetchProfileRow(t.user_id);
+          const el = document.createElement("div");
+          el.className = "admin-list-item";
+          el.innerHTML = `
+            <div style="font-weight:800; color:${t.amount >= 0 ? "var(--accent-3)" : "var(--danger)"}; width:80px;">${t.amount >= 0 ? "+" : ""}${t.amount} ⛁</div>
+            <div class="grow">
+              <div>${adminNameHTML(p)}</div>
+              <div style="color:var(--text-dim); font-size:.8rem;">${JIKAN.esc(t.reason || "")} • ${new Date(t.created_at).toLocaleString()}</div>
+            </div>`;
+          box.appendChild(el);
+        }
+      } catch (e) {
+        box.innerHTML = `<div class="empty-state">Could not load transactions.</div>`;
+      }
     }
 
     // ---------- Moderation ----------
