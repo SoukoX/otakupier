@@ -983,12 +983,12 @@ begin
   if set_rp_config.item_id = 'name_color' and set_rp_config.config !~ '^#[0-9a-fA-F]{6}$' then return 'invalid color'; end if;
   if set_rp_config.item_id = 'custom_title' and char_length(set_rp_config.config) > 24 then return 'title too long'; end if;
   if not exists (
-    select 1 from public.spendings
-    where user_id = auth.uid() and item_id = set_rp_config.item_id and active
-      and (expires_at is null or expires_at > now())
+    select 1 from public.spendings s
+    where s.user_id = auth.uid() and s.item_id = set_rp_config.item_id and s.active
+      and (s.expires_at is null or s.expires_at > now())
   ) then return 'not owned'; end if;
-  update public.spendings set config = set_rp_config.config
-    where user_id = auth.uid() and item_id = set_rp_config.item_id;
+  update public.spendings s set config = set_rp_config.config
+    where s.user_id = auth.uid() and s.item_id = set_rp_config.item_id;
   return 'ok';
 end;
 $$;
