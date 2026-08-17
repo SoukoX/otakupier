@@ -76,7 +76,7 @@
               ${rankTag(userId, st.profile)}
               <span style="color:var(--text-dim); font-size:.85rem;">Joined ${joined}</span>
             </div>
-            <div style="color:var(--text-dim); font-size:.75rem; margin-top:2px;">ID: <code style="font-size:.72rem; word-break:break-all;">${JIKAN.esc(userId)}</code></div>
+            <div style="color:var(--text-dim); font-size:.75rem; margin-top:2px;">ID: <code id="profileUserId" style="font-size:.72rem; word-break:break-all; cursor:pointer;" title="Click to copy" onclick="copyProfileUserId()">${JIKAN.esc(userId)}</code> <button class="btn btn-outline btn-small" onclick="copyProfileUserId()" style="padding:1px 8px; font-size:.7rem;">Copy</button></div>
             ${st.profile.bio ? `<p style="margin:10px 0 0; color:var(--text-dim);">${JIKAN.esc(st.profile.bio)}</p>` : ""}
             <div class="stat-strip">
               <div class="stat"><b>${st.counts.reviews}</b> reviews</div>
@@ -340,6 +340,17 @@
       const res = await setRpConfig("custom_title", v);
       if (res.ok) { showToast("Title updated!"); renderRewardShop(); }
       else showToast(res.message || "Update failed");
+    }
+
+    async function copyProfileUserId() {
+      const el = document.getElementById("profileUserId");
+      if (!el) return;
+      try {
+        await navigator.clipboard.writeText(el.textContent.trim());
+        showToast("User ID copied!");
+      } catch (e) {
+        showToast("Could not copy");
+      }
     }
 
     document.addEventListener("DOMContentLoaded", load);
