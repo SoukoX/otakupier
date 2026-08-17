@@ -588,27 +588,57 @@
         c.classList.toggle("is-active", idx === i));
     }
 
-    // Hero "▶ Watch Now" — starts playback immediately (episode 1 on the
-    // first provider), or jumps to the watch panel when there's no episode
-    // list so the visitor can still pick a provider search.
+    // Hero "▶ Watch Now" — streams ON THIS SITE using an embeddable (legal)
+    // third-party player. No redirects: the provider plays inside the page.
+    // The "Links to Watch" panel below is the section that opens external
+    // providers in a new tab.
     function startWatching() {
-      const providers = getStreamingProviders();
-      const slot = document.getElementById("watchSlot");
-      if (!providers.length) {
-        showToast("Streaming isn't configured yet.");
+      const embed = getStreamingProviders().filter((p) => p.mode === "embed");
+      if (!embed.length) {
+        showToast("No on-site streaming is configured for this title.");
         return;
       }
-      const eps = listOfEpisodes();
-      if (slot) slot.scrollIntoView({ behavior: "smooth", block: "center" });
       const btn = document.getElementById("watchNowBtn");
       if (btn) btn.classList.add("pulse-once");
-      if (eps.length) {
-        openStream(1);
-      } else if (slot) {
-        slot.classList.remove("watch-flash");
-        void slot.offsetWidth;
-        slot.classList.add("watch-flash");
-      }
+      showProviderPicker();
+    }
+
+    function showProviderPicker() {
+      const embed = getStreamingProviders().filter((p) => p.mode === "embed");
+      const title = JIKAN.title(animeData) || "Anime";
+      closeStreamModal();
+      const overlay = document.createElement("div");
+      overlay.className = "stream-modal-overlay";
+      const rows = embed.length
+        ? embed.map((p, i) => `
+        <button class="provider-pick" onclick="pickProviderAndWatch(${i})">
+          <span class="provider-pick-name">${JIKAN.esc(p.name)}</span>
+          <span class="watch-pill">Plays on-site</span>
+        </button>`).join("")
+        : `<div class="stream-notice">No on-site player is available for this title. Use the "Links to Watch" panel below for external providers.</div>`;
+      overlay.innerHTML = `
+        <div class="stream-modal" role="dialog" aria-modal="true" aria-label="Choose a provider">
+          <div class="stream-modal-head">
+            <div class="stream-modal-title">Watch &ldquo;${JIKAN.esc(title)}&rdquo; — pick a provider</div>
+            <button class="stream-modal-close" onclick="closeStreamModal()" aria-label="Close">&times;</button>
+          </div>
+          <div class="provider-pick-list">${rows}</div>
+          <div class="stream-modal-actions">
+            <button class="btn btn-outline btn-small" onclick="closeStreamModal()">Close</button>
+          </div>
+        </div>`;
+      overlay.addEventListener("click", (e) => { if (e.target === overlay) closeStreamModal(); });
+      document.addEventListener("keydown", streamEscKey);
+      document.body.appendChild(overlay);
+    }
+
+    function pickProviderAndWatch(i) {
+      const embed = getStreamingProviders().filter((p) => p.mode === "embed");
+      const p = embed[i];
+      if (!p) return;
+      activeProviderIndex = getStreamingProviders().findIndex((x) => x.id === p.id);
+      closeStreamModal();
+      openStream(1);
     }
 
     // Open the streaming player modal for a given episode number.
