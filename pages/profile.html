@@ -269,7 +269,7 @@
           <div class="tx-list">
             ${txs.map((t) => `
               <div class="tx-row">
-                <span>${t.amount > 0 ? `+${t.amount} ⛁` : `${t.amount} ⛁`}</span>
+                <span style="color:${t.amount < 0 ? "var(--danger)" : "var(--accent-3)"};">${t.amount > 0 ? `+${t.amount} ⛁` : `${t.amount} ⛁`}</span>
                 <span class="tx-reason">${JIKAN.esc(reasonLabel(t))}</span>
                 <span class="tx-date">${new Date(t.created_at).toLocaleDateString()}</span>
               </div>`).join("")}
