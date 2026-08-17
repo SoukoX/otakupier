@@ -871,7 +871,7 @@ begin
     where rt.user_id = auth.uid() and rt.reason = add_rp.reason and rt.amount > 0
       and rt.created_at > date_trunc('day', now());
   if used >= cap then return; end if;
-  update public.profiles p set p.rp = p.rp + amount, p.rp_earned = p.rp_earned + amount
+  update public.profiles p set rp = p.rp + amount, rp_earned = p.rp_earned + amount
     where p.id = auth.uid();
   insert into public.reward_transactions (user_id, amount, reason)
     values (auth.uid(), amount, add_rp.reason);
@@ -904,7 +904,7 @@ begin
     where rt.user_id = recipient and rt.reason = award_rp_to.reason and rt.amount > 0
       and rt.created_at > date_trunc('day', now());
   if used >= cap then return; end if;
-  update public.profiles p set p.rp = p.rp + amount, p.rp_earned = p.rp_earned + amount
+  update public.profiles p set rp = p.rp + amount, rp_earned = p.rp_earned + amount
     where p.id = recipient;
   insert into public.reward_transactions (user_id, amount, reason)
     values (recipient, amount, award_rp_to.reason);
@@ -949,7 +949,7 @@ begin
   if balance is null or balance < cost then return 'not enough points'; end if;
   if spend_rp.item_id = 'name_color' and spend_rp.config !~ '^#[0-9a-fA-F]{6}$' then return 'invalid color'; end if;
   if spend_rp.item_id = 'custom_title' and char_length(spend_rp.config) > 24 then return 'title too long'; end if;
-  update public.profiles p set p.rp = p.rp - cost where p.id = auth.uid();
+  update public.profiles p set rp = p.rp - cost where p.id = auth.uid();
   -- Extend existing timed purchases instead of piling duplicates.
   if duration is not null then
     select s.expires_at into existing_exp from public.spendings s
@@ -1015,10 +1015,10 @@ begin
   if isadmin is distinct from true then return 'admin only'; end if;
   if target is null or amount = 0 then return 'invalid'; end if;
   if amount > 0 then
-    update public.profiles p set p.rp = p.rp + amount, p.rp_earned = p.rp_earned + amount
+    update public.profiles p set rp = p.rp + amount, rp_earned = p.rp_earned + amount
       where p.id = target;
   else
-    update public.profiles p set p.rp = greatest(p.rp + amount, 0) where p.id = target;
+    update public.profiles p set rp = greatest(p.rp + amount, 0) where p.id = target;
   end if;
   insert into public.reward_transactions (user_id, amount, reason)
     values (target, amount, 'admin:' || coalesce(grant_rp.reason, 'adjust'));
