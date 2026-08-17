@@ -57,3 +57,14 @@ const CONFIG = {
     //     enabled: true },
   ],
 };
+
+// Running straight off the filesystem (file://) has no pretty-URL
+// resolution — internal links need the real ".html" file there.
+const IS_LOCAL = /^(file|ftp):/.test(window.location.protocol);
+
+// Internal page link: clean (extensionless) form on the hosted site, the
+// real ".html" file when opened straight from disk.
+function pageHref(page) {
+  const p = window.location.pathname.includes("/pages/") ? "../" : "";
+  return p + "pages/" + page + (IS_LOCAL ? ".html" : "");
+}
