@@ -79,7 +79,7 @@
       const perk = perks[uid] || {};
       const av = el.querySelector(".avatar");
       if (av && perk.avatar_ring) av.classList.add("avatar-ring");
-      const link = el.querySelector('a[href*="profile.html?id="]');
+      const link = el.querySelector('a[href*="profile?id="]');
       if (link && link.textContent.trim() && (perk.name_color || perk.vip_badge || perk.vip)) {
         const prof = { name: link.textContent };
         link.innerHTML = prestigeNameHTML(prof, perk);
