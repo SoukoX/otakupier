@@ -156,7 +156,7 @@
         await supabase.from("forum_replies").delete().eq("thread_id", threadId);
         await supabase.from("forum_threads").delete().eq("id", threadId);
         showToast("Thread deleted");
-        window.location.href = "forums.html";
+        window.location.href = "forums";
       } catch (err) {
         showToast("Could not delete thread");
       }
