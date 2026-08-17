@@ -9,6 +9,18 @@
   <link rel="icon" type="image/svg+xml" href="favicon.svg">
   <link rel="canonical" href="https://otakupier.2bd.net/404.html">
   <link rel="stylesheet" href="css/style.css">
+  <script>
+    // Clean URLs (e.g. /pages/anime) hit this 404 on reload because static
+    // hosting has no rewrite rules. Forward them to the real .html file.
+    (function () {
+      var path = window.location.pathname;
+      if (path.indexOf(".html") !== -1) return; // genuine .html 404 — show the page
+      var target = path.endsWith("/")
+        ? path + "index.html"
+        : path + ".html";
+      window.location.replace(target + window.location.search + window.location.hash);
+    })();
+  </script>
 </head>
 <body>
   <nav class="navbar" id="navbar"></nav>
