@@ -71,7 +71,7 @@
             </div>`;
           el.addEventListener("click", (e) => {
             if (e.target.closest("button")) return;
-            window.location.href = `anime.html?id=${s.anime_mal_id}`;
+            window.location.href = `anime?id=${s.anime_mal_id}`;
           });
           grid.appendChild(el);
         });
