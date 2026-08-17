@@ -926,17 +926,17 @@ begin
     when 'name_color'    then price := 300; duration := null;
     when 'custom_title'  then price := 500; duration := null;
     when 'vote_power'    then price := 400; duration := interval '30 days';
-    when 'vip_badge'     then price := 800; duration := null;
+    when 'vip_badge'     then price := 25000; duration := null;
     when 'avatar_ring'   then price := 600; duration := null;
     when 'profile_banner' then price := 700; duration := null;
     when 'chat_glow'     then price := 350; duration := interval '30 days';
     else return 'unknown item';
   end case;
   if price = 0 then return 'unknown item'; end if;
-  if item_id = 'name_color' and config !~ '^#[0-9a-fA-F]{6}$' then return 'invalid color'; end if;
-  if item_id = 'custom_title' and char_length(config) > 24 then return 'title too long'; end if;
   select rp into balance from public.profiles where id = auth.uid();
   if balance is null or balance < price then return 'not enough points'; end if;
+  if item_id = 'name_color' and config !~ '^#[0-9a-fA-F]{6}$' then return 'invalid color'; end if;
+  if item_id = 'custom_title' and char_length(config) > 24 then return 'title too long'; end if;
   update public.profiles set rp = rp - price where id = auth.uid();
   -- Extend existing timed purchases instead of piling duplicates.
   if duration is not null then
