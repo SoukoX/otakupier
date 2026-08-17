@@ -449,6 +449,11 @@ img {
   border-radius: 14px;
   padding: 12px;
   background: var(--bg-card);
+  animation: theaterIn 0.35s ease both;
+}
+@keyframes theaterIn {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: translateY(0); }
 }
 .watch-player {
   display: flex;
@@ -458,7 +463,6 @@ img {
 .watch-player-bar {
   display: flex;
   align-items: center;
-  justify-content: space-between;
   gap: 10px;
   margin-bottom: 10px;
 }
@@ -471,12 +475,14 @@ img {
 }
 .watch-hide {
   flex: 0 0 auto;
+  margin-left: auto;
   border: none;
   background: none;
   color: var(--text-dim);
   font-size: 1.3rem;
   line-height: 1;
   cursor: pointer;
+  transition: color 0.2s;
 }
 .watch-hide:hover {
   color: var(--text);
@@ -494,6 +500,11 @@ img {
   width: 100%;
   height: 100%;
   border: none;
+  animation: fadeIn 0.3s ease both;
+}
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
 }
 .watch-frame .loading,
 .watch-frame .stream-notice {
@@ -506,6 +517,17 @@ img {
   gap: 10px;
   text-align: center;
   padding: 20px;
+}
+.not-found-title {
+  font-weight: 800;
+  font-size: 1.05rem;
+  color: var(--accent-2);
+}
+.stream-notice p {
+  margin: 0;
+  font-size: 0.9rem;
+  color: var(--text-dim);
+  max-width: 46ch;
 }
 .watch-side {
   min-width: 0;
@@ -532,8 +554,35 @@ img {
   overflow-y: auto;
   padding: 2px;
 }
+.watch-providers .ep-chip,
+.watch-episodes .ep-chip {
+  min-width: 0;
+  padding: 7px 8px;
+  text-align: center;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--bg-alt);
+  color: var(--text);
+  font-size: 0.85rem;
+  font-weight: 600;
+  cursor: pointer;
+  font-family: inherit;
+  transition: transform 0.15s, border-color 0.2s, background 0.2s, box-shadow 0.2s;
+}
+.watch-providers .ep-chip:hover,
+.watch-episodes .ep-chip:hover {
+  transform: translateY(-2px);
+  border-color: var(--accent-3);
+  box-shadow: 0 4px 12px rgba(56, 214, 181, 0.18);
+}
+.watch-providers .ep-chip.is-active,
+.watch-episodes .ep-chip.is-active {
+  border-color: var(--accent);
+  color: var(--accent);
+  background: rgba(230, 70, 92, 0.1);
+  box-shadow: inset 0 0 0 1px var(--accent);
+}
 
-@media (max-width: 720px) {
 .watch-head {
   display: flex;
   gap: 18px;
@@ -564,18 +613,17 @@ img {
   gap: 8px;
   margin-top: 12px;
 }
-@media (max-width: 560px) {
-  .watch-head-img {
-    width: 72px;
-    height: 104px;
-  }
-}
 
-.watch-theater {
+@media (max-width: 720px) {
+  .watch-theater {
     grid-template-columns: 1fr;
   }
   .watch-episodes {
     max-height: 200px;
+  }
+  .watch-head-img {
+    width: 72px;
+    height: 104px;
   }
 }
 
