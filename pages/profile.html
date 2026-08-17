@@ -303,7 +303,7 @@
 
     function renderConfigEditor(item, row) {
       if (item.id === "name_color") {
-        const current = row?.config || "#7c5cff";
+        const current = row?.config || "#e6465c";
         return `
           <div class="config-editor">
             <input type="color" id="cfgColor" value="${current}" onchange="setColor()" style="width:100%; height:36px; border:none; background:none; cursor:pointer;">
@@ -320,7 +320,7 @@
     }
 
     async function buyReward(itemId) {
-      const res = await buyRpItem(itemId, itemId === "name_color" ? "#7c5cff" : "");
+      const res = await buyRpItem(itemId, itemId === "name_color" ? "#e6465c" : "");
       if (res.ok) {
         showToast("Purchased! Enjoy your new perk.");
         renderRewardShop();
