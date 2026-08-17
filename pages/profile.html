@@ -316,7 +316,7 @@
     }
 
     async function buyReward(itemId) {
-      const res = await buyRpItem(itemId);
+      const res = await buyRpItem(itemId, itemId === "name_color" ? "#7c5cff" : "");
       if (res.ok) {
         showToast("Purchased! Enjoy your new perk.");
         renderRewardShop();
