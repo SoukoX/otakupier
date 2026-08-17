@@ -682,7 +682,7 @@ function prestigeNameHTML(profile, perks, opts) {
 const RP_SHOP = [
   { id: "name_color", name: "Name Color", icon: "🎨", price: 300, duration: null, desc: "Pick a custom color for your name everywhere on the site." },
   { id: "custom_title", name: "Custom Title", icon: "🏷️", price: 500, duration: null, desc: "A custom title shown under your name (max 24 chars)." },
-  { id: "vip_badge", name: "VIP Badge", icon: "💎", price: 800, duration: null, desc: "A shining VIP badge next to your name site-wide." },
+  { id: "vip_badge", name: "VIP Badge", icon: "💎", price: 25000, duration: null, desc: "A shining VIP badge next to your name site-wide." },
   { id: "avatar_ring", name: "Golden Avatar Ring", icon: "👑", price: 600, duration: null, desc: "A golden ring around your avatar on chat, DMs & reviews." },
   { id: "chat_glow", name: "Chat Glow", icon: "✨", price: 350, duration: "30 days", desc: "Your chat messages always glow with VIP styling." },
   { id: "vote_power", name: "Voting Power 2x", icon: "🗳️", price: 400, duration: "30 days", desc: "Your community votes count 2x in the OtakuPier rating." },
