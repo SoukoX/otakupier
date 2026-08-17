@@ -123,7 +123,7 @@ async function refreshCurrentProfile() {
   if (!supabase || !currentUser) return;
   const { data } = await supabase
     .from("profiles")
-    .select("id, name, avatar_url, bio, xp, is_admin, created_at")
+    .select("id, name, avatar_url, bio, xp, rp, rp_earned, is_admin, created_at")
     .eq("id", currentUser.id)
     .maybeSingle();
   if (data) currentProfile = data;
@@ -218,6 +218,7 @@ function renderNav() {
 
   const authArea = isLoggedIn()
     ? `<div class="user-menu">
+         <span class="rp-badge" title="Reward Points — spend these in the Reward Shop">⛁ ${currentProfile?.rp || 0}</span>
          <a href="${p}pages/profile.html" class="user-avatar" title="${JIKAN.esc(getProfile().name)}">${getProfile().avatar
          ? `<img src="${JIKAN.safeImg(getProfile().avatar)}" alt="">`
          : JIKAN.esc(getProfile().name.charAt(0).toUpperCase())}</a>
@@ -229,11 +230,37 @@ function renderNav() {
   nav.innerHTML = `
     <div class="navbar-inner">
       <a href="${p}index.html" class="logo"><span>Otaku</span>Pier</a>
-      <ul class="nav-links">${links}</ul>
-      <div class="nav-auth">
-        ${authArea}
+      <button class="nav-toggle" id="navToggle" aria-label="Toggle menu" aria-expanded="false">☰</button>
+      <div class="nav-panel">
+        <ul class="nav-links">${links}</ul>
+        <div class="nav-auth">
+          ${authArea}
+        </div>
       </div>
     </div>`;
+
+  const toggle = document.getElementById("navToggle");
+  if (toggle) {
+    toggle.addEventListener("click", (e) => {
+      e.stopPropagation();
+      nav.classList.toggle("open");
+      toggle.setAttribute("aria-expanded", nav.classList.contains("open") ? "true" : "false");
+    });
+    nav.querySelectorAll(".nav-panel a, .nav-panel .btn").forEach((a) => {
+      a.addEventListener("click", () => {
+        nav.classList.remove("open");
+        toggle.setAttribute("aria-expanded", "false");
+      });
+    });
+    document.removeEventListener("click", nav._outsideHandler);
+    nav._outsideHandler = (e) => {
+      if (nav.classList.contains("open") && !nav.contains(e.target)) {
+        nav.classList.remove("open");
+        toggle.setAttribute("aria-expanded", "false");
+      }
+    };
+    document.addEventListener("click", nav._outsideHandler);
+  }
 }
 
 // ---------- Shared UI ----------
@@ -546,6 +573,124 @@ function hasChatPrivilege(xp) {
 async function awardXp(amount) {
   if (!supabase || !isLoggedIn()) return;
   try { await supabase.rpc("add_xp", { amount }); } catch (e) {}
+}
+
+// ---------- Reward Points (RP) ----------
+// Whitelisted (reason -> amount) pairs that map 1:1 to add_rp() server-side.
+// Keep in sync with the SQL whitelist in supabase_schema.sql.
+const RP_REWARDS = {
+  review: 10,
+  reply: 5,
+  vote: 5,
+  save: 3,
+  thread: 15,
+  forum_reply: 5,
+  club: 20,
+  club_join: 10,
+  club_post: 5,
+  friend: 10,
+  chat: 1,
+  link_approved: 25,
+};
+
+// Award RP to the current user for a known action (fire-and-forget).
+async function awardRp(reason) {
+  if (!supabase || !isLoggedIn()) return;
+  const amount = RP_REWARDS[reason];
+  if (!amount) return;
+  try { await supabase.rpc("add_rp", { amount, reason }); } catch (e) {}
+}
+
+// Award RP to another user (e.g. their review got liked). No self-award.
+async function awardRpTo(recipient, reason) {
+  if (!supabase || !isLoggedIn() || !recipient) return;
+  const amount = RP_REWARDS[reason];
+  if (!amount) return;
+  try { await supabase.rpc("award_rp_to", { recipient, amount, reason }); } catch (e) {}
+}
+
+// Buy a shop item. Returns { ok, message }.
+async function buyRpItem(itemId, config) {
+  if (!supabase || !isLoggedIn()) return { ok: false, message: "Login to use the Reward Shop" };
+  try {
+    const { data, error } = await supabase.rpc("spend_rp", { item_id: itemId, config: config || "" });
+    if (error) throw error;
+    return { ok: data === "ok", message: data };
+  } catch (e) {
+    return { ok: false, message: e.message || "Purchase failed" };
+  }
+}
+
+// Change config of an owned item (name color / custom title).
+async function setRpConfig(itemId, config) {
+  if (!supabase || !isLoggedIn()) return { ok: false, message: "Login required" };
+  try {
+    const { data, error } = await supabase.rpc("set_rp_config", { item_id: itemId, config });
+    if (error) throw error;
+    return { ok: data === "ok", message: data };
+  } catch (e) {
+    return { ok: false, message: e.message || "Update failed" };
+  }
+}
+
+// Fetch active (non-expired) spendings for a set of users -> { userId: {itemId: config} }
+async function spendingsMap(userIds) {
+  if (!supabase || !userIds.length) return {};
+  try {
+    const { data } = await supabase
+      .from("spendings")
+      .select("user_id, item_id, config, expires_at, active")
+      .in("user_id", userIds);
+    const map = {};
+    (data || []).forEach((s) => {
+      if (!s.active) return;
+      if (s.expires_at && new Date(s.expires_at) <= new Date()) return;
+      (map[s.user_id] = map[s.user_id] || {})[s.item_id] = s.config || true;
+    });
+    return map;
+  } catch (e) { return {}; }
+}
+
+// RP badge: shows balance to the logged-in user next to their XP.
+function rpBadge(profile) {
+  const rp = profile?.rp || 0;
+  return `<span class="rp-badge" title="Reward Points — spend these in the Reward Shop">⛁ ${rp}</span>`;
+}
+
+// Prestige perks from a spendings map for one user.
+function perksOf(spendings, userId) {
+  return (spendings && userId && spendings[userId]) || {};
+}
+
+// A display name that reflects earned prestige: name color, VIP badge,
+// golden avatar ring (rendered by the caller on the avatar element).
+function prestigeNameHTML(profile, perks, opts) {
+  const p = profile || {};
+  opts = opts || {};
+  const name = JIKAN.esc(p.name || "User");
+  const admin = p.is_admin
+    ? `<span class="admin-badge" title="Verified administrator">✓ Admin</span>`
+    : "";
+  const vip = (perks && (perks.vip_badge || perks.vip)) ? `<span class="vip-badge" title="VIP — bought in the Reward Shop">VIP</span>` : "";
+  const color = (perks && perks.name_color) ? ` style="color:${perks.name_color};"` : "";
+  const openTag = opts.strong ? `<strong${color}>` : `<span${color}>`;
+  const closeTag = opts.strong ? "</strong>" : "</span>";
+  return `${openTag}${name}${closeTag} ${vip}${admin}`.trim();
+}
+
+// The shop catalog (single source of truth used by profile + admin).
+const RP_SHOP = [
+  { id: "name_color", name: "Name Color", icon: "🎨", price: 300, duration: null, desc: "Pick a custom color for your name everywhere on the site." },
+  { id: "custom_title", name: "Custom Title", icon: "🏷️", price: 500, duration: null, desc: "A custom title shown under your name (max 24 chars)." },
+  { id: "vip_badge", name: "VIP Badge", icon: "💎", price: 800, duration: null, desc: "A shining VIP badge next to your name site-wide." },
+  { id: "avatar_ring", name: "Golden Avatar Ring", icon: "👑", price: 600, duration: null, desc: "A golden ring around your avatar on chat, DMs & reviews." },
+  { id: "chat_glow", name: "Chat Glow", icon: "✨", price: 350, duration: "30 days", desc: "Your chat messages always glow with VIP styling." },
+  { id: "vote_power", name: "Voting Power 2x", icon: "🗳️", price: 400, duration: "30 days", desc: "Your community votes count 2x in the OtakuPier rating." },
+  { id: "profile_banner", name: "Profile Banner", icon: "🖼️", price: 700, duration: null, desc: "A special banner at the top of your profile page." },
+];
+
+function rpShopItem(id) {
+  return RP_SHOP.find((i) => i.id === id) || null;
 }
 
 // Render a translucent skeleton grid while anime cards load
