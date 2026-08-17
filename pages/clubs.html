@@ -59,7 +59,7 @@
               <div style="color:var(--text-dim); font-size:.8rem; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${JIKAN.esc(c.description || "")}</div>
               <div style="color:var(--text-dim); font-size:.75rem; margin-top:4px;">${c.members.length} members • owner: ${JIKAN.esc(owner?.name || "User")}${owner?.is_admin ? " 👑" : ""}</div>
             </div>`;
-          el.addEventListener("click", () => (window.location.href = `club.html?id=${c.id}`));
+          el.addEventListener("click", () => (window.location.href = `club?id=${c.id}`));
           list.appendChild(el);
         }
       } catch (err) {
@@ -75,7 +75,7 @@
     function showNewClub() {
       if (!isLoggedIn()) {
         showToast("Login to create a club");
-        window.location.href = "login.html";
+        window.location.href = "login";
         return;
       }
       const list = document.getElementById("clubList");
@@ -104,7 +104,7 @@
         awardXp(20); // +20 XP for creating a club
         awardRp("club"); // +20 RP
         showToast("Club created! +20 XP +20 RP");
-        window.location.href = `club.html?id=${club.id}`;
+        window.location.href = `club?id=${club.id}`;
       } catch (err) {
         showToast("Could not create club: " + err.message);
       }
