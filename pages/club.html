@@ -165,7 +165,7 @@
         await supabase.from("club_members").delete().eq("club_id", clubId);
         await supabase.from("clubs").delete().eq("id", clubId);
         showToast("Club deleted");
-        window.location.href = "clubs.html";
+        window.location.href = "clubs";
       } catch (err) {
         showToast("Could not delete club");
       }
