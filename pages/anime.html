@@ -612,18 +612,31 @@
     }
 
     // Open the streaming player modal for a given episode number.
-    function openStream(ep) {
+    async function openStream(ep) {
       const providers = getStreamingProviders();
       if (!providers.length) {
         showToast("Streaming isn't configured yet.");
         return;
       }
       const provider = providers[activeProviderIndex] || providers[0];
-      const url = JIKAN.streamingUrl(provider, {
+      let url = JIKAN.streamingUrl(provider, {
         mal_id: animeData?.mal_id,
         ep,
         title: JIKAN.title(animeData),
       });
+      // On-site embed provider: resolve the Archive.org item for this title
+      // and play it inside the page player (no redirect).
+      if (provider.id === "archive") {
+        showToast("Searching Archive.org…");
+        const item = await findArchiveItem(JIKAN.title(animeData));
+        if (!item) {
+          showToast("No on-site copy found on Archive.org — try a provider below.");
+          const slot = document.getElementById("watchSlot");
+          if (slot) slot.scrollIntoView({ behavior: "smooth", block: "center" });
+          return;
+        }
+        url = `https://archive.org/embed/${item}`;
+      }
       if (!url) {
         showToast("This provider could not build a link for this episode.");
         return;
@@ -632,6 +645,29 @@
       renderEpRow(listOfEpisodes());
       const title = (animeData?.title_english || animeData?.title || "Anime") + " — Episode " + ep;
       openStreamModal({ provider, url, title, ep });
+    }
+
+    // Find an Archive.org item whose title matches the anime. Tries a few
+    // query shapes (full title, series name) and prefers popular items.
+    async function findArchiveItem(title) {
+      const candidates = [title, title.replace(/\s*\([^)]*\)/g, "").trim()];
+      const tries = [];
+      candidates.forEach((t) => {
+        tries.push(`title:(${t}) AND mediatype:movies`);
+        tries.push(`(${t}) AND mediatype:movies`);
+      });
+      for (const q of tries) {
+        try {
+          const r = await fetch(
+            "https://archive.org/advancedsearch.php?q=" + encodeURIComponent(q) +
+            "&fl[]=identifier&rows=5&sort[]=downloads+desc&output=json", { cache: "force-cache" });
+          if (!r.ok) continue;
+          const j = await r.json();
+          const docs = j?.response?.docs || [];
+          if (docs.length) return docs[0].identifier;
+        } catch (e) {}
+      }
+      return null;
     }
 
     function listOfEpisodes() {
