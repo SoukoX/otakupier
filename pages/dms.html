@@ -193,6 +193,9 @@
           const m = payload.new;
           if ((m.sender_id === currentUser.id && m.recipient_id === activeUserId) ||
               (m.sender_id === activeUserId && m.recipient_id === currentUser.id)) {
+            // Skip the sender's own insert — sendDm() already re-renders the
+            // list, so showing it here too would duplicate the bubble.
+            if (m.sender_id === currentUser.id) return;
             renderDm(m);
             const box = document.getElementById("dmMessages");
             if (box) box.scrollTop = box.scrollHeight;
