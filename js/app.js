@@ -2,6 +2,54 @@
 
 const SUPABASE_READY = CONFIG.SUPABASE_URL.includes("YOUR-PROJECT-REF") ? false : true;
 
+// Clean URLs: hide the ".html" extension from the address bar so the live
+// site reads like a real app — "/" for home, "/pages/anime?id=5" instead of
+// "/pages/anime.html?id=5". GitHub Pages serves the clean path natively and
+// the custom 404 page forwards any stragglers on reload.
+function cleanUrl() {
+  try {
+    let path = window.location.pathname;
+    if (path.endsWith("index.html")) {
+      path = path.slice(0, -"index.html".length);
+      if (!path || path === "/") path = "/";
+    } else if (path.endsWith(".html")) {
+      path = path.slice(0, -5);
+    } else {
+      return;
+    }
+    history.replaceState(null, "", path + window.location.search + window.location.hash);
+  } catch (e) {}
+}
+cleanUrl();
+
+// Turn a local link into its clean (extensionless) form.
+// "pages/anime.html" -> "pages/anime", "index.html" -> "./", "../index.html" -> "../"
+function cleanHref(h) {
+  if (!h) return h;
+  let out = h.replace(/\.html(?=\?|#|$)/, "").replace(/index$/, "");
+  if (!out) return "./";
+  return out;
+}
+
+// Rewrite every in-page link that still points at a .html file (static
+// markup, onclick strings) to its clean form once the page is up.
+function cleanLinks() {
+  try {
+    document.querySelectorAll("a[href]").forEach((a) => {
+      const h = a.getAttribute("href");
+      if (!h || /^(https?:|#|\/\/)/.test(h)) return;
+      if (h.indexOf(".html") === -1) return;
+      a.setAttribute("href", cleanHref(h));
+    });
+    document.querySelectorAll("[onclick]").forEach((el) => {
+      const o = el.getAttribute("onclick");
+      if (o && o.indexOf(".html") !== -1) {
+        el.setAttribute("onclick", o.replace(/([\w./-]+)\.html(?=[?#'"`])/g, "$1"));
+      }
+    });
+  } catch (e) {}
+}
+
 let currentUser = null;
 let currentProfile = null;
 let unreadDms = 0;
@@ -173,7 +221,7 @@ function goBack() {
     return;
   }
   // Came from an external site, a new tab, or a direct link — go home.
-  location.href = pathPrefix() + "index.html";
+  location.href = pathPrefix() || "/";
 }
 
 const NAV_LINKS = [
@@ -187,7 +235,8 @@ const NAV_LINKS = [
 
 function linkHref(l) {
   const p = pathPrefix();
-  return l.inPages ? `${p}${l.href}` : `${p}${l.href.replace("pages/", "")}`;
+  const href = l.inPages ? l.href : l.href.replace("pages/", "");
+  return `${p}${cleanHref(href)}`;
 }
 
 function renderNav() {
@@ -195,8 +244,9 @@ function renderNav() {
   if (!nav) return;
 
   const p = pathPrefix();
-  const current = window.location.pathname.split("/").pop();
-  const isHome = current === "index.html" || current === "";
+  const raw = window.location.pathname.split("/").pop() || "";
+  const current = raw.replace(/\.html$/, "");
+  const isHome = current === "" || current === "index";
 
   const loggedLinks = isLoggedIn()
     ? NAV_LINKS.concat([
@@ -208,7 +258,7 @@ function renderNav() {
     : NAV_LINKS;
 
   const links = loggedLinks.map((l) => {
-    const active = current === l.file ? " active" : "";
+    const active = current === (l.file || "").replace(/\.html$/, "") ? " active" : "";
     const badge = l.label === "Messages" && unreadDms > 0
       ? `<span class="nav-badge" id="dmBadge">${unreadDms > 99 ? "99+" : unreadDms}</span>`
       : "";
@@ -219,22 +269,24 @@ function renderNav() {
     ? `<div class="user-menu">
          <span class="rp-badge" title="Reward Points — spend these in the Reward Shop">⛁ ${currentProfile?.rp || 0}</span>
          ${isAdmin()
-           ? `<a href="${p}pages/admin.html" class="btn btn-outline btn-small admin-btn" title="Admin panel">⚙ Admin</a>`
+           ? `<a href="${p}pages/admin" class="btn btn-outline btn-small admin-btn" title="Admin panel">⚙ Admin</a>`
            : ""}
-         <a href="${p}pages/profile.html" class="user-avatar" title="${JIKAN.esc(getProfile().name)}">${getProfile().avatar
+         <a href="${p}pages/profile" class="user-avatar" title="${JIKAN.esc(getProfile().name)}">${getProfile().avatar
          ? `<img src="${JIKAN.safeImg(getProfile().avatar)}" alt="">`
          : JIKAN.esc(getProfile().name.charAt(0).toUpperCase())}</a>
          <button class="btn btn-outline btn-small" onclick="logout()">Logout</button>
        </div>`
-    : `<a href="${p}pages/login.html" class="btn btn-outline btn-small">Login</a>
-       <a href="${p}pages/signup.html" class="btn btn-primary btn-small">Sign up</a>`;
+    : `<a href="${p}pages/login" class="btn btn-outline btn-small">Login</a>
+       <a href="${p}pages/signup" class="btn btn-primary btn-small">Sign up</a>`;
+
+  const homeHref = p ? p : "/";
 
   if (isHome) {
     // Home page: immersive full-page hero — no navbar bar. A floating
     // logo + menu button that reveals the links on demand.
     nav.className = "navbar navbar-home";
     nav.innerHTML = `
-      <a href="${p}index.html" class="logo logo-home"><span>Otaku</span>Pier</a>
+      <a href="${homeHref}" class="logo logo-home"><span>Otaku</span>Pier</a>
       <button class="nav-toggle nav-toggle-home" id="navToggle" aria-label="Toggle menu" aria-expanded="false">☰</button>
       <div class="nav-panel nav-panel-home">
         <ul class="nav-links">${links}</ul>
@@ -244,7 +296,7 @@ function renderNav() {
     nav.className = "navbar";
     nav.innerHTML = `
       <div class="navbar-inner">
-        <a href="${p}index.html" class="logo"><span>Otaku</span>Pier</a>
+        <a href="${homeHref}" class="logo"><span>Otaku</span>Pier</a>
         <button class="nav-toggle" id="navToggle" aria-label="Toggle menu" aria-expanded="false">☰</button>
         <div class="nav-panel">
           <ul class="nav-links">${links}</ul>
@@ -300,20 +352,20 @@ function renderFooter() {
   const p = pathPrefix();
   foot.innerHTML = `
     <div class="footer-links">
-      <a href="${p}index.html">Home</a>
-      <a href="${p}pages/catalog.html">Catalog</a>
-      <a href="${p}pages/forums.html">Forums</a>
-      <a href="${p}pages/clubs.html">Clubs</a>
-      <a href="${p}pages/rankings.html">Rankings</a>
-      <a href="${p}pages/chat.html">Chat</a>
-      ${isLoggedIn() ? `<a href="${p}pages/mylist.html">My List</a>
-      <a href="${p}pages/friends.html">Friends</a>
-      <a href="${p}pages/dms.html">Messages</a>
-      <a href="${p}pages/profile.html">Profile</a>
-      ${isAdmin() ? `<a href="${p}pages/admin.html">Admin</a>` : ""}
-      <a href="${p}pages/dms.html?with=admin">Contact admin</a>` : ""}
+      <a href="${p || "/"}">Home</a>
+      <a href="${p}pages/catalog">Catalog</a>
+      <a href="${p}pages/forums">Forums</a>
+      <a href="${p}pages/clubs">Clubs</a>
+      <a href="${p}pages/rankings">Rankings</a>
+      <a href="${p}pages/chat">Chat</a>
+      ${isLoggedIn() ? `<a href="${p}pages/mylist">My List</a>
+      <a href="${p}pages/friends">Friends</a>
+      <a href="${p}pages/dms">Messages</a>
+      <a href="${p}pages/profile">Profile</a>
+      ${isAdmin() ? `<a href="${p}pages/admin">Admin</a>` : ""}
+      <a href="${p}pages/dms?with=admin">Contact admin</a>` : ""}
     </div>
-    <p>&copy; ${new Date().getFullYear()} <a href="${p}index.html">${CONFIG.SITE_NAME}</a> — anime catalog &amp; community. Anime data via Jikan/MyAnimeList.</p>`;
+    <p>&copy; ${new Date().getFullYear()} <a href="${p || "/"}">${CONFIG.SITE_NAME}</a> — anime catalog &amp; community. Anime data via Jikan/MyAnimeList.</p>`;
 }
 
 // ---------- Auth UI helpers (shared across login/signup) ----------
@@ -486,7 +538,7 @@ function setupAuthForm(formId, mode) {
         btn.disabled = false;
         btn.textContent = original;
         showToast("An account with this email already exists. Try logging in instead.");
-        setTimeout(() => (window.location.href = pathPrefix() + "login.html"), 2200);
+        setTimeout(() => (window.location.href = pathPrefix() + "login"), 2200);
         return;
       }
 
@@ -496,14 +548,14 @@ function setupAuthForm(formId, mode) {
         // the user is already signed in — don't tell them to check their mail.
         if (res.data?.session) {
           showToast("Account created — welcome!");
-          setTimeout(() => (window.location.href = pathPrefix() + "index.html"), 700);
+          setTimeout(() => (window.location.href = pathPrefix() || "/"), 700);
         } else {
           showToast("Account created! Check your email to confirm.");
-          setTimeout(() => (window.location.href = pathPrefix() + "index.html"), 2500);
+          setTimeout(() => (window.location.href = pathPrefix() || "/"), 2500);
         }
       } else {
         showToast("Logged in!");
-        setTimeout(() => (window.location.href = pathPrefix() + "index.html"), 700);
+        setTimeout(() => (window.location.href = pathPrefix() || "/"), 700);
       }
     } catch (err) {
       const m = (err.message || "").toLowerCase();
@@ -800,29 +852,10 @@ async function fetchProfileRow(id) {
   return error ? null : data;
 }
 
-// Clean URLs: hide the ".html" extension from the address bar so the live
-// site reads like a real app — "/" for home, "/pages/anime?id=5" instead of
-// "/pages/anime.html?id=5". Reloads of the clean path are remapped by the
-// custom 404 page, which forwards to the real file.
-function cleanUrl() {
-  try {
-    let path = window.location.pathname;
-    if (path.endsWith("index.html")) {
-      path = path.slice(0, -"index.html".length);
-      if (!path || path === "/") path = "/";
-    } else if (path.endsWith(".html")) {
-      path = path.slice(0, -5);
-    } else {
-      return;
-    }
-    history.replaceState(null, "", path + window.location.search + window.location.hash);
-  } catch (e) {}
-}
-
 // Boot
 document.addEventListener("DOMContentLoaded", () => {
-  cleanUrl();
   renderNav();
   renderFooter();
+  cleanLinks();
   initSupabase();
 });
