@@ -53,12 +53,24 @@ const CONFIG = {
     // watch page for the title so the visitor can stream it there.
     { id: "youtube", name: "YouTube", mode: "link",
       url: "https://www.youtube.com/results?search_query={title}+episode+{ep_num}", enabled: true },
+    { id: "crunchyroll", name: "Crunchyroll", mode: "link",
+      url: "https://www.crunchyroll.com/search?q={title}", enabled: true },
+    { id: "netflix", name: "Netflix", mode: "link",
+      url: "https://www.netflix.com/search?q={title}", enabled: true },
     { id: "hidive", name: "HIDIVE", mode: "link",
       url: "https://www.hidive.com/search?q={title}", enabled: true },
     { id: "hulu", name: "Hulu", mode: "link",
       url: "https://www.hulu.com/search?q={title}", enabled: true },
     { id: "prime", name: "Prime Video", mode: "link",
       url: "https://www.primevideo.com/search/ref=atv_nb_sr?phrase={title}", enabled: true },
+    { id: "disney", name: "Disney+", mode: "link",
+      url: "https://www.disneyplus.com/search?q={title}", enabled: true },
+    { id: "max", name: "Max", mode: "link",
+      url: "https://www.max.com/search?q={title}", enabled: true },
+    { id: "apple", name: "Apple TV", mode: "link",
+      url: "https://tv.apple.com/search?q={title}", enabled: true },
+    { id: "vudu", name: "Fandango at Home", mode: "link",
+      url: "https://www.vudu.com/content/movies/search?q={title}", enabled: true },
 
     // On-site embed: plays inside the page player (no redirect). Archive.org
     // hosts public-domain / Creative Commons anime and its /embed player
