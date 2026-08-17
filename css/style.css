@@ -219,6 +219,18 @@ img {
   flex: 0 0 auto;
   white-space: nowrap;
   color: var(--text);
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.logo-img {
+  width: 44px;
+  height: 44px;
+  object-fit: contain;
+  border-radius: 12px;
+  box-shadow: 0 4px 16px rgba(230, 70, 92, 0.35);
+  flex: 0 0 auto;
 }
 
 .logo span {
