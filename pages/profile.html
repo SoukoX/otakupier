@@ -54,8 +54,10 @@
       const perks = await spendingsMap([userId]);
       const perk = perks[userId] || {};
       const profileBanner = perk.profile_banner ? "premium" : "default";
-      const rank = rankForXp(st.profile.xp);
-      const prog = xpProgress(st.profile.xp);
+      const rank = effectiveRank(st.profile);
+      const prog = st.profile.is_admin
+        ? { cur: rank, next: null, pct: 1 }
+        : xpProgress(st.profile.xp);
       const badges = badgesFor(st.profile, st.counts);
       const joined = new Date(st.profile.created_at).toLocaleDateString();
 
