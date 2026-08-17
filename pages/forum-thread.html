@@ -67,7 +67,8 @@
         if (author) {
           document.getElementById("rankTag").innerHTML = rankTag(thread.user_id, author);
           const nameEl = main.querySelector(".review-author a");
-          if (author.is_admin) nameEl.outerHTML = adminNameHTML(author);
+          const perks = await spendingsMap([thread.user_id]);
+          nameEl.outerHTML = `<a href="profile.html?id=${thread.user_id}" style="color:var(--text); text-decoration:none;">${prestigeNameHTML(author, perks[thread.user_id])}</a>`;
         }
         await loadReplies();
         renderReplyForm();
@@ -113,7 +114,8 @@
         if (p) {
           document.getElementById(`rtag-${r.id}`).innerHTML = rankTag(r.user_id, p);
           const nameEl = el.querySelector(".review-author a");
-          if (p.is_admin) nameEl.outerHTML = adminNameHTML(p);
+          const perks = await spendingsMap([r.user_id]);
+          nameEl.outerHTML = `<a href="profile.html?id=${r.user_id}" style="color:var(--text); text-decoration:none;">${prestigeNameHTML(p, perks[r.user_id])}</a>`;
         }
       }
     }
@@ -139,7 +141,8 @@
       try {
         await dbInsert("forum_replies", { thread_id: Number(threadId), user_id: currentUser.id, body });
         awardXp(5); // +5 XP per reply
-        showToast("Reply posted! +5 XP");
+        awardRp("forum_reply"); // +5 RP
+        showToast("Reply posted! +5 XP +5 RP");
         loadReplies();
         document.getElementById("replyBody").value = "";
       } catch (err) {
