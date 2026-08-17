@@ -227,7 +227,7 @@
     }
 
     function copyShareLink() {
-      const url = SEO.BASE + "/pages/anime.html?id=" + encodeURIComponent(animeData.mal_id);
+      const url = SEO.BASE + "/pages/anime?id=" + encodeURIComponent(animeData.mal_id);
       navigator.clipboard?.writeText(url).then(() => showToast("Link copied!")).catch(() => showToast("Could not copy link"));
     }
 
@@ -268,7 +268,7 @@
             <div class="title">${JIKAN.esc(r.name)}</div>
             <div class="jtitle" style="color:var(--accent-3);">${JIKAN.esc(r.relation)}</div>
           </div>`;
-        el.addEventListener("click", () => (window.location.href = `anime.html?id=${r.mal_id}`));
+        el.addEventListener("click", () => (window.location.href = `anime?id=${r.mal_id}`));
         grid.appendChild(el);
       });
       // Wait for the rest of the page to finish, then enrich the related cards.
@@ -735,7 +735,7 @@
             <div class="char-name">${JIKAN.esc(c.character.name)}</div>
             <div class="char-role">${c.role || ""}</div>
             ${vaName ? `<div class="char-role" style="color:var(--accent-3);">${JIKAN.esc(vaName)}</div>` : ""}`;
-          el.addEventListener("click", () => (window.location.href = `character.html?id=${c.character.mal_id}`));
+          el.addEventListener("click", () => (window.location.href = `character?id=${c.character.mal_id}`));
           grid.appendChild(el);
         });
         if (!res.data.length) grid.innerHTML = `<div class="empty-state">No characters listed.</div>`;
