@@ -844,7 +844,7 @@ function rankTag(userId, profile) {
   const admin = p.is_admin
     ? `<span class="admin-badge" title="Verified administrator">✓ Admin</span>`
     : "";
-  return `<span class="rank-tag" title="Rank: ${r.name}">${r.icon} ${r.name}</span>${admin}`;
+  return `<span class="rank-tag" title="${r.name}">${r.icon} ${r.name}</span>${admin}`;
 }
 
 // Admin name: red + verified badge, used everywhere users are displayed
