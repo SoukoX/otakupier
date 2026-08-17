@@ -63,7 +63,7 @@
     }
 
     async function fetchUser(id) {
-      const { data } = await supabase.from("profiles").select("name, xp, avatar_url").eq("id", id).maybeSingle();
+      const { data } = await supabase.from("profiles").select("name, xp, avatar_url, is_admin").eq("id", id).maybeSingle();
       return data;
     }
 
@@ -71,6 +71,19 @@
       const letter = (name || "U").charAt(0).toUpperCase();
       return `<div class="avatar">${avatar ? `<img src="${JIKAN.safeImg(avatar)}" alt="">` : letter}</div>
         <a href="profile.html?id=${userId}" style="color:var(--text); text-decoration:none; font-weight:600;">${JIKAN.esc(name || "User")}</a>`;
+    }
+
+    async function decorateRow(el, uid) {
+      if (!el) return;
+      const perks = await spendingsMap([uid]);
+      const perk = perks[uid] || {};
+      const av = el.querySelector(".avatar");
+      if (av && perk.avatar_ring) av.classList.add("avatar-ring");
+      const link = el.querySelector('a[href*="profile.html?id="]');
+      if (link && link.textContent.trim() && (perk.name_color || perk.vip_badge || perk.vip)) {
+        const prof = { name: link.textContent };
+        link.innerHTML = prestigeNameHTML(prof, perk);
+      }
     }
 
     async function renderRequests(list) {
@@ -89,6 +102,7 @@
           </div>`;
         slot.appendChild(el);
         if (p) el.querySelector(`#tag-${f.id}`).innerHTML = rankTag(f.requester_id, p);
+        decorateRow(el, f.requester_id);
       }
     }
 
@@ -110,6 +124,7 @@
           </div>`;
         slot.appendChild(el);
         if (p) el.querySelector(`#tag-${otherId}`).innerHTML = rankTag(otherId, p);
+        decorateRow(el, otherId);
       }
     }
 
@@ -158,7 +173,7 @@
         el.innerHTML = `
           <div class="avatar">${u.avatar_url ? `<img src="${JIKAN.safeImg(u.avatar_url)}" alt="">` : (u.name || "U").charAt(0).toUpperCase()}</div>
           <div style="flex:1; min-width:0;">
-            ${u.is_admin ? adminNameHTML(u) : `<a href="profile.html?id=${u.id}" style="color:var(--text); text-decoration:none; font-weight:600;">${JIKAN.esc(u.name || "User")}</a>`}
+            <a href="profile.html?id=${u.id}" style="color:var(--text); text-decoration:none; font-weight:600;">${prestigeNameHTML(u, {})}</a>
             <div style="font-size:.75rem; color:var(--text-dim);">${rankForXp(u.xp).icon} ${rankForXp(u.xp).name}</div>
           </div>
           <span id="resTag-${u.id}"></span>
@@ -168,6 +183,7 @@
           </div>`;
         box.appendChild(el);
         renderSearchFriendBtn(u, el);
+        decorateRow(el, u.id);
       }
     }
 
@@ -214,8 +230,9 @@
     async function acceptFriendReqByName(fid) {
       try {
         await supabase.from("friendships").update({ status: "accepted" }).eq("id", fid);
-        showToast("You are now friends! +10 XP");
+        showToast("You are now friends! +10 XP +10 RP");
         awardXp(10);
+        awardRp("friend");
         searchUsers();
       } catch (err) {
         showToast("Could not accept");
@@ -227,7 +244,8 @@
         await supabase.from("friendships").update({ status }).eq("id", fid);
         if (status === "accepted") {
           awardXp(10);
-          showToast("You are now friends! +10 XP");
+          awardRp("friend");
+          showToast("You are now friends! +10 XP +10 RP");
         } else {
           showToast("Request declined");
         }
