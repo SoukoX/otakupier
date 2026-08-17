@@ -76,6 +76,7 @@
               ${rankTag(userId, st.profile)}
               <span style="color:var(--text-dim); font-size:.85rem;">Joined ${joined}</span>
             </div>
+            <div style="color:var(--text-dim); font-size:.75rem; margin-top:2px;">ID: <code style="font-size:.72rem; word-break:break-all;">${JIKAN.esc(userId)}</code></div>
             ${st.profile.bio ? `<p style="margin:10px 0 0; color:var(--text-dim);">${JIKAN.esc(st.profile.bio)}</p>` : ""}
             <div class="stat-strip">
               <div class="stat"><b>${st.counts.reviews}</b> reviews</div>
