@@ -800,3 +800,265 @@ create index if not exists idx_custom_anime_created on public.custom_anime (crea
 --     (email is not a column here — match by id instead):
 --     update public.profiles set is_admin = true
 --     where id = (select id from auth.users where email = 'YOUR-EMAIL@example.com');
+
+-- 16. Reward Points economy ("RP")
+-- RP is a spendable community currency, separate from XP (which is a pure
+-- progression stat). Users EARN RP for valuable contributions and SPEND it
+-- in the Reward Shop on prestige & power perks (name colors, VIP badge,
+-- golden avatar ring, voting power, chat glow, custom titles, banners).
+--
+--   profiles.rp         -> current spendable balance
+--   profiles.rp_earned  -> lifetime earned (used for shop tier / history)
+--   reward_transactions -> immutable ledger of every +/- RP movement
+--   spendings           -> what the user has purchased (with expiry)
+--
+-- Clients never write rp / rp_earned / ledger rows directly: only the
+-- SECURITY DEFINER functions below may touch them (mirrors the XP system).
+alter table public.profiles add column if not exists rp integer default 0;
+alter table public.profiles add column if not exists rp_earned integer default 0;
+
+create table if not exists public.reward_transactions (
+  id bigint generated always as identity primary key,
+  user_id uuid references auth.users on delete cascade not null,
+  amount integer not null,
+  reason text not null default '',
+  item_id text,
+  created_at timestamptz default now()
+);
+
+create table if not exists public.spendings (
+  id bigint generated always as identity primary key,
+  user_id uuid references auth.users on delete cascade not null,
+  item_id text not null,
+  config text default '',
+  price integer not null default 0,
+  active boolean default true,
+  expires_at timestamptz,
+  purchased_at timestamptz default now(),
+  unique (user_id, item_id)
+);
+
+-- 16b. EARN points. (amount, reason) must match a whitelisted pair so the
+-- public API can't farm arbitrary RP; each reason also has a daily cap
+-- (counted from today's ledger) to throttle spam (chat, likes, etc.).
+create or replace function public.add_rp(amount integer, reason text default '')
+returns void
+language plpgsql
+security definer set search_path = public
+as $$
+declare
+  cap integer;
+  used integer;
+begin
+  if auth.uid() is null then return; end if;
+  cap := case
+    when reason = 'review'    and amount = 10 then 5
+    when reason = 'reply'     and amount = 5  then 15
+    when reason = 'vote'      and amount = 5  then 10
+    when reason = 'save'      and amount = 3  then 15
+    when reason = 'thread'    and amount = 15 then 3
+    when reason = 'forum_reply' and amount = 5 then 15
+    when reason = 'club'      and amount = 20 then 2
+    when reason = 'club_join' and amount = 10 then 5
+    when reason = 'club_post' and amount = 5  then 10
+    when reason = 'friend'    and amount = 10 then 5
+    when reason = 'chat'      and amount = 1  then 50
+    when reason = 'link_approved' and amount = 25 then 5
+    else 0
+  end;
+  if cap = 0 then return; end if;
+  select count(*) into used from public.reward_transactions rt
+    where rt.user_id = auth.uid() and rt.reason = add_rp.reason and rt.amount > 0
+      and rt.created_at > date_trunc('day', now());
+  if used >= cap then return; end if;
+  update public.profiles set rp = rp + amount, rp_earned = rp_earned + amount
+    where id = auth.uid();
+  insert into public.reward_transactions (user_id, amount, reason)
+    values (auth.uid(), amount, reason);
+end;
+$$;
+revoke execute on function public.add_rp(integer, text) from public;
+grant execute on function public.add_rp(integer, text) to authenticated;
+
+-- 16c. Award RP to a SPECIFIC user (used for "review like received" etc.).
+-- Rejects self-awards (no self-farm) and only accepts whitelisted amounts.
+create or replace function public.award_rp_to(recipient uuid, amount integer, reason text default 'like_received')
+returns void
+language plpgsql
+security definer set search_path = public
+as $$
+declare
+  used integer;
+begin
+  if recipient is null or auth.uid() is null then return; end if;
+  if recipient = auth.uid() then return; end if;
+  if reason <> 'like_received' or amount not in (5) then return; end if;
+  select count(*) into used from public.reward_transactions rt
+    where rt.user_id = recipient and rt.reason = award_rp_to.reason and rt.amount > 0
+      and rt.created_at > date_trunc('day', now());
+  if used >= 20 then return; end if;
+  update public.profiles set rp = rp + amount, rp_earned = rp_earned + amount
+    where id = recipient;
+  insert into public.reward_transactions (user_id, amount, reason)
+    values (recipient, amount, reason);
+end;
+$$;
+revoke execute on function public.award_rp_to(uuid, integer, text) from public;
+grant execute on function public.award_rp_to(uuid, integer, text) to authenticated;
+
+-- 16d. SPEND points in the Reward Shop. Pricing lives in this function so the
+-- client can't set its own prices. Returns 'ok' or an error message.
+create or replace function public.spend_rp(item_id text, config text default '')
+returns text
+language plpgsql
+security definer set search_path = public
+as $$
+declare
+  price integer;
+  balance integer;
+  duration interval;
+  new_exp timestamptz;
+  existing_exp timestamptz;
+begin
+  if auth.uid() is null then return 'not logged in'; end if;
+  price := 0; duration := null;
+  case item_id
+    when 'name_color'    then price := 300; duration := null;
+    when 'custom_title'  then price := 500; duration := null;
+    when 'vote_power'    then price := 400; duration := interval '30 days';
+    when 'vip_badge'     then price := 800; duration := null;
+    when 'avatar_ring'   then price := 600; duration := null;
+    when 'profile_banner' then price := 700; duration := null;
+    when 'chat_glow'     then price := 350; duration := interval '30 days';
+    else return 'unknown item';
+  end case;
+  if price = 0 then return 'unknown item'; end if;
+  if item_id = 'name_color' and config !~ '^#[0-9a-fA-F]{6}$' then return 'invalid color'; end if;
+  if item_id = 'custom_title' and char_length(config) > 24 then return 'title too long'; end if;
+  select rp into balance from public.profiles where id = auth.uid();
+  if balance is null or balance < price then return 'not enough points'; end if;
+  update public.profiles set rp = rp - price where id = auth.uid();
+  -- Extend existing timed purchases instead of piling duplicates.
+  if duration is not null then
+    select expires_at into existing_exp from public.spendings
+      where user_id = auth.uid() and item_id = item_id;
+    new_exp := now() + duration;
+    if existing_exp is not null and existing_exp > now() then
+      new_exp := existing_exp + duration;
+    end if;
+    insert into public.spendings (user_id, item_id, config, price, active, expires_at)
+      values (auth.uid(), item_id, config, price, true, new_exp)
+    on conflict (user_id, item_id) do update
+      set active = true, expires_at = excluded.expires_at, price = excluded.price, config = excluded.config;
+  else
+    insert into public.spendings (user_id, item_id, config, price, active, expires_at)
+      values (auth.uid(), item_id, config, price, true, null)
+    on conflict (user_id, item_id) do update
+      set active = true, expires_at = null, price = excluded.price, config = excluded.config;
+  end if;
+  insert into public.reward_transactions (user_id, amount, reason, item_id)
+    values (auth.uid(), -price, 'spend:' || item_id, item_id);
+  return 'ok';
+end;
+$$;
+revoke execute on function public.spend_rp(text, text) from public;
+grant execute on function public.spend_rp(text, text) to authenticated;
+
+-- 16e. Change the config of an item you already own (name color hex,
+-- custom title text). Owner-only; validates input server-side.
+create or replace function public.set_rp_config(item_id text, config text default '')
+returns text
+language plpgsql
+security definer set search_path = public
+as $$
+begin
+  if auth.uid() is null then return 'not logged in'; end if;
+  if item_id = 'name_color' and config !~ '^#[0-9a-fA-F]{6}$' then return 'invalid color'; end if;
+  if item_id = 'custom_title' and char_length(config) > 24 then return 'title too long'; end if;
+  if not exists (
+    select 1 from public.spendings
+    where user_id = auth.uid() and item_id = item_id and active
+      and (expires_at is null or expires_at > now())
+  ) then return 'not owned'; end if;
+  update public.spendings set config = config
+    where user_id = auth.uid() and item_id = item_id;
+  return 'ok';
+end;
+$$;
+revoke execute on function public.set_rp_config(text, text) from public;
+grant execute on function public.set_rp_config(text, text) to authenticated;
+
+-- 16f. Admin tool: grant OR claw back points on any user (negative amount
+-- removes). Admin-only, keeps rp_earned monotonic for positive grants.
+create or replace function public.grant_rp(target uuid, amount integer, reason text default 'admin')
+returns text
+language plpgsql
+security definer set search_path = public
+as $$
+declare
+  isadmin boolean;
+begin
+  if auth.uid() is null then return 'not logged in'; end if;
+  select is_admin into isadmin from public.profiles where id = auth.uid();
+  if isadmin is distinct from true then return 'admin only'; end if;
+  if target is null or amount = 0 then return 'invalid'; end if;
+  if amount > 0 then
+    update public.profiles set rp = rp + amount, rp_earned = rp_earned + amount
+      where id = target;
+  else
+    update public.profiles set rp = greatest(rp + amount, 0) where id = target;
+  end if;
+  insert into public.reward_transactions (user_id, amount, reason)
+    values (target, amount, 'admin:' || coalesce(reason, 'adjust'));
+  return 'ok';
+end;
+$$;
+revoke execute on function public.grant_rp(uuid, integer, text) from public;
+grant execute on function public.grant_rp(uuid, integer, text) to authenticated;
+
+-- 16g. Deactivate timed purchases that have expired. Callable by any
+-- authenticated user; harmless + keeps reads clean.
+create or replace function public.cleanup_spendings()
+returns void
+language plpgsql
+security definer set search_path = public
+as $$
+begin
+  if auth.uid() is null then return; end if;
+  update public.spendings set active = false
+    where active and expires_at is not null and expires_at <= now();
+end;
+$$;
+revoke execute on function public.cleanup_spendings() from public;
+grant execute on function public.cleanup_spendings() to authenticated;
+
+-- 16h. RLS for the reward tables + protect profiles.rp columns.
+alter table public.reward_transactions enable row level security;
+alter table public.spendings enable row level security;
+
+drop policy if exists "Users see their own reward transactions" on public.reward_transactions;
+create policy "Users see their own reward transactions"
+  on public.reward_transactions for select using (auth.uid() = user_id);
+
+drop policy if exists "Admins see all reward transactions" on public.reward_transactions;
+create policy "Admins see all reward transactions"
+  on public.reward_transactions for select
+  using (exists (select 1 from public.profiles p where p.id = auth.uid() and p.is_admin));
+
+-- Ledger rows are written ONLY by the SECURITY DEFINER functions above.
+revoke insert, update, delete on public.reward_transactions from anon, authenticated;
+
+-- Everyone can read spendings (prestige is public — that's the point).
+drop policy if exists "Spendings are viewable by everyone" on public.spendings;
+create policy "Spendings are viewable by everyone"
+  on public.spendings for select using (true);
+
+-- Purchases are created ONLY by spend_rp().
+revoke insert, update, delete on public.spendings from anon, authenticated;
+
+-- Nobody edits rp / rp_earned directly (mirrors xp protection).
+revoke update (rp, rp_earned) on public.profiles from anon, authenticated;
+
+-- Indexes for reward queries.
+create index if not exists idx_rp_tx_user on public.reward_transactions (user_id, created_at desc);
+create index if not exists idx_spendings_user on public.spendings (user_id);
