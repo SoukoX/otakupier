@@ -64,6 +64,38 @@ img {
   align-items: center;
   justify-content: space-between;
   gap: 16px;
+  position: relative;
+}
+
+.nav-toggle {
+  display: none;
+  flex: 0 0 auto;
+  width: 40px;
+  height: 40px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--bg-card);
+  color: var(--text);
+  font-size: 1.25rem;
+  line-height: 1;
+  cursor: pointer;
+  align-items: center;
+  justify-content: center;
+  font-family: inherit;
+  transition: border-color 0.2s, background 0.2s;
+}
+
+.nav-toggle:hover {
+  border-color: var(--accent);
+  background: var(--bg-hover);
+}
+
+.nav-panel {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  flex: 1;
+  min-width: 0;
 }
 
 .logo {
@@ -1495,6 +1527,16 @@ footer .footer-links {
 }
 
 /* ---------- Responsive ---------- */
+@media (max-width: 960px) {
+  .container {
+    padding: 18px 16px;
+  }
+
+  .navbar-inner {
+    padding: 0 14px;
+  }
+}
+
 @media (max-width: 720px) {
   .detail-header {
     grid-template-columns: 1fr;
@@ -1503,11 +1545,6 @@ footer .footer-links {
   .detail-poster {
     max-width: 260px;
     margin: 0 auto;
-  }
-
-  .nav-links a {
-    padding: 8px 10px;
-    font-size: 0.9rem;
   }
 
   .grid {
@@ -1521,6 +1558,207 @@ footer .footer-links {
 
   .rank-thumb {
     width: 50px;
+  }
+
+  .nav-toggle {
+    display: inline-flex;
+  }
+
+  .nav-panel {
+    position: fixed;
+    top: 62px;
+    left: 0;
+    right: 0;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 0;
+    background: var(--bg-alt);
+    border-bottom: 1px solid var(--border);
+    box-shadow: var(--shadow);
+    padding: 8px 14px 16px;
+    max-height: calc(100vh - 62px);
+    overflow-y: auto;
+    transform: translateY(-8px);
+    opacity: 0;
+    visibility: hidden;
+    pointer-events: none;
+    transition: opacity 0.2s, transform 0.2s, visibility 0.2s;
+    z-index: 60;
+  }
+
+  .navbar.open .nav-panel {
+    transform: translateY(0);
+    opacity: 1;
+    visibility: visible;
+    pointer-events: auto;
+  }
+
+  .nav-links {
+    flex-direction: column;
+    align-items: stretch;
+    overflow-x: visible;
+    flex: none;
+  }
+
+  .nav-links a {
+    display: block;
+    padding: 11px 12px;
+    font-size: 0.95rem;
+  }
+
+  .nav-auth {
+    margin-left: 0;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 8px;
+    border-top: 1px solid var(--border);
+    margin-top: 8px;
+    padding-top: 12px;
+  }
+
+  .nav-auth .btn,
+  .nav-auth .user-menu {
+    width: 100%;
+  }
+
+  .nav-auth .user-menu {
+    flex-wrap: wrap;
+  }
+
+  .user-menu .btn {
+    flex: 1;
+  }
+
+  .hero {
+    padding: 36px 16px 30px;
+  }
+
+  .hero p {
+    font-size: 1rem;
+  }
+
+  .section-head {
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+
+  .pagination {
+    gap: 10px;
+  }
+
+  .auth-wrap {
+    margin: 20px 14px;
+    padding: 22px 18px;
+  }
+
+  .chat-layout {
+    height: calc(100vh - 160px);
+    min-height: 320px;
+  }
+
+  .dm-thread {
+    height: calc(100vh - 160px);
+  }
+
+  .msg {
+    max-width: 95%;
+  }
+
+  .dm-bubble {
+    max-width: 85%;
+  }
+
+  .watch-add-form {
+    flex-direction: column;
+  }
+
+  .watch-add-form input {
+    min-width: 0;
+    width: 100%;
+  }
+
+  .watch-add-form .btn {
+    width: 100%;
+  }
+
+  .review-reply {
+    margin-left: 10px;
+    padding-left: 10px;
+  }
+
+  .profile-card {
+    padding: 18px;
+  }
+
+  .admin-list-item .grow {
+    min-width: 120px;
+  }
+
+  .stream-modal-overlay {
+    padding: 10px;
+  }
+
+  .stream-modal {
+    padding: 10px;
+  }
+
+  .ep-list {
+    grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+  }
+
+  .char-grid {
+    grid-template-columns: repeat(auto-fill, minmax(110px, 1fr));
+    gap: 10px;
+  }
+
+  .shop-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .reward-balance > div {
+    min-width: 120px;
+  }
+
+  .tx-row {
+    flex-wrap: wrap;
+    gap: 4px;
+  }
+}
+
+@media (max-width: 420px) {
+  .grid {
+    grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+    gap: 10px;
+  }
+
+  .anime-card .info {
+    padding: 8px 10px;
+  }
+
+  .anime-card .title {
+    font-size: 0.82rem;
+  }
+
+  .logo {
+    font-size: 1.15rem;
+  }
+
+  .nav-auth .user-menu {
+    gap: 6px;
+  }
+
+  .footer-links {
+    flex-wrap: wrap;
+    gap: 12px;
+  }
+
+  .detail-stats .stat {
+    font-size: 0.78rem;
+    padding: 6px 10px;
+  }
+
+  .btn {
+    padding: 10px 14px;
   }
 }
 
@@ -1755,3 +1993,199 @@ footer .footer-links {
   color: var(--accent-3);
   border-color: var(--accent);
 }
+
+/* ---------- Reward Points economy ---------- */
+.rp-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 9px;
+  border-radius: 999px;
+  background: linear-gradient(135deg, rgba(255, 196, 0, 0.16), rgba(255, 92, 138, 0.12));
+  border: 1px solid rgba(255, 196, 0, 0.45);
+  color: #ffd54a;
+  font-size: 0.75rem;
+  font-weight: 800;
+  margin-left: 6px;
+  white-space: nowrap;
+}
+
+.vip-badge {
+  display: inline-block;
+  font-size: 0.62rem;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  color: #fff;
+  background: linear-gradient(135deg, #ffd54a, #ff8a00);
+  padding: 1px 7px;
+  border-radius: 999px;
+  margin-left: 5px;
+  vertical-align: middle;
+  box-shadow: 0 0 10px rgba(255, 213, 74, 0.45);
+  white-space: nowrap;
+}
+
+.avatar-ring {
+  position: relative;
+  box-shadow: 0 0 0 2.5px var(--bg-card), 0 0 0 4px #ffd54a, 0 0 14px rgba(255, 213, 74, 0.55);
+}
+
+.custom-title {
+  display: inline-block;
+  font-size: 0.82rem;
+  font-weight: 700;
+  color: var(--accent-3);
+  background: rgba(0, 212, 168, 0.12);
+  border: 1px solid rgba(0, 212, 168, 0.35);
+  padding: 2px 10px;
+  border-radius: 999px;
+  margin: 2px 0 8px;
+}
+
+/* Profile banner (prestige perk) */
+.profile-banner {
+  height: 90px;
+  border-radius: var(--radius) var(--radius) 0 0;
+  margin-bottom: -18px;
+  border: 1px solid var(--border);
+  border-bottom: none;
+  background: linear-gradient(135deg, var(--bg-alt), var(--bg-card));
+}
+.profile-banner.banner-premium {
+  background: linear-gradient(120deg, #3b1d4f, #7c5cff 40%, #ff5c8a 70%, #ffb03a);
+  box-shadow: inset 0 0 40px rgba(0, 0, 0, 0.25);
+  border-color: rgba(124, 92, 255, 0.5);
+}
+.profile-banner.banner-default {
+  display: none;
+}
+
+/* Reward Shop */
+.reward-balance {
+  display: flex;
+  gap: 14px;
+  flex-wrap: wrap;
+  margin-bottom: 14px;
+}
+.reward-balance > div {
+  flex: 1;
+  min-width: 140px;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 14px 18px;
+  text-align: center;
+}
+.reward-balance span {
+  display: block;
+  font-size: 1.6rem;
+  font-weight: 800;
+  color: #ffd54a;
+}
+.reward-balance small {
+  color: var(--text-dim);
+  font-size: 0.78rem;
+}
+
+.shop-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 14px;
+}
+.shop-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  transition: border-color 0.2s, transform 0.2s;
+}
+.shop-card:hover {
+  border-color: rgba(255, 213, 74, 0.4);
+  transform: translateY(-2px);
+}
+.shop-icon {
+  font-size: 1.6rem;
+  line-height: 1;
+}
+.shop-name {
+  font-weight: 800;
+  font-size: 0.98rem;
+}
+.shop-desc {
+  color: var(--text-dim);
+  font-size: 0.82rem;
+  flex: 1;
+}
+.shop-meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 2px;
+}
+.shop-price {
+  font-weight: 800;
+  color: #ffd54a;
+}
+.shop-duration {
+  font-size: 0.72rem;
+  color: var(--text-dim);
+  background: var(--bg-alt);
+  border: 1px solid var(--border);
+  padding: 2px 8px;
+  border-radius: 999px;
+}
+.shop-owned {
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: var(--accent-3);
+  text-align: center;
+}
+
+.config-editor {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.tx-list {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 6px 14px;
+}
+.tx-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 9px 0;
+  border-bottom: 1px solid var(--border);
+  font-size: 0.88rem;
+}
+.tx-row:last-child {
+  border-bottom: none;
+}
+.tx-row > span:first-child {
+  font-weight: 800;
+  color: var(--accent-3);
+  min-width: 62px;
+}
+.tx-reason {
+  flex: 1;
+  color: var(--text);
+}
+.tx-date {
+  color: var(--text-dim);
+  font-size: 0.78rem;
+}
+
+/* Reward Shop admin helpers */
+.admin-rp-form {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
