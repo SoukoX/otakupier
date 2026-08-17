@@ -2027,7 +2027,7 @@ footer .footer-links {
 
 .avatar-ring {
   position: relative;
-  box-shadow: 0 0 0 2.5px var(--bg-card), 0 0 0 4px #ffd54a, 0 0 14px rgba(255, 213, 74, 0.55);
+  box-shadow: 0 0 0 2px var(--bg-card), 0 0 0 2.5px rgba(124, 92, 255, 0.85), 0 0 10px rgba(124, 92, 255, 0.35);
 }
 
 .custom-title {
