@@ -526,7 +526,7 @@
       const input = (document.getElementById("rpUid")?.value || "").trim();
       const amount = parseInt(document.getElementById("rpAmount")?.value, 10);
       if (!input) { showToast("Enter a user ID or name"); return; }
-      if (!amount || Math.abs(amount) > 100000) { showToast("Enter a valid amount (-100000 to 100000)"); return; }
+      if (!amount || Math.abs(amount) > 1000000) { showToast("Enter a valid amount (-1000000 to 1000000)"); return; }
       try {
         let target = input;
         const uuidRe = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
