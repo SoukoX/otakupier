@@ -579,18 +579,18 @@ async function awardXp(amount) {
 // Whitelisted (reason -> amount) pairs that map 1:1 to add_rp() server-side.
 // Keep in sync with the SQL whitelist in supabase_schema.sql.
 const RP_REWARDS = {
-  review: 10,
-  reply: 5,
-  vote: 5,
-  save: 3,
-  thread: 15,
-  forum_reply: 5,
-  club: 20,
-  club_join: 10,
-  club_post: 5,
-  friend: 10,
+  review: 2,
+  reply: 1,
+  vote: 1,
+  save: 1,
+  thread: 3,
+  forum_reply: 1,
+  club: 5,
+  club_join: 2,
+  club_post: 1,
+  friend: 2,
   chat: 1,
-  link_approved: 25,
+  link_approved: 10,
 };
 
 // Award RP to the current user for a known action (fire-and-forget).
@@ -680,13 +680,13 @@ function prestigeNameHTML(profile, perks, opts) {
 
 // The shop catalog (single source of truth used by profile + admin).
 const RP_SHOP = [
-  { id: "name_color", name: "Name Color", icon: "🎨", price: 300, duration: null, desc: "Pick a custom color for your name everywhere on the site." },
-  { id: "custom_title", name: "Custom Title", icon: "🏷️", price: 500, duration: null, desc: "A custom title shown under your name (max 24 chars)." },
-  { id: "vip_badge", name: "VIP Badge", icon: "💎", price: 500000, duration: null, desc: "A shining VIP badge next to your name site-wide." },
-  { id: "avatar_ring", name: "Golden Avatar Ring", icon: "👑", price: 600, duration: null, desc: "A golden ring around your avatar on chat, DMs & reviews." },
-  { id: "chat_glow", name: "Chat Glow", icon: "✨", price: 350, duration: "30 days", desc: "Your chat messages always glow with VIP styling." },
-  { id: "vote_power", name: "Voting Power 2x", icon: "🗳️", price: 400, duration: "30 days", desc: "Your community votes count 2x in the OtakuPier rating." },
-  { id: "profile_banner", name: "Profile Banner", icon: "🖼️", price: 700, duration: null, desc: "A special banner at the top of your profile page." },
+  { id: "name_color", name: "Name Color", icon: "🎨", price: 15000, duration: null, desc: "Pick a custom color for your name everywhere on the site." },
+  { id: "custom_title", name: "Custom Title", icon: "🏷️", price: 25000, duration: null, desc: "A custom title shown under your name (max 24 chars)." },
+  { id: "vip_badge", name: "VIP Badge", icon: "💎", price: 500000, duration: null, desc: "The ultimate status — a shining VIP badge next to your name site-wide." },
+  { id: "avatar_ring", name: "Golden Avatar Ring", icon: "👑", price: 40000, duration: null, desc: "A golden ring around your avatar on chat, DMs & reviews." },
+  { id: "chat_glow", name: "Chat Glow", icon: "✨", price: 8000, duration: "30 days", desc: "Your chat messages always glow with VIP styling." },
+  { id: "vote_power", name: "Voting Power 2x", icon: "🗳️", price: 10000, duration: "30 days", desc: "Your community votes count 2x in the OtakuPier rating." },
+  { id: "profile_banner", name: "Profile Banner", icon: "🖼️", price: 50000, duration: null, desc: "A special banner at the top of your profile page." },
 ];
 
 function rpShopItem(id) {
