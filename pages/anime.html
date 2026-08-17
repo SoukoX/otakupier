@@ -588,14 +588,14 @@
         c.classList.toggle("is-active", idx === i));
     }
 
-    // Hero "▶ Watch Now" — streams ON THIS SITE using an embeddable (legal)
-    // third-party player. No redirects: the provider plays inside the page.
-    // The "Links to Watch" panel below is the section that opens external
-    // providers in a new tab.
+    // Hero "▶ Watch Now" — asks which provider to use. On-site (embed)
+    // providers open the dedicated Watch page which plays right in the page
+    // player; link providers open the provider's watch/search page in a new
+    // tab.
     function startWatching() {
-      const embed = getStreamingProviders().filter((p) => p.mode === "embed");
-      if (!embed.length) {
-        showToast("No on-site streaming is configured for this title.");
+      const providers = getStreamingProviders();
+      if (!providers.length) {
+        showToast("Streaming isn't configured yet.");
         return;
       }
       const btn = document.getElementById("watchNowBtn");
@@ -604,22 +604,23 @@
     }
 
     function showProviderPicker() {
-      const embed = getStreamingProviders().filter((p) => p.mode === "embed");
+      const providers = getStreamingProviders();
       const title = JIKAN.title(animeData) || "Anime";
       closeStreamModal();
       const overlay = document.createElement("div");
       overlay.className = "stream-modal-overlay";
-      const rows = embed.length
-        ? embed.map((p, i) => `
-        <button class="provider-pick" onclick="pickProviderAndWatch(${i})">
-          <span class="provider-pick-name">${JIKAN.esc(p.name)}</span>
-          <span class="watch-pill">Plays on-site</span>
-        </button>`).join("")
-        : `<div class="stream-notice">No on-site player is available for this title. Use the "Links to Watch" panel below for external providers.</div>`;
+      const rows = providers.map((p, i) => {
+        const tag = p.mode === "embed"
+          ? `<span class="watch-pill">Plays on-site</span>`
+          : `<span class="watch-pill watch-pill-out">Opens in new tab</span>`;
+        return `<button class="provider-pick" onclick="pickProvider(${i})">
+          <span class="provider-pick-name">${JIKAN.esc(p.name)}</span>${tag}
+        </button>`;
+      }).join("");
       overlay.innerHTML = `
         <div class="stream-modal" role="dialog" aria-modal="true" aria-label="Choose a provider">
           <div class="stream-modal-head">
-            <div class="stream-modal-title">Pick a provider</div>
+            <div class="stream-modal-title">Watch &ldquo;${JIKAN.esc(title)}&rdquo; — pick a provider</div>
             <button class="stream-modal-close" onclick="closeStreamModal()" aria-label="Close">&times;</button>
           </div>
           <div class="provider-pick-list">${rows}</div>
@@ -632,13 +633,25 @@
       document.body.appendChild(overlay);
     }
 
-    function pickProviderAndWatch(i) {
-      const embed = getStreamingProviders().filter((p) => p.mode === "embed");
-      const p = embed[i];
+    function pickProvider(i) {
+      const providers = getStreamingProviders();
+      const p = providers[i];
       if (!p) return;
-      activeProviderIndex = getStreamingProviders().findIndex((x) => x.id === p.id);
       closeStreamModal();
-      openStream(1);
+      if (p.mode === "embed") {
+        window.location.href = `${pageHref("watch")}?id=${animeData?.mal_id}&provider=${encodeURIComponent(p.id)}`;
+        return;
+      }
+      const url = JIKAN.streamingUrl(p, {
+        mal_id: animeData?.mal_id,
+        ep: 1,
+        title: JIKAN.title(animeData),
+      });
+      if (url) {
+        window.open(url, "_blank", "noopener");
+      } else {
+        showToast("This provider could not build a link for this title.");
+      }
     }
 
     // Open the streaming player modal for a given episode number.
@@ -678,24 +691,29 @@
     }
 
     // Find an Archive.org item whose title matches the anime. Tries a few
-    // query shapes (full title, series name) and prefers popular items.
+    // query shapes (alphanumeric-clean title first to dodge Solr special
+    // chars, then the full title phrase) and prefers popular items.
     async function findArchiveItem(title) {
-      const candidates = [title, title.replace(/\s*\([^)]*\)/g, "").trim()];
-      const tries = [];
-      candidates.forEach((t) => {
-        tries.push(`title:(${t}) AND mediatype:movies`);
-        tries.push(`(${t}) AND mediatype:movies`);
-      });
-      for (const q of tries) {
-        try {
-          const r = await fetch(
-            "https://archive.org/advancedsearch.php?q=" + encodeURIComponent(q) +
-            "&fl[]=identifier&rows=5&sort[]=downloads+desc&output=json", { cache: "force-cache" });
-          if (!r.ok) continue;
-          const j = await r.json();
-          const docs = j?.response?.docs || [];
-          if (docs.length) return docs[0].identifier;
-        } catch (e) {}
+      const base = title.replace(/\s*\([^)]*\)\s*/g, " ").trim();
+      const clean = base.replace(/[^\p{L}\p{N}\s]/gu, " ").replace(/\s+/g, " ").trim();
+      const variants = [clean, base, title];
+      const seen = new Set();
+      for (const t of variants) {
+        if (!t || seen.has(t)) continue;
+        seen.add(t);
+        const phrase = '"' + t.replace(/"/g, "\\\"") + '"';
+        const queries = [`title:${phrase} AND mediatype:movies`, `${phrase} AND mediatype:movies`];
+        for (const q of queries) {
+          try {
+            const r = await fetch(
+              "https://archive.org/advancedsearch.php?q=" + encodeURIComponent(q) +
+              "&fl[]=identifier&rows=5&sort[]=downloads+desc&output=json", { cache: "force-cache" });
+            if (!r.ok) continue;
+            const j = await r.json();
+            const docs = j?.response?.docs || [];
+            if (docs.length) return docs[0].identifier;
+          } catch (e) {}
+        }
       }
       return null;
     }
