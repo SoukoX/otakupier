@@ -57,6 +57,8 @@ let currentUser = null;
 let currentProfile = null;
 let unreadDms = 0;
 let activeDmPartner = null; // set by dms.html when a thread is open
+// Unread live-chat messages, persisted so the badge survives page changes.
+let unreadChat = Number(localStorage.getItem("op_unread_chat") || 0);
 
 // `supabase` global is provided by the Supabase CDN (UMD). We reuse that
 // binding for the client instance so pages can call supabase.from(...).
@@ -80,6 +82,7 @@ function initSupabase() {
         });
         refreshUnreadDms();
         subscribeDmAlerts();
+        initChatUnread();
       }
     });
   });
@@ -94,6 +97,7 @@ function initSupabase() {
         });
         refreshUnreadDms();
         subscribeDmAlerts();
+        initChatUnread();
       }
     });
   });
@@ -125,6 +129,56 @@ function updateDmBadge() {
   } else {
     badge.style.display = "none";
   }
+}
+
+// ---------- Unread live-chat indicator ----------
+// A red badge on the nav "Chat" link, like the Messages badge. Counts new
+// chat messages received while the visitor is NOT on the chat page, caps at
+// "99+", and clears the moment the chat page is opened.
+function saveUnreadChat(n) {
+  unreadChat = Math.max(0, n);
+  try { localStorage.setItem("op_unread_chat", String(unreadChat)); } catch (e) {}
+  updateChatBadge();
+}
+
+function updateChatBadge() {
+  const badge = document.getElementById("chatBadge");
+  if (!badge) return;
+  if (unreadChat > 0) {
+    badge.textContent = unreadChat > 99 ? "99+" : String(unreadChat);
+    badge.style.display = "";
+  } else {
+    badge.style.display = "none";
+  }
+}
+
+function clearChatUnread() {
+  saveUnreadChat(0);
+  renderNav();
+}
+
+let chatAlertChannel = null;
+function initChatUnread() {
+  if (!supabase || !currentUser) return;
+  if (window.location.pathname.includes("chat")) saveUnreadChat(0);
+  if (chatAlertChannel) return;
+  chatAlertChannel = supabase
+    .channel("chat-unread")
+    .on("postgres_changes", {
+      event: "INSERT",
+      schema: "public",
+      table: "chat_messages",
+    }, (payload) => {
+      const m = payload.new;
+      if (m.user_id === currentUser.id) return;
+      if (window.location.pathname.includes("chat")) {
+        saveUnreadChat(0);
+      } else {
+        saveUnreadChat(unreadChat + 1);
+        renderNav();
+      }
+    })
+    .subscribe();
 }
 
 let dmAlertChannel = null;
@@ -263,7 +317,9 @@ function renderNav() {
     const active = current === (l.file || "").replace(/\.html$/, "") ? " active" : "";
     const badge = l.label === "Messages" && unreadDms > 0
       ? `<span class="nav-badge" id="dmBadge">${unreadDms > 99 ? "99+" : unreadDms}</span>`
-      : "";
+      : (l.label === "Chat" && unreadChat > 0
+        ? `<span class="nav-badge" id="chatBadge">${unreadChat > 99 ? "99+" : unreadChat}</span>`
+        : "");
     return `<li><a href="${linkHref(l)}" title="${l.title || l.label}" class="${active.trim()}">${l.label}${badge}</a></li>`;
   }).join("");
 
