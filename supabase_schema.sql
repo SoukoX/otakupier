@@ -955,12 +955,12 @@ begin
     end if;
     insert into public.spendings (user_id, item_id, config, price, active, expires_at)
       values (auth.uid(), spend_rp.item_id, spend_rp.config, price, true, new_exp)
-    on conflict (user_id, item_id) do update
+    on conflict on constraint spendings_user_id_item_id_key do update
       set active = true, expires_at = excluded.expires_at, price = excluded.price, config = excluded.config;
   else
     insert into public.spendings (user_id, item_id, config, price, active, expires_at)
       values (auth.uid(), spend_rp.item_id, spend_rp.config, price, true, null)
-    on conflict (user_id, item_id) do update
+    on conflict on constraint spendings_user_id_item_id_key do update
       set active = true, expires_at = null, price = excluded.price, config = excluded.config;
   end if;
   insert into public.reward_transactions (user_id, amount, reason, item_id)
