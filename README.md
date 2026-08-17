@@ -16,7 +16,7 @@ otakupier/
 ├── js/
 │   ├── config.js       # <-- Put your Supabase keys here
 │   ├── api.js          # Jikan API helpers
-│   └── app.js          # Nav, auth, shared UI, ranks/XP/badges, admin helpers
+│   └── app.js          # Nav, auth, shared UI, ranks/XP/badges, RP economy, admin helpers
 ├── pages/
 │   ├── catalog.html    # Search + genre filter + pagination (100/page)
 │   ├── anime.html      # Detail: trailer, characters+VA, all episodes w/ MAL ratings,
@@ -107,6 +107,8 @@ Verified admins get a red name + "✓ Admin" badge site-wide and access to the *
 - **Profiles** — view anyone's profile: rank, XP bar, badges, stats
 - **XP & Ranks** — gain XP from all activity. Ranks: Newbie → Watcher → Otaku → Weeb → Elite → Legend. High ranks get highlighted chat messages.
 - **Badges** — Member (years), Review Star (50 likes), Chatter (100 messages), Collector (50 saved), Critic (10 reviews), Rater (25 votes)
+- **Reward Points (RP) & Reward Shop** — earn RP for contributing (reviews, replies, votes, saves, forums, clubs, friends, chat, approved watch links, likes received), then spend it on prestige/power perks: 🎨 custom **name color**, 🏷️ **custom title**, 💎 **VIP badge**, 👑 **golden avatar ring**, ✨ **chat glow** (30d), 🗳️ **Voting Power 2x** (30d — your votes count twice in the OtakuPier community rating), 🖼️ **profile banner**. Earned amounts are whitelisted + daily-capped server-side; ledger is immutable
+- **Responsive** — mobile-friendly nav (hamburger menu) and layouts down to ~360px
 
 ## How to set up Supabase (free) — enables login, reviews, rankings, chat
 1. Create a free account at https://supabase.com
