@@ -1240,7 +1240,7 @@
             const { data: rev } = await supabase.from("reviews").select("user_id").eq("id", reviewId).single();
             if (rev && rev.user_id !== currentUser.id) {
               await supabase.rpc("award_xp_to", { recipient: rev.user_id, amount: 10 });
-              await supabase.rpc("award_rp_to", { recipient: rev.user_id, amount: 5, reason: "like_received" });
+              await supabase.rpc("award_rp_to", { recipient: rev.user_id, amount: 2, reason: "like_received" });
             }
           } catch (e) {}
         }
