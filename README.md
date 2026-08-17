@@ -107,7 +107,7 @@ Verified admins get a red name + "✓ Admin" badge site-wide and access to the *
 - **Profiles** — view anyone's profile: rank, XP bar, badges, stats
 - **XP & Ranks** — gain XP from all activity. Ranks: Newbie → Watcher → Otaku → Weeb → Elite → Legend. High ranks get highlighted chat messages.
 - **Badges** — Member (years), Review Star (50 likes), Chatter (100 messages), Collector (50 saved), Critic (10 reviews), Rater (25 votes)
-- **Reward Points (RP) & Reward Shop** — earn RP for contributing (reviews, replies, votes, saves, forums, clubs, friends, chat, approved watch links, likes received), then spend it on prestige/power perks: 🎨 custom **name color** (15k), 🏷️ **custom title** (25k), 👑 **golden avatar ring** (40k), 🖼️ **profile banner** (50k), ✨ **chat glow** 30d (8k), 🗳️ **Voting Power 2x** 30d (10k — your votes count twice in the OtakuPier community rating), and the ultimate 💎 **VIP badge** (500k). Points are scarce: small fixed rewards, daily caps server-side, and an immutable ledger
+- **Reward Points (RP) & Reward Shop** — earn RP for contributing (reviews, replies, votes, saves, forums, clubs, friends, chat, approved watch links, likes received), then spend it on prestige/power perks: 🎨 custom **name color** (15k), 🏷️ **custom title** (25k), 🌟 **glowing avatar** (40k), 🖼️ **profile banner** (50k), ✨ **chat glow** 30d (8k), 🗳️ **Voting Power 2x** 30d (10k — your votes count twice in the OtakuPier community rating), and the ultimate 💎 **VIP badge** (500k). Points are scarce: small fixed rewards, daily caps server-side, and an immutable ledger
 - **Responsive** — mobile-friendly nav (hamburger menu) and layouts down to ~360px
 
 ## How to set up Supabase (free) — enables login, reviews, rankings, chat
