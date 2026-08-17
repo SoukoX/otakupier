@@ -204,7 +204,7 @@ function renderNav() {
         { label: "Messages", href: "pages/dms.html", file: "dms.html", inPages: true },
         { label: "Profile", href: "pages/profile.html", file: "profile.html", inPages: true },
       ].concat(isAdmin()
-        ? [{ label: "⚙", title: "Admin panel", href: "pages/admin.html", file: "admin.html", inPages: true }]
+        ? [{ label: "Admin", title: "Admin panel", href: "pages/admin.html", file: "admin.html", inPages: true }]
         : []))
     : NAV_LINKS;
 
@@ -297,7 +297,7 @@ function renderFooter() {
       ${isAdmin() ? `<a href="${p}pages/admin.html">Admin</a>` : ""}
       <a href="${p}pages/dms.html?with=admin">Contact admin</a>` : ""}
     </div>
-    <p>&copy; ${new Date().getFullYear()} <a href="${p}index.html">${CONFIG.SITE_NAME}</a> — fan-made catalog &amp; community. Anime data via Jikan/MyAnimeList.</p>`;
+    <p>&copy; ${new Date().getFullYear()} <a href="${p}index.html">${CONFIG.SITE_NAME}</a> — anime catalog &amp; community. Anime data via Jikan/MyAnimeList.</p>`;
 }
 
 // ---------- Auth UI helpers (shared across login/signup) ----------
