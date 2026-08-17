@@ -874,7 +874,7 @@ begin
   update public.profiles set rp = rp + amount, rp_earned = rp_earned + amount
     where id = auth.uid();
   insert into public.reward_transactions (user_id, amount, reason)
-    values (auth.uid(), amount, reason);
+    values (auth.uid(), amount, add_rp.reason);
 end;
 $$;
 revoke execute on function public.add_rp(integer, text) from public;
@@ -907,7 +907,7 @@ begin
   update public.profiles set rp = rp + amount, rp_earned = rp_earned + amount
     where id = recipient;
   insert into public.reward_transactions (user_id, amount, reason)
-    values (recipient, amount, reason);
+    values (recipient, amount, award_rp_to.reason);
 end;
 $$;
 revoke execute on function public.award_rp_to(uuid, integer, text) from public;
@@ -942,29 +942,29 @@ begin
   if price = 0 then return 'unknown item'; end if;
   select rp into balance from public.profiles where id = auth.uid();
   if balance is null or balance < price then return 'not enough points'; end if;
-  if item_id = 'name_color' and config !~ '^#[0-9a-fA-F]{6}$' then return 'invalid color'; end if;
-  if item_id = 'custom_title' and char_length(config) > 24 then return 'title too long'; end if;
+  if spend_rp.item_id = 'name_color' and spend_rp.config !~ '^#[0-9a-fA-F]{6}$' then return 'invalid color'; end if;
+  if spend_rp.item_id = 'custom_title' and char_length(spend_rp.config) > 24 then return 'title too long'; end if;
   update public.profiles set rp = rp - price where id = auth.uid();
   -- Extend existing timed purchases instead of piling duplicates.
   if duration is not null then
     select expires_at into existing_exp from public.spendings
-      where user_id = auth.uid() and item_id = item_id;
+      where user_id = auth.uid() and item_id = spend_rp.item_id;
     new_exp := now() + duration;
     if existing_exp is not null and existing_exp > now() then
       new_exp := existing_exp + duration;
     end if;
     insert into public.spendings (user_id, item_id, config, price, active, expires_at)
-      values (auth.uid(), item_id, config, price, true, new_exp)
+      values (auth.uid(), spend_rp.item_id, spend_rp.config, price, true, new_exp)
     on conflict (user_id, item_id) do update
       set active = true, expires_at = excluded.expires_at, price = excluded.price, config = excluded.config;
   else
     insert into public.spendings (user_id, item_id, config, price, active, expires_at)
-      values (auth.uid(), item_id, config, price, true, null)
+      values (auth.uid(), spend_rp.item_id, spend_rp.config, price, true, null)
     on conflict (user_id, item_id) do update
       set active = true, expires_at = null, price = excluded.price, config = excluded.config;
   end if;
   insert into public.reward_transactions (user_id, amount, reason, item_id)
-    values (auth.uid(), -price, 'spend:' || item_id, item_id);
+    values (auth.uid(), -price, 'spend:' || spend_rp.item_id, spend_rp.item_id);
   return 'ok';
 end;
 $$;
@@ -980,15 +980,15 @@ security definer set search_path = public
 as $$
 begin
   if auth.uid() is null then return 'not logged in'; end if;
-  if item_id = 'name_color' and config !~ '^#[0-9a-fA-F]{6}$' then return 'invalid color'; end if;
-  if item_id = 'custom_title' and char_length(config) > 24 then return 'title too long'; end if;
+  if set_rp_config.item_id = 'name_color' and set_rp_config.config !~ '^#[0-9a-fA-F]{6}$' then return 'invalid color'; end if;
+  if set_rp_config.item_id = 'custom_title' and char_length(set_rp_config.config) > 24 then return 'title too long'; end if;
   if not exists (
     select 1 from public.spendings
-    where user_id = auth.uid() and item_id = item_id and active
+    where user_id = auth.uid() and item_id = set_rp_config.item_id and active
       and (expires_at is null or expires_at > now())
   ) then return 'not owned'; end if;
-  update public.spendings set config = config
-    where user_id = auth.uid() and item_id = item_id;
+  update public.spendings set config = set_rp_config.config
+    where user_id = auth.uid() and item_id = set_rp_config.item_id;
   return 'ok';
 end;
 $$;
@@ -1016,7 +1016,7 @@ begin
     update public.profiles set rp = greatest(rp + amount, 0) where id = target;
   end if;
   insert into public.reward_transactions (user_id, amount, reason)
-    values (target, amount, 'admin:' || coalesce(reason, 'adjust'));
+    values (target, amount, 'admin:' || coalesce(grant_rp.reason, 'adjust'));
   return 'ok';
 end;
 $$;
