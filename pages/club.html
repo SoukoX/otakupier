@@ -40,6 +40,11 @@
         club = c;
         document.title = `${c.name} - OtakuPier`;
         const owner = await fetchProfile(c.created_by);
+        if (owner) {
+          const perks = await spendingsMap([c.created_by]);
+          const line = document.getElementById("ownerLine");
+          if (line) line.innerHTML = `Owner: <a href="profile.html?id=${c.created_by}" style="color:var(--accent);">${prestigeNameHTML(owner, perks[c.created_by])}</a> • created ${new Date(c.created_at).toLocaleDateString()}`;
+        }
         if (isLoggedIn()) {
           const { data: mem } = await supabase.from("club_members").select("*")
             .eq("club_id", clubId).eq("user_id", currentUser.id).maybeSingle();
@@ -53,7 +58,7 @@
             <div style="flex:1; min-width:220px;">
               <h2 style="margin:0 0 4px;">${JIKAN.esc(c.name)}</h2>
               <p style="color:var(--text-dim); margin:0 0 8px;">${JIKAN.esc(c.description || "No description yet.")}</p>
-              <span style="color:var(--text-dim); font-size:.8rem;">Owner: ${owner?.is_admin ? adminNameHTML(owner) : `<a href="profile.html?id=${c.created_by}" style="color:var(--accent);">${JIKAN.esc(owner?.name || "User")}</a>`} • created ${new Date(c.created_at).toLocaleDateString()}</span>
+              <span style="color:var(--text-dim); font-size:.8rem;" id="ownerLine">Owner: loading… • created ${new Date(c.created_at).toLocaleDateString()}</span>
               <div id="joinBtn" style="margin-top:12px;"></div>
             </div>
           </div>
@@ -86,11 +91,13 @@
       box.innerHTML = "";
       for (const m of data) {
         const p = await fetchProfile(m.user_id);
+        const perks = await spendingsMap([m.user_id]);
+        const perk = perks[m.user_id] || {};
         const el = document.createElement("div");
         el.className = "user-row";
         el.innerHTML = `
-          <div class="avatar" style="cursor:pointer;" onclick="location.href='profile.html?id=${m.user_id}'">${(p?.name || "U").charAt(0).toUpperCase()}</div>
-          ${p?.is_admin ? adminNameHTML(p) : `<a href="profile.html?id=${m.user_id}" style="color:var(--text); text-decoration:none; font-weight:600;">${JIKAN.esc(p?.name || "User")}</a>`}
+          <div class="avatar${perk.avatar_ring ? " avatar-ring" : ""}" style="cursor:pointer;" onclick="location.href='profile.html?id=${m.user_id}'">${(p?.name || "U").charAt(0).toUpperCase()}</div>
+          <a href="profile.html?id=${m.user_id}" style="color:var(--text); text-decoration:none; font-weight:600;">${prestigeNameHTML(p || {}, perk)}</a>
           ${m.role === "owner" ? `<span class="genre-tag" style="font-size:.7rem;">Owner</span>` : ""}
           ${myRole === "owner" && m.role !== "owner" ? `<button class="btn btn-danger btn-small" style="margin-left:auto;" onclick="removeMember('${m.user_id}')">Remove</button>` : ""}`;
         box.appendChild(el);
@@ -116,6 +123,7 @@
       try {
         await dbInsert("club_members", { club_id: Number(clubId), user_id: currentUser.id, role: "member" });
         awardXp(10); // +10 XP for joining
+        awardRp("club_join"); // +10 RP
         showToast("Welcome to the club! +10 XP");
         isMember = true;
         loadMembers();
@@ -173,13 +181,15 @@
       }
       for (const p of data) {
         const author = await fetchProfile(p.user_id);
+        const perks = await spendingsMap([p.user_id]);
+        const perk = perks[p.user_id] || {};
         const el = document.createElement("div");
         el.className = "review";
         el.innerHTML = `
           <div class="review-top">
             <div class="review-author">
-              <div class="avatar" style="cursor:pointer;" onclick="location.href='profile.html?id=${p.user_id}'">${(author?.name || "U").charAt(0).toUpperCase()}</div>
-              ${author?.is_admin ? adminNameHTML(author) : `<a href="profile.html?id=${p.user_id}" style="color:var(--text); text-decoration:none;">${JIKAN.esc(author?.name || "User")}</a>`}
+              <div class="avatar${perk.avatar_ring ? " avatar-ring" : ""}" style="cursor:pointer;" onclick="location.href='profile.html?id=${p.user_id}'">${(author?.name || "U").charAt(0).toUpperCase()}</div>
+              <a href="profile.html?id=${p.user_id}" style="color:var(--text); text-decoration:none;">${prestigeNameHTML(author || {}, perk)}</a>
             </div>
           </div>
           <div class="review-date">${new Date(p.created_at).toLocaleString()}</div>
@@ -210,6 +220,7 @@
       try {
         await dbInsert("club_posts", { club_id: Number(clubId), user_id: currentUser.id, body });
         awardXp(5); // +5 XP per club post
+        awardRp("club_post"); // +5 RP
         showToast("Posted! +5 XP");
         document.getElementById("postBody").value = "";
         loadPosts();
