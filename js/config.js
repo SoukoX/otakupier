@@ -49,6 +49,21 @@ const CONFIG = {
     { id: "retro", name: "RetroCrush", mode: "link",
       url: "https://retrocrush.tv/search?q={title}", enabled: true },
 
+    // More reputable third-party streamers. Link mode opens their search /
+    // watch page for the title so the visitor can stream it there.
+    { id: "youtube", name: "YouTube", mode: "link",
+      url: "https://www.youtube.com/results?search_query={title}+episode+{ep_num}", enabled: true },
+    { id: "hidive", name: "HIDIVE", mode: "link",
+      url: "https://www.hidive.com/search?q={title}", enabled: true },
+    { id: "hulu", name: "Hulu", mode: "link",
+      url: "https://www.hulu.com/search?q={title}", enabled: true },
+    { id: "prime", name: "Prime Video", mode: "link",
+      url: "https://www.primevideo.com/search/ref=atv_nb_sr?phrase={title}", enabled: true },
+    { id: "archive", name: "Internet Archive", mode: "link",
+      url: "https://archive.org/search?query={title}", enabled: true },
+    { id: "vudu", name: "Fandango at Home", mode: "link",
+      url: "https://www.vudu.com/content/movies/search?q={title}", enabled: true },
+
     // Direct video playback (mode "video") plays an actual MP4/HLS file
     // inline with the built-in player. Only add sources whose hosting you
     // have the rights to, e.g. your OWN files. Example pattern:
