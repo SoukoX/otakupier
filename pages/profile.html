@@ -51,6 +51,9 @@
       document.title = `${st.profile.name || "User"} - OtakuPier`;
 
       const isSelf = isLoggedIn() && currentUser.id === userId;
+      const perks = await spendingsMap([userId]);
+      const perk = perks[userId] || {};
+      const profileBanner = perk.profile_banner ? "premium" : "default";
       const rank = rankForXp(st.profile.xp);
       const prog = xpProgress(st.profile.xp);
       const badges = badgesFor(st.profile, st.counts);
@@ -61,12 +64,14 @@
         : `<span style="color:var(--text-dim); font-size:.85rem;">No badges yet — keep participating!</span>`;
 
       main.innerHTML = `
+        <div class="profile-banner banner-${profileBanner}"></div>
         <div class="profile-card">
-          <div class="avatar-lg">${st.profile.avatar_url
+          <div class="avatar-lg${perk.avatar_ring ? " avatar-ring" : ""}">${st.profile.avatar_url
             ? `<img src="${JIKAN.safeImg(st.profile.avatar_url)}" alt="">`
             : (st.profile.name || "U").charAt(0).toUpperCase()}</div>
           <div style="flex:1; min-width:220px;">
-            <h2 style="margin:0 0 4px;">${st.profile.is_admin ? adminNameHTML(st.profile) : JIKAN.esc(st.profile.name || "User")}</h2>
+            <h2 style="margin:0 0 4px;">${prestigeNameHTML(st.profile, perk)}</h2>
+            ${perk.custom_title ? `<div class="custom-title">${JIKAN.esc(String(perk.custom_title))}</div>` : ""}
             <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
               ${rankTag(userId, st.profile)}
               <span style="color:var(--text-dim); font-size:.85rem;">Joined ${joined}</span>
@@ -100,7 +105,10 @@
         <h3 class="sub-head">Reviews &amp; Comments</h3>
         <div id="reviews"></div>`;
 
-      if (isSelf) main.insertAdjacentHTML("afterbegin", `<div style="margin-bottom:16px;"><a class="btn btn-outline" href="mylist.html">My List</a> <a class="btn btn-outline" href="friends.html">Friends</a></div>`);
+      if (isSelf) {
+        main.insertAdjacentHTML("afterbegin", `<div style="margin-bottom:16px;"><a class="btn btn-outline" href="mylist.html">My List</a> <a class="btn btn-outline" href="friends.html">Friends</a></div>`);
+        renderRewardShop();
+      }
       if (!isSelf) loadFriendButton();
       loadProfileReviews();
     }
@@ -146,8 +154,9 @@
     async function acceptFriendReq(fid) {
       try {
         await supabase.from("friendships").update({ status: "accepted" }).eq("id", fid);
-        showToast("You are now friends! +10 XP");
+        showToast("You are now friends! +10 XP +10 RP");
         awardXp(10);
+        awardRp("friend");
         loadFriendButton();
       } catch (err) {
         showToast("Could not accept");
@@ -203,6 +212,133 @@
       } catch (err) {
         slot.innerHTML = `<div class="empty-state">Could not load reviews.</div>`;
       }
+    }
+
+    // ---------- Reward Shop ----------
+    async function renderRewardShop() {
+      const slot = document.createElement("div");
+      slot.id = "rewardShop";
+      document.getElementById("main").insertAdjacentElement("beforeend", slot);
+
+      const [profRes, spendRes, txRes] = await Promise.all([
+        supabase.from("profiles").select("rp, rp_earned, xp").eq("id", currentUser.id).maybeSingle(),
+        supabase.from("spendings").select("*").eq("user_id", currentUser.id),
+        supabase.from("reward_transactions").select("*").eq("user_id", currentUser.id).order("created_at", { ascending: false }).limit(10),
+      ]);
+      const profile = profRes.data || {};
+      const owned = (spendRes.data || []).filter((s) => s.active && (!s.expires_at || new Date(s.expires_at) > new Date()));
+      const ownedIds = new Set(owned.map((s) => s.item_id));
+      const txs = txRes.data || [];
+
+      slot.innerHTML = `
+        <h3 class="sub-head" style="margin-top:36px;">⛁ Reward Shop</h3>
+        <div class="reward-balance">
+          <div><span>⛁ ${profile.rp || 0}</span><small>Available points</small></div>
+          <div><span>${profile.rp_earned || 0}</span><small>Earned all-time</small></div>
+        </div>
+        <p style="color:var(--text-dim); font-size:.9rem; margin-bottom:16px;">
+          Earn points by reviewing, voting, saving anime, posting in forums &amp; clubs, chatting, and getting your watch links approved.
+          Spend them on prestige and power perks that set you apart.
+        </p>
+        <div class="shop-grid">
+          ${RP_SHOP.map((item) => {
+            const own = ownedIds.has(item.id);
+            const itemRow = owned.find((s) => s.item_id === item.id);
+            return `
+              <div class="shop-card">
+                <div class="shop-icon">${item.icon}</div>
+                <div class="shop-name">${item.name}</div>
+                <div class="shop-desc">${item.desc}</div>
+                <div class="shop-meta">
+                  <span class="shop-price">⛁ ${item.price}</span>
+                  <span class="shop-duration">${item.duration || "Permanent"}</span>
+                </div>
+                ${own
+                  ? `<span class="shop-owned">Owned${itemRow?.expires_at ? ` — till ${new Date(itemRow.expires_at).toLocaleDateString()}` : ""}</span>
+                     ${renderConfigEditor(item, itemRow)}`
+                  : `<button class="btn btn-primary btn-block" onclick="buyReward('${item.id}')">${(profile.rp || 0) >= item.price ? "Buy" : "Not enough ⛁"}</button>`}
+              </div>`;
+          }).join("")}
+        </div>
+        ${txs.length ? `
+          <h4 class="sub-head" style="margin-top:28px;">Recent activity</h4>
+          <div class="tx-list">
+            ${txs.map((t) => `
+              <div class="tx-row">
+                <span>${t.amount > 0 ? `+${t.amount} ⛁` : `${t.amount} ⛁`}</span>
+                <span class="tx-reason">${JIKAN.esc(reasonLabel(t))}</span>
+                <span class="tx-date">${new Date(t.created_at).toLocaleDateString()}</span>
+              </div>`).join("")}
+          </div>` : ""}`;
+
+      // Refresh the balance chip / header after a purchase
+      slot._refresh = async () => {
+        const r = await supabase.from("profiles").select("rp, rp_earned").eq("id", currentUser.id).maybeSingle();
+        if (r.data) {
+          const b = slot.querySelector(".reward-balance");
+          if (b) b.innerHTML = `<div><span>⛁ ${r.data.rp || 0}</span><small>Available points</small></div>
+            <div><span>${r.data.rp_earned || 0}</span><small>Earned all-time</small></div>`;
+        }
+      };
+    }
+
+    function reasonLabel(t) {
+      const map = {
+        review: "Review", reply: "Reply", like_received: "Like received", vote: "Vote",
+        save: "Saved anime", thread: "Forum thread", forum_reply: "Forum reply",
+        club: "Created club", club_join: "Joined club", club_post: "Club post",
+        friend: "Friend accepted", chat: "Chat message", link_approved: "Watch link approved",
+      };
+      if (t.reason.startsWith("spend:")) {
+        const item = rpShopItem(t.reason.slice(6));
+        return `Bought ${item ? item.name : t.reason.slice(6)}`;
+      }
+      if (t.reason.startsWith("admin:")) return `Admin adjustment`;
+      return map[t.reason] || t.reason || "Activity";
+    }
+
+    function renderConfigEditor(item, row) {
+      if (item.id === "name_color") {
+        const current = row?.config || "#7c5cff";
+        return `
+          <div class="config-editor">
+            <input type="color" id="cfgColor" value="${current}" onchange="setColor()" style="width:100%; height:36px; border:none; background:none; cursor:pointer;">
+          </div>`;
+      }
+      if (item.id === "custom_title") {
+        return `
+          <div class="config-editor">
+            <input type="text" id="cfgTitle" maxlength="24" placeholder="Your title..." value="${JIKAN.esc(row?.config || "")}" style="width:100%; padding:8px 10px; border-radius:8px; border:1px solid var(--border); background:var(--bg); color:var(--text);">
+            <button class="btn btn-outline btn-small" onclick="saveTitle()">Save title</button>
+          </div>`;
+      }
+      return "";
+    }
+
+    async function buyReward(itemId) {
+      const res = await buyRpItem(itemId);
+      if (res.ok) {
+        showToast("Purchased! Enjoy your new perk.");
+        renderRewardShop();
+      } else {
+        showToast(res.message || "Could not purchase");
+      }
+    }
+
+    async function setColor() {
+      const v = document.getElementById("cfgColor")?.value;
+      if (!v) return;
+      const res = await setRpConfig("name_color", v);
+      if (res.ok) showToast("Name color updated!");
+      else showToast(res.message || "Update failed");
+    }
+
+    async function saveTitle() {
+      const v = document.getElementById("cfgTitle")?.value.trim();
+      if (!v) { showToast("Enter a title"); return; }
+      const res = await setRpConfig("custom_title", v);
+      if (res.ok) { showToast("Title updated!"); renderRewardShop(); }
+      else showToast(res.message || "Update failed");
     }
 
     document.addEventListener("DOMContentLoaded", load);
