@@ -871,8 +871,8 @@ begin
     where rt.user_id = auth.uid() and rt.reason = add_rp.reason and rt.amount > 0
       and rt.created_at > date_trunc('day', now());
   if used >= cap then return; end if;
-  update public.profiles set rp = rp + amount, rp_earned = rp_earned + amount
-    where id = auth.uid();
+  update public.profiles p set p.rp = p.rp + amount, p.rp_earned = p.rp_earned + amount
+    where p.id = auth.uid();
   insert into public.reward_transactions (user_id, amount, reason)
     values (auth.uid(), amount, add_rp.reason);
 end;
@@ -904,8 +904,8 @@ begin
     where rt.user_id = recipient and rt.reason = award_rp_to.reason and rt.amount > 0
       and rt.created_at > date_trunc('day', now());
   if used >= cap then return; end if;
-  update public.profiles set rp = rp + amount, rp_earned = rp_earned + amount
-    where id = recipient;
+  update public.profiles p set p.rp = p.rp + amount, p.rp_earned = p.rp_earned + amount
+    where p.id = recipient;
   insert into public.reward_transactions (user_id, amount, reason)
     values (recipient, amount, award_rp_to.reason);
 end;
@@ -915,56 +915,61 @@ grant execute on function public.award_rp_to(uuid, integer, text) to authenticat
 
 -- 16d. SPEND points in the Reward Shop. Pricing lives in this function so the
 -- client can't set its own prices. Returns 'ok' or an error message.
+-- NOTE: every column reference is table-qualified and every parameter
+-- reference is function-qualified so the compiler can never confuse the
+-- `spendings.item_id` / `spendings.config` / `spendings.price` columns with
+-- the function arguments or locals (previously raised "column reference
+-- item_id is ambiguous").
 create or replace function public.spend_rp(item_id text, config text default '')
 returns text
 language plpgsql
 security definer set search_path = public
 as $$
 declare
-  price integer;
+  cost integer;
   balance integer;
   duration interval;
   new_exp timestamptz;
   existing_exp timestamptz;
 begin
   if auth.uid() is null then return 'not logged in'; end if;
-  price := 0; duration := null;
-  case item_id
-    when 'name_color'    then price := 15000; duration := null;
-    when 'custom_title'  then price := 25000; duration := null;
-    when 'vote_power'    then price := 10000; duration := interval '30 days';
-    when 'vip_badge'     then price := 500000; duration := null;
-    when 'avatar_ring'   then price := 40000; duration := null;
-    when 'profile_banner' then price := 50000; duration := null;
-    when 'chat_glow'     then price := 8000; duration := interval '30 days';
+  cost := 0; duration := null;
+  case spend_rp.item_id
+    when 'name_color'    then cost := 15000; duration := null;
+    when 'custom_title'  then cost := 25000; duration := null;
+    when 'vote_power'    then cost := 10000; duration := interval '30 days';
+    when 'vip_badge'     then cost := 500000; duration := null;
+    when 'avatar_ring'   then cost := 40000; duration := null;
+    when 'profile_banner' then cost := 50000; duration := null;
+    when 'chat_glow'     then cost := 8000; duration := interval '30 days';
     else return 'unknown item';
   end case;
-  if price = 0 then return 'unknown item'; end if;
-  select rp into balance from public.profiles where id = auth.uid();
-  if balance is null or balance < price then return 'not enough points'; end if;
+  if cost = 0 then return 'unknown item'; end if;
+  select p.rp into balance from public.profiles p where p.id = auth.uid();
+  if balance is null or balance < cost then return 'not enough points'; end if;
   if spend_rp.item_id = 'name_color' and spend_rp.config !~ '^#[0-9a-fA-F]{6}$' then return 'invalid color'; end if;
   if spend_rp.item_id = 'custom_title' and char_length(spend_rp.config) > 24 then return 'title too long'; end if;
-  update public.profiles set rp = rp - price where id = auth.uid();
+  update public.profiles p set p.rp = p.rp - cost where p.id = auth.uid();
   -- Extend existing timed purchases instead of piling duplicates.
   if duration is not null then
-    select expires_at into existing_exp from public.spendings
-      where user_id = auth.uid() and item_id = spend_rp.item_id;
+    select s.expires_at into existing_exp from public.spendings s
+      where s.user_id = auth.uid() and s.item_id = spend_rp.item_id;
     new_exp := now() + duration;
     if existing_exp is not null and existing_exp > now() then
       new_exp := existing_exp + duration;
     end if;
     insert into public.spendings (user_id, item_id, config, price, active, expires_at)
-      values (auth.uid(), spend_rp.item_id, spend_rp.config, price, true, new_exp)
+      values (auth.uid(), spend_rp.item_id, spend_rp.config, cost, true, new_exp)
     on conflict on constraint spendings_user_id_item_id_key do update
       set active = true, expires_at = excluded.expires_at, price = excluded.price, config = excluded.config;
   else
     insert into public.spendings (user_id, item_id, config, price, active, expires_at)
-      values (auth.uid(), spend_rp.item_id, spend_rp.config, price, true, null)
+      values (auth.uid(), spend_rp.item_id, spend_rp.config, cost, true, null)
     on conflict on constraint spendings_user_id_item_id_key do update
       set active = true, expires_at = null, price = excluded.price, config = excluded.config;
   end if;
   insert into public.reward_transactions (user_id, amount, reason, item_id)
-    values (auth.uid(), -price, 'spend:' || spend_rp.item_id, spend_rp.item_id);
+    values (auth.uid(), -cost, 'spend:' || spend_rp.item_id, spend_rp.item_id);
   return 'ok';
 end;
 $$;
@@ -1010,10 +1015,10 @@ begin
   if isadmin is distinct from true then return 'admin only'; end if;
   if target is null or amount = 0 then return 'invalid'; end if;
   if amount > 0 then
-    update public.profiles set rp = rp + amount, rp_earned = rp_earned + amount
-      where id = target;
+    update public.profiles p set p.rp = p.rp + amount, p.rp_earned = p.rp_earned + amount
+      where p.id = target;
   else
-    update public.profiles set rp = greatest(rp + amount, 0) where id = target;
+    update public.profiles p set p.rp = greatest(p.rp + amount, 0) where p.id = target;
   end if;
   insert into public.reward_transactions (user_id, amount, reason)
     values (target, amount, 'admin:' || coalesce(grant_rp.reason, 'adjust'));
