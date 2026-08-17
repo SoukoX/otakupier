@@ -144,23 +144,26 @@
           <div class="msg-time">${new Date(m.created_at).toLocaleTimeString()}</div>
         </div>`;
       box.appendChild(el);
-      // Add rank tag + highlight privilege
+      // Add rank tag + highlight privilege + prestige perks
       try {
-        const { data: p } = await supabase.from("profiles").select("name, xp, is_admin").eq("id", m.user_id).maybeSingle();
+        const [profRes, perks] = await Promise.all([
+          supabase.from("profiles").select("name, xp, is_admin").eq("id", m.user_id).maybeSingle(),
+          spendingsMap([m.user_id]),
+        ]);
+        const p = profRes.data;
+        const perk = perks[m.user_id] || {};
         if (p) {
           const tagEl = el.querySelector(".rank-tag");
           tagEl.innerHTML = `${rankForXp(p.xp).icon} ${rankForXp(p.xp).name}`;
-          if (p.is_admin) {
-            el.classList.add("highlight");
-            tagEl.style.background = "rgba(0,212,168,.2)";
-            tagEl.style.color = "var(--accent-3)";
-          } else if (hasChatPrivilege(p.xp)) {
+          const glow = p.is_admin || hasChatPrivilege(p.xp) || perk.chat_glow || perk.vip_badge;
+          if (glow) {
             el.classList.add("highlight");
             tagEl.style.background = "rgba(0,212,168,.2)";
             tagEl.style.color = "var(--accent-3)";
           }
+          if (perk.avatar_ring) el.querySelector(".avatar").classList.add("avatar-ring");
           const author = el.querySelector(".msg-author");
-          if (p.is_admin) author.innerHTML = adminNameHTML(p);
+          author.innerHTML = `<a href="profile.html?id=${m.user_id}" style="color:inherit; text-decoration:none;">${prestigeNameHTML(p, perk, { strong: true })}</a>`;
         }
       } catch (e) {}
     }
@@ -180,6 +183,7 @@
           message: text,
         });
         awardXp(1); // +1 XP per chat message
+        awardRp("chat"); // +1 RP
         input.value = "";
         updateCounter();
       } catch (err) {
