@@ -605,12 +605,12 @@ async function dbSelect(table, match = {}, order = {}) {
 
 // ---------- Gamification: ranks, XP, badges ----------
 const RANKS = [
-  { name: "E", icon: "🌱", min: 0 },
-  { name: "D", icon: "👀", min: 100 },
-  { name: "C", icon: "🎌", min: 300 },
-  { name: "B", icon: "🔥", min: 700 },
-  { name: "A", icon: "⭐", min: 1500 },
-  { name: "S", icon: "👑", min: 3000 },
+  { name: "E Rank", icon: "🌱", min: 0 },
+  { name: "D Rank", icon: "👀", min: 100 },
+  { name: "C Rank", icon: "🎌", min: 300 },
+  { name: "B Rank", icon: "🔥", min: 700 },
+  { name: "A Rank", icon: "⭐", min: 1500 },
+  { name: "S Rank", icon: "👑", min: 3000 },
 ];
 
 function rankForXp(xp) {
