@@ -52,6 +52,9 @@
       box.scrollTop = box.scrollHeight;
     }
 
+    // Opening the chat counts every unread message as read.
+    if (typeof clearChatUnread === "function") clearChatUnread();
+
     function renderInput() {
       const wrap = document.getElementById("inputWrap");
       if (!SUPABASE_READY || !supabase) {
