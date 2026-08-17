@@ -2,10 +2,6 @@
 
 const SUPABASE_READY = CONFIG.SUPABASE_URL.includes("YOUR-PROJECT-REF") ? false : true;
 
-// Running straight off the filesystem (file://) has no pretty-URL
-// resolution and no history API — keep the real ".html" links there.
-const IS_LOCAL = /^(file|ftp):/.test(window.location.protocol);
-
 // Clean URLs: hide the ".html" extension from the address bar so the live
 // site reads like a real app — "/" for home, "/pages/anime?id=5" instead of
 // "/pages/anime.html?id=5". GitHub Pages serves the clean path natively and
@@ -275,15 +271,15 @@ function renderNav() {
     ? `<div class="user-menu">
          <span class="rp-badge" title="Reward Points — spend these in the Reward Shop">⛁ ${currentProfile?.rp || 0}</span>
          ${isAdmin()
-           ? `<a href="${p}pages/admin" class="btn btn-outline btn-small admin-btn" title="Admin panel">⚙ Admin</a>`
+           ? `<a href="${pageHref("admin")}" class="btn btn-outline btn-small admin-btn" title="Admin panel">⚙ Admin</a>`
            : ""}
-         <a href="${p}pages/profile" class="user-avatar" title="${JIKAN.esc(getProfile().name)}">${getProfile().avatar
+         <a href="${pageHref("profile")}" class="user-avatar" title="${JIKAN.esc(getProfile().name)}">${getProfile().avatar
          ? `<img src="${JIKAN.safeImg(getProfile().avatar)}" alt="">`
          : JIKAN.esc(getProfile().name.charAt(0).toUpperCase())}</a>
          <button class="btn btn-outline btn-small" onclick="logout()">Logout</button>
        </div>`
-    : `<a href="${p}pages/login" class="btn btn-outline btn-small">Login</a>
-       <a href="${p}pages/signup" class="btn btn-primary btn-small">Sign up</a>`;
+    : `<a href="${pageHref("login")}" class="btn btn-outline btn-small">Login</a>
+       <a href="${pageHref("signup")}" class="btn btn-primary btn-small">Sign up</a>`;
 
   const homeHref = p ? p : "/";
 
@@ -359,17 +355,17 @@ function renderFooter() {
   foot.innerHTML = `
     <div class="footer-links">
       <a href="${p || "/"}">Home</a>
-      <a href="${p}pages/catalog">Catalog</a>
-      <a href="${p}pages/forums">Forums</a>
-      <a href="${p}pages/clubs">Clubs</a>
-      <a href="${p}pages/rankings">Rankings</a>
-      <a href="${p}pages/chat">Chat</a>
-      ${isLoggedIn() ? `<a href="${p}pages/mylist">My List</a>
-      <a href="${p}pages/friends">Friends</a>
-      <a href="${p}pages/dms">Messages</a>
-      <a href="${p}pages/profile">Profile</a>
-      ${isAdmin() ? `<a href="${p}pages/admin">Admin</a>` : ""}
-      <a href="${p}pages/dms?with=admin">Contact admin</a>` : ""}
+      <a href="${pageHref("catalog")}">Catalog</a>
+      <a href="${pageHref("forums")}">Forums</a>
+      <a href="${pageHref("clubs")}">Clubs</a>
+      <a href="${pageHref("rankings")}">Rankings</a>
+      <a href="${pageHref("chat")}">Chat</a>
+      ${isLoggedIn() ? `<a href="${pageHref("mylist")}">My List</a>
+      <a href="${pageHref("friends")}">Friends</a>
+      <a href="${pageHref("dms")}">Messages</a>
+      <a href="${pageHref("profile")}">Profile</a>
+      ${isAdmin() ? `<a href="${pageHref("admin")}">Admin</a>` : ""}
+      <a href="${pageHref("dms")}?with=admin">Contact admin</a>` : ""}
     </div>
     <p>&copy; ${new Date().getFullYear()} <a href="${p || "/"}">${CONFIG.SITE_NAME}</a> — anime catalog &amp; community. Anime data via Jikan/MyAnimeList.</p>`;
 }
@@ -544,7 +540,7 @@ function setupAuthForm(formId, mode) {
         btn.disabled = false;
         btn.textContent = original;
         showToast("An account with this email already exists. Try logging in instead.");
-        setTimeout(() => (window.location.href = pathPrefix() + "login"), 2200);
+        setTimeout(() => (window.location.href = pageHref("login")), 2200);
         return;
       }
 
