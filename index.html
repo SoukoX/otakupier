@@ -5,7 +5,7 @@
   <meta name="referrer" content="strict-origin-when-cross-origin">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>OtakuPier - Anime Catalog, Rankings & Reviews: Discover Where to Watch</title>
-  <meta name="description" content="OtakuPier is an anime catalog and community site. Discover anime, read manga, find where to watch on official platforms, browse rankings, reviews, characters and live chat with fellow fans.">
+  <meta name="description" content="OtakuPier is an anime catalog and community site. Discover anime, read manga, find watch links, browse rankings, reviews, characters and live chat with fellow fans.">
   <meta name="keywords" content="anime, anime catalog, where to watch anime, anime rankings, anime reviews, seasonal anime, anime community, read manga, otaku">
   <meta name="robots" content="index, follow">
   <meta name="theme-color" content="#e6465c">
@@ -14,7 +14,7 @@
   <meta property="og:type" content="website">
   <meta property="og:site_name" content="OtakuPier">
   <meta property="og:title" content="OtakuPier - Anime Catalog, Rankings & Reviews">
-  <meta property="og:description" content="Discover anime, read manga, and find where to watch on official platforms.">
+  <meta property="og:description" content="Discover anime, read manga, and find watch links.">
   <meta property="og:url" content="https://otakupier.2bd.net/">
   <meta property="og:image" content="https://otakupier.2bd.net/images/banner.svg">
   <meta name="twitter:card" content="summary_large_image">
@@ -28,7 +28,7 @@
     "name": "OtakuPier",
     "alternateName": "OtakuPier Anime",
     "url": "https://otakupier.2bd.net/",
-    "description": "Anime catalog and community site. Discover anime, read manga, find where to watch on official platforms, and join community rankings and reviews.",
+    "description": "Anime catalog and community site. Discover anime, read manga, find watch links, and join community rankings and reviews.",
     "inLanguage": "en",
     "publisher": {
       "@type": "Organization",
@@ -57,7 +57,7 @@
       <div class="hero-copy">
         <p class="hero-kicker anim-rise">A harbor for anime &amp; manga</p>
         <h1 class="anim-rise anim-delay-1">Everything docks at <span class="shimmer">OtakuPier</span></h1>
-        <p class="hero-sub anim-rise anim-delay-2">OtakuPier is a community-run port for the shows you love. Browse the catalog, find where to watch each title, compare community rankings, and leave the review you've been sitting on.</p>
+        <p class="hero-sub anim-rise anim-delay-2">OtakuPier is a community-run port for the shows you love. Browse the catalog, find watch links for each title, compare community rankings, and leave the review you've been sitting on.</p>
         <div class="hero-cta anim-rise anim-delay-3">
           <a href="pages/catalog.html" class="btn btn-primary btn-glow">Browse the catalog</a>
           <a href="#about" class="btn btn-outline">What is this place?</a>
@@ -76,8 +76,8 @@
           </li>
           <li>
             <span class="num">02</span>
-            <span class="label">Where to watch</span>
-            <span class="sub">Official streaming links for every title, so you can actually press play.</span>
+            <span class="label">Links to watch</span>
+            <span class="sub">Streaming links for every title, so you can actually press play.</span>
           </li>
           <li>
             <span class="num">03</span>
@@ -93,13 +93,13 @@
         <span>アニメ ANIME</span><span>・</span>
         <span>マンガ MANGA</span><span>・</span>
         <span>COMMUNITY RANKINGS</span><span>・</span>
-        <span>WHERE TO WATCH</span><span>・</span>
+        <span>WATCH LINKS</span><span>・</span>
         <span>REVIEWS</span><span>・</span>
         <span>LIVE CHAT</span><span>・</span>
         <span>アニメ ANIME</span><span>・</span>
         <span>マンガ MANGA</span><span>・</span>
         <span>COMMUNITY RANKINGS</span><span>・</span>
-        <span>WHERE TO WATCH</span><span>・</span>
+        <span>WATCH LINKS</span><span>・</span>
         <span>REVIEWS</span><span>・</span>
         <span>LIVE CHAT</span><span>・</span>
       </div>
@@ -117,7 +117,7 @@
         <div class="carousel-fade right"></div>
         <button class="carousel-btn prev" aria-label="Scroll left">‹</button>
         <button class="carousel-btn next" aria-label="Scroll right">›</button>
-        <div class="carousel" id="topRatedCarousel"></div>
+        <div class="carousel coverflow" id="topRatedCarousel"></div>
       </div>
     </section>
 
@@ -127,7 +127,7 @@
       </div>
       <div class="about-card">
         <p><strong>OtakuPier</strong> is a catalog and community board for anime and manga. Where most sites are just a grid of posters and a search bar, this one is built around a simple idea: <em>the people watching should shape what everyone finds.</em></p>
-        <p>Every title here links out to an official way to watch it. Members vote on community rankings, leave reviews, keep watchlists, and talk in the live chat. And the more you take part, the more the site reflects you — earned Reward Points let you customize your name color, title, avatar glow, and even a VIP badge.</p>
+        <p>Every title here links out to a way to watch it. Members vote on community rankings, leave reviews, keep watchlists, and talk in the live chat. And the more you take part, the more the site reflects you — earned Reward Points let you customize your name color, title, avatar glow, and even a VIP badge.</p>
       </div>
     </section>
   </main>
@@ -153,6 +153,7 @@
       const fill = (grid, list) => {
         grid.innerHTML = "";
         (list || []).slice(0, 25).forEach((a) => grid.appendChild(JIKAN.card(a)));
+        if (window.__coverflows && window.__coverflows.has(grid)) window.__coverflows.get(grid)();
         return (list || []).length > 0;
       };
       const fail = (grid) => {
@@ -204,12 +205,159 @@
       const wrap = el.closest(".carousel-wrap");
       if (!wrap) return;
 
+      const isCF = el.classList.contains("coverflow");
+
+      // Coverflow: as you scroll, each card is placed on a 3D arc — the
+      // center card rises, grows and stays bright while the ones further
+      // out shrink, dim and turn away. Repositioned on every scroll tick.
+      // Coverflow: as you scroll, each card is placed on a 3D arc — the
+      // center card rises, grows and stays bright while the ones further
+      // out shrink, dim and turn away. Positions are computed from the
+      // card index (fixed grid geometry) instead of reading layout each
+      // frame, so the animation stays at a clean 60fps.
+      let geo = { col: 240, gap: 16, padL: 8, count: 0 };
+      let glowIdx = -1;
+      const readGeo = () => {
+        const first = el.querySelector(".anime-card");
+        if (!first) return;
+        const cs = getComputedStyle(el);
+        geo.col = parseFloat(cs.gridAutoColumns) || first.offsetWidth;
+        geo.gap = parseFloat(cs.columnGap) || 0;
+        geo.padL = parseFloat(cs.paddingLeft) || 0;
+        geo.count = el.querySelectorAll(".anime-card").length;
+      };
+
+      const updateCoverflow = () => {
+        if (!isCF) return;
+        const cards = el.querySelectorAll(".anime-card");
+        if (!cards.length) return;
+        if (geo.count !== cards.length) readGeo();
+        const rect = el.getBoundingClientRect();
+        const cx = rect.left + rect.width / 2;
+        const n = cards.length;
+        let nearest = 0, nearestAbs = 2;
+        for (let i = 0; i < n; i++) {
+          const card = cards[i];
+          const ccx = rect.left + geo.padL - el.scrollLeft + i * (geo.col + geo.gap) + geo.col / 2;
+          const off = (ccx - cx) / (geo.col * 1.5);
+          const abs = Math.min(1, Math.abs(off));
+          if (abs < nearestAbs) { nearestAbs = abs; nearest = i; }
+          const rise = abs * 30;
+          const rotY = off * -32;
+          card.dataset.cf = `translateY(${-rise}px) scale(${1 - abs * 0.3}) rotateY(${rotY}deg)`;
+          card.style.opacity = Math.max(0.32, 1 - abs * 0.55);
+          card.style.filter = `brightness(${1 - abs * 0.35}) saturate(${1 - abs * 0.25})`;
+          card.style.zIndex = Math.round(20 * (1 - abs)) + 1;
+          applyTilt(card);
+        }
+        // The card at center is the "highlighted" one — give it a warm glow
+        if (glowIdx !== nearest) {
+          const cardsArr = cards;
+          if (glowIdx >= 0 && glowIdx < n) {
+            cardsArr[glowIdx].style.boxShadow = "0 18px 40px rgba(0, 0, 0, 0.4)";
+          }
+          cardsArr[nearest].style.boxShadow = "0 0 0 1px rgba(255, 179, 64, 0.6), 0 28px 60px rgba(0, 0, 0, 0.55), 0 0 40px rgba(230, 70, 92, 0.4)";
+          glowIdx = nearest;
+        }
+        curIdx = indexAt(el.scrollLeft);
+        if (!snappedOnce) {
+          // First paint: settle the nearest highlightable anime at center.
+          snappedOnce = true;
+          const first = Math.max(0, Math.ceil((el.clientWidth / 2 - geo.padL - geo.col / 2) / (geo.col + geo.gap)));
+          if (centerOf(first) > 2) animateTo(centerOf(first), 700);
+        }
+      };
+
+      const applyTilt = (card) => {
+        const tx = parseFloat(card.dataset.tiltX || 0);
+        const ty = parseFloat(card.dataset.tiltY || 0);
+        card.style.transform = `${card.dataset.cf || ""} rotateX(${tx}deg) rotateY(${ty}deg)`;
+      };
+
+      let cfTicking = false;
+      const cfOnScroll = () => {
+        if (cfTicking) return;
+        cfTicking = true;
+        requestAnimationFrame(() => { cfTicking = false; updateCoverflow(); });
+      };
+      if (isCF) {
+        el.addEventListener("scroll", cfOnScroll, { passive: true });
+        window.addEventListener("resize", cfOnScroll);
+        window.__coverflows = window.__coverflows || new Map();
+        window.__coverflows.set(el, cfOnScroll);
+      }
+
+      // Cursor drives the tilt on each card (combined with the coverflow arc)
+      if (isCF) {
+        el.addEventListener("pointermove", (e) => {
+          const card = e.target.closest(".anime-card");
+          if (!card) return;
+          const r = card.getBoundingClientRect();
+          const px = (e.clientX - r.left) / r.width - 0.5;
+          const py = (e.clientY - r.top) / r.height - 0.5;
+          card.dataset.tiltX = (-py * 12).toFixed(2);
+          card.dataset.tiltY = (px * 12).toFixed(2);
+          applyTilt(card);
+        });
+        el.addEventListener("pointerleave", () => {
+          el.querySelectorAll(".anime-card").forEach((c) => {
+            if (c.dataset.tiltX) {
+              c.dataset.tiltX = "0"; c.dataset.tiltY = "0";
+              applyTilt(c);
+            }
+          });
+        });
+      }
+
       // Arrow buttons
       const prev = wrap.querySelector(".carousel-btn.prev");
       const next = wrap.querySelector(".carousel-btn.next");
       const step = () => Math.max(el.clientWidth * 0.75, 300);
-      if (prev) prev.addEventListener("click", () => el.scrollBy({ left: -step(), behavior: "smooth" }));
-      if (next) next.addEventListener("click", () => el.scrollBy({ left: step(), behavior: "smooth" }));
+
+      // Exact scroll position that centers card index i in the viewport.
+      // Driving the animation to these positions means the highlighted
+      // anime always lands dead-center.
+      const centerOf = (i) => {
+        const max = Math.max(0, el.scrollWidth - el.clientWidth);
+        const pos = geo.padL + i * (geo.col + geo.gap) + geo.col / 2 - el.clientWidth / 2;
+        return Math.max(0, Math.min(max, pos));
+      };
+      const indexAt = (sl) => {
+        const i = Math.round((sl + el.clientWidth / 2 - geo.padL - geo.col / 2) / (geo.col + geo.gap));
+        return Math.max(0, Math.min(geo.count - 1, i));
+      };
+      let curIdx = 0;
+      let snappedOnce = false;
+
+      // Smooth eased glide to a scroll position. The 3D arc is re-synced
+      // every frame so the next anime visibly takes over the center
+      // highlight instead of the whole row just sliding sideways.
+      const animateTo = (target, duration = 800) => {
+        const from = el.scrollLeft;
+        const dist = target - from;
+        if (Math.abs(dist) < 1) return;
+        cancelAnimationFrame(raf); raf = null;
+        el.classList.add("no-snap");
+        el.style.scrollBehavior = "auto";
+        const start = performance.now();
+        const ease = (t) => (t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2);
+        const tick = (now) => {
+          const p = Math.min(1, (now - start) / duration);
+          el.scrollLeft = from + dist * ease(p);
+          if (isCF) cfOnScroll();
+          if (p < 1) {
+            raf = requestAnimationFrame(tick);
+          } else {
+            raf = null;
+            el.classList.remove("no-snap");
+            el.style.scrollBehavior = "";
+          }
+        };
+        raf = requestAnimationFrame(tick);
+      };
+
+      if (prev) prev.addEventListener("click", () => animateTo(centerOf(Math.max(0, curIdx - 1))));
+      if (next) next.addEventListener("click", () => animateTo(centerOf(Math.min(geo.count - 1, curIdx + 1))));
 
       // Hide the right fade / button when fully scrolled
       const updateEdges = () => {
@@ -274,16 +422,51 @@
           e.stopPropagation();
         }
       }, true);
+
+      // Auto-advance: glide to the next card every few seconds.
+      // Pauses while the pointer is over it, while dragging, or when
+      // the tab is hidden.
+      const maxScroll = () => el.scrollWidth - el.clientWidth;
+      let paused = false, autoTimer = null, hovered = false;
+
+      const scrollStep = () => {
+        // Advance the center highlight one anime at a time; wrap around.
+        const next = curIdx + 1;
+        if (next >= geo.count) {
+          animateTo(centerOf(0), 1000);
+        } else {
+          animateTo(centerOf(next), 850);
+        }
+      };
+
+      const startAuto = () => {
+        stopAuto();
+        autoTimer = setInterval(() => {
+          if (paused || hovered || down) return;
+          if (document.hidden) return;
+          scrollStep();
+        }, 4200);
+      };
+      const stopAuto = () => {
+        if (autoTimer) { clearInterval(autoTimer); autoTimer = null; }
+      };
+
+      el.addEventListener("pointerenter", () => { hovered = true; });
+      el.addEventListener("pointerleave", () => { hovered = false; });
+      document.addEventListener("visibilitychange", () => {
+        if (document.hidden) stopAuto(); else startAuto();
+      });
+
+      startAuto();
     }
 
     document.addEventListener("DOMContentLoaded", loadHome);
 
-    // Cursor parallax — kanji drift gently toward the pointer
+    // Cursor parallax — kanji drift gently toward the pointer and the
+    // floating anime posters tilt in 3D toward it.
     (function () {
       const hero = document.querySelector(".hero");
       if (!hero) return;
-      const chars = hero.querySelectorAll(".hero-char");
-      if (!chars.length) return;
 
       let rx = 0, ry = 0, tx = 0, ty = 0, raf = null;
 
@@ -302,6 +485,7 @@
       function step() {
         rx += (tx - rx) * 0.06;
         ry += (ty - ry) * 0.06;
+        const chars = hero.querySelectorAll(".hero-char");
         chars.forEach((c, i) => {
           const depth = 18 + i * 10;
           c.style.transform = `translate3d(${rx * depth}px, ${ry * depth * 0.6}px, 0)`;
