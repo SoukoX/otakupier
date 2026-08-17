@@ -2879,18 +2879,30 @@ footer .footer-links {
   white-space: nowrap;
 }
 
-.avatar-ring {
-  position: relative;
-  background: linear-gradient(135deg, rgba(230, 70, 92, 0.95), rgba(56, 214, 181, 0.9));
-  box-shadow: 0 0 14px rgba(230, 70, 92, 0.4);
-}
-.avatar-ring::after {
-  content: "";
-  position: absolute;
-  inset: -3px;
+.avatar {
+  width: 38px;
+  height: 38px;
   border-radius: 50%;
-  border: 1.5px solid rgba(255, 179, 64, 0.55);
-  pointer-events: none;
+  background: var(--accent-grad);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 800;
+  font-size: 0.9rem;
+  color: #fff;
+  overflow: hidden;
+  flex: 0 0 auto;
+}
+
+.avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.avatar-ring {
+  background: linear-gradient(135deg, rgba(230, 70, 92, 0.95), rgba(56, 214, 181, 0.9));
+  box-shadow: 0 0 0 2px var(--bg-card), 0 0 0 3px rgba(230, 70, 92, 0.9), 0 0 14px rgba(230, 70, 92, 0.5), 0 0 0 6px rgba(56, 214, 181, 0.55);
 }
 
 .custom-title {
