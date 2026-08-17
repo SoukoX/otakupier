@@ -2016,12 +2016,12 @@ footer .footer-links {
   font-weight: 800;
   letter-spacing: 0.06em;
   color: #fff;
-  background: linear-gradient(135deg, #ffd54a, #ff8a00);
+  background: linear-gradient(135deg, #4facfe, #00f2fe);
   padding: 1px 7px;
   border-radius: 999px;
   margin-left: 5px;
   vertical-align: middle;
-  box-shadow: 0 0 10px rgba(255, 213, 74, 0.45);
+  box-shadow: 0 0 10px rgba(79, 172, 254, 0.45);
   white-space: nowrap;
 }
 
