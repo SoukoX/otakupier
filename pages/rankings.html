@@ -112,7 +112,7 @@
           <div class="rank-vote" style="text-align:right;">
             <button class="btn btn-primary btn-small" onclick="event.stopPropagation();openVote(${r.id})">${mine && !isAdmin() ? "Change vote" : "Vote"}</button>
           </div>`;
-        el.addEventListener("click", () => (window.location.href = `anime.html?id=${r.id}`));
+        el.addEventListener("click", () => (window.location.href = `anime?id=${r.id}`));
         list.appendChild(el);
       });
     }
@@ -121,7 +121,7 @@
     function openVote(malId) {
       if (!isLoggedIn()) {
         showToast("Login to vote on anime");
-        window.location.href = "login.html";
+        window.location.href = "login";
         return;
       }
       const row = aggRows.find((a) => a.id === malId);
