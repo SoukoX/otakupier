@@ -8,7 +8,7 @@
   <meta name="description" content="OtakuPier is an anime catalog and community site. Discover anime, read manga, find where to watch on official platforms, browse rankings, reviews, characters and live chat with fellow fans.">
   <meta name="keywords" content="anime, anime catalog, where to watch anime, anime rankings, anime reviews, seasonal anime, anime community, read manga, otaku">
   <meta name="robots" content="index, follow">
-  <meta name="theme-color" content="#7c5cff">
+  <meta name="theme-color" content="#e6465c">
   <link rel="canonical" href="https://otakupier.2bd.net/">
   <link rel="icon" type="image/svg+xml" href="favicon.svg">
   <meta property="og:type" content="website">
@@ -42,42 +42,93 @@
   <nav class="navbar" id="navbar"></nav>
 
   <header class="hero">
-    <h1>Welcome to <span>OtakuPier</span></h1>
-    <p>Explore the world of anime. Discover titles, characters and episodes, find where to watch on official platforms, read the manga — then rank, review and chat with the community.</p>
-    <a href="pages/catalog.html" class="btn btn-primary">Browse the catalog</a>
+    <div class="hero-bg" aria-hidden="true">
+      <div class="blob blob-1"></div>
+      <div class="blob blob-2"></div>
+      <div class="blob blob-3"></div>
+      <span class="hero-char c1">魂</span>
+      <span class="hero-char c2">波</span>
+      <span class="hero-char c3">夢</span>
+      <span class="hero-char c4">海</span>
+    </div>
+    <div class="hero-posters" id="heroPosters" aria-hidden="true"></div>
+    <div class="hero-grain" aria-hidden="true"></div>
+    <div class="hero-inner">
+      <div class="hero-copy">
+        <p class="hero-kicker anim-rise">A harbor for anime &amp; manga</p>
+        <h1 class="anim-rise anim-delay-1">Everything docks at <span class="shimmer">OtakuPier</span></h1>
+        <p class="hero-sub anim-rise anim-delay-2">OtakuPier is a community-run port for the shows you love. Browse the catalog, find where to watch each title, compare community rankings, and leave the review you've been sitting on.</p>
+        <div class="hero-cta anim-rise anim-delay-3">
+          <a href="pages/catalog.html" class="btn btn-primary btn-glow">Browse the catalog</a>
+          <a href="#about" class="btn btn-outline">What is this place?</a>
+        </div>
+      </div>
+      <aside class="pier-post anim-rise anim-delay-2" aria-label="How OtakuPier works">
+        <div class="pier-post-head">
+          <span class="pier-pulse"></span>
+          <h3>What you'll find here</h3>
+        </div>
+        <ul>
+          <li>
+            <span class="num">01</span>
+            <span class="label">Community rankings</span>
+            <span class="sub">Not one critic's list — every member's vote counts toward the pier's top-rated chart.</span>
+          </li>
+          <li>
+            <span class="num">02</span>
+            <span class="label">Where to watch</span>
+            <span class="sub">Official streaming links for every title, so you can actually press play.</span>
+          </li>
+          <li>
+            <span class="num">03</span>
+            <span class="label">You earn the stripes</span>
+            <span class="sub">Review, chat, and rank to earn Reward Points — spend them on name colors, titles, and more.</span>
+          </li>
+        </ul>
+      </aside>
+    </div>
+
+    <div class="ticker" aria-hidden="true">
+      <div class="ticker-track">
+        <span>アニメ ANIME</span><span>・</span>
+        <span>マンガ MANGA</span><span>・</span>
+        <span>COMMUNITY RANKINGS</span><span>・</span>
+        <span>WHERE TO WATCH</span><span>・</span>
+        <span>REVIEWS</span><span>・</span>
+        <span>LIVE CHAT</span><span>・</span>
+        <span>アニメ ANIME</span><span>・</span>
+        <span>マンガ MANGA</span><span>・</span>
+        <span>COMMUNITY RANKINGS</span><span>・</span>
+        <span>WHERE TO WATCH</span><span>・</span>
+        <span>REVIEWS</span><span>・</span>
+        <span>LIVE CHAT</span><span>・</span>
+      </div>
+    </div>
   </header>
 
   <main class="container">
-    <section id="trending">
-      <div class="section-head">
-        <h2>Trending Now</h2>
-        <a class="link" href="pages/catalog.html">View all</a>
-      </div>
-      <div class="grid" id="trendingGrid"></div>
-    </section>
-
-    <section id="airing">
-      <div class="section-head">
-        <h2>Currently Airing</h2>
-        <a class="link" href="pages/catalog.html">View all</a>
-      </div>
-      <div class="grid" id="airingGrid"></div>
-    </section>
-
-    <section id="upcoming">
-      <div class="section-head">
-        <h2>Upcoming</h2>
-        <a class="link" href="pages/catalog.html">View all</a>
-      </div>
-      <div class="grid" id="upcomingGrid"></div>
-    </section>
-
     <section id="toprated">
       <div class="section-head">
-        <h2>Top Rated</h2>
+        <h2>Top of the pier</h2>
         <a class="link" href="pages/rankings.html">See community rankings</a>
       </div>
-      <div class="grid" id="topRatedGrid"></div>
+      <div class="carousel-wrap">
+        <div class="carousel-fade left"></div>
+        <div class="carousel-fade right"></div>
+        <button class="carousel-btn prev" aria-label="Scroll left">‹</button>
+        <button class="carousel-btn next" aria-label="Scroll right">›</button>
+        <div class="carousel" id="topRatedCarousel"></div>
+      </div>
+    </section>
+
+    <section id="about">
+      <div class="section-head">
+        <h2>About OtakuPier</h2>
+      </div>
+      <div class="about-card">
+        <p><strong>OtakuPier</strong> is a catalog and community board for anime and manga. Where most sites are just a grid of posters and a search bar, this one is built around a simple idea: <em>the people watching should shape what everyone finds.</em></p>
+        <p>Every title here links out to an official way to watch it. Members vote on community rankings, leave reviews, keep watchlists, and talk in the live chat. And the more you take part, the more the site reflects you — earned Reward Points let you customize your name color, title, avatar glow, and even a VIP badge.</p>
+      </div>
     </section>
   </main>
 
@@ -89,63 +140,179 @@
   <script src="js/app.js"></script>
   <script>
     async function loadHome() {
-      const trending = document.getElementById("trendingGrid");
-      const topRated = document.getElementById("topRatedGrid");
-      const airing = document.getElementById("airingGrid");
-      const upcoming = document.getElementById("upcomingGrid");
+      const carousel = document.getElementById("topRatedCarousel");
+      if (!carousel) return;
 
-      // Translucent skeleton placeholders while data loads
-      [trending, topRated, airing, upcoming].forEach((g) => {
-        g.innerHTML = skeletonGrid(12);
-      });
+      carousel.innerHTML = skeletonGrid(12);
+      setupCarousel(carousel);
 
-      // Track anime already placed so the same title never appears twice
-      const seen = new Set();
-      const pick = (list) => {
-        const fresh = [];
-        (list || []).forEach((a) => {
-          if (a.mal_id && !seen.has(a.mal_id)) {
-            seen.add(a.mal_id);
-            fresh.push(a);
-          }
-        });
-        return fresh.slice(0, 25);
-      };
+      // Fill the hero with real anime posters for that unmistakable anime look
+      const posters = document.getElementById("heroPosters");
+      if (posters) fillHeroPosters(posters);
+
       const fill = (grid, list) => {
-        const fresh = pick(list);
         grid.innerHTML = "";
-        fresh.forEach((a) => grid.appendChild(JIKAN.card(a)));
-        return fresh.length > 0;
+        (list || []).slice(0, 25).forEach((a) => grid.appendChild(JIKAN.card(a)));
+        return (list || []).length > 0;
       };
-      const fail = (grid, label) => {
-        grid.innerHTML = `<div class="empty-state">${label} unavailable right now. Please try again later.</div>`;
+      const fail = (grid) => {
+        grid.innerHTML = `<div class="empty-state">Top titles unavailable right now. Please try again later.</div>`;
       };
 
       await JIKAN.loadEdits();
+      try {
+        const res = await JIKAN.topRated(1);
+        if (fill(carousel, res.data)) return;
+      } catch (e) {}
+      try {
+        const fb = await JIKAN.topAnime(1);
+        if (fill(carousel, fb.data)) return;
+      } catch (e) {}
+      fail(carousel);
+    }
 
-      // Each section loads independently so one flaky Jikan endpoint never
-      // blanks the whole home page. Every section has a top-anime fallback.
-      async function loadSection(grid, label, primary, fallbackPage) {
-        try {
-          const res = await primary();
-          if (res && res.data && fill(grid, res.data.slice(0, 25))) return;
-        } catch (e) {}
-        try {
-          const fb = await JIKAN.topRated(fallbackPage);
-          if (fb && fb.data && fill(grid, fb.data)) return;
-        } catch (e) {}
-        fail(grid, label);
-      }
+    // Populate the hero's floating poster cards from live Jikan data.
+    // Titles are picked at random so the hero looks different on every visit.
+    function fillHeroPosters(el) {
+      const slot = (img, cls) => {
+        const i = new Image();
+        i.className = cls;
+        i.onload = () => el.appendChild(i);
+        i.onerror = () => {};
+        i.src = img;
+      };
+      JIKAN.topAnime(1)
+        .then((res) => {
+          const list = (res.data || []).slice(0, 24);
+          const pics = list.map((a) => a.images?.jpg?.image_url).filter(Boolean);
+          if (!pics.length) return;
+          // Shuffle so a different set of shows docks each refresh
+          for (let i = pics.length - 1; i > 0; i--) {
+            const j = Math.floor(Math.random() * (i + 1));
+            [pics[i], pics[j]] = [pics[j], pics[i]];
+          }
+          ["fp-1", "fp-2", "fp-3", "fp-4", "fp-5", "fp-6"].forEach((cls, n) => {
+            const pic = pics[n] || pics[0];
+            if (pic) slot(pic, cls);
+          });
+        })
+        .catch(() => {});
+    }
 
-      await Promise.all([
-        loadSection(trending, "Trending", () => JIKAN.topAnime(1), 1),
-        loadSection(topRated, "Top Rated", () => JIKAN.topRated(1), 1),
-        loadSection(airing, "Currently airing", () => JIKAN.currentSeason(), 2),
-        loadSection(upcoming, "Upcoming", () => JIKAN.upcomingSeason(), 3),
-      ]);
+    // Drag-to-scroll + arrow buttons for the carousel
+    function setupCarousel(el) {
+      const wrap = el.closest(".carousel-wrap");
+      if (!wrap) return;
+
+      // Arrow buttons
+      const prev = wrap.querySelector(".carousel-btn.prev");
+      const next = wrap.querySelector(".carousel-btn.next");
+      const step = () => Math.max(el.clientWidth * 0.75, 300);
+      if (prev) prev.addEventListener("click", () => el.scrollBy({ left: -step(), behavior: "smooth" }));
+      if (next) next.addEventListener("click", () => el.scrollBy({ left: step(), behavior: "smooth" }));
+
+      // Hide the right fade / button when fully scrolled
+      const updateEdges = () => {
+        const max = el.scrollWidth - el.clientWidth;
+        const atStart = el.scrollLeft <= 2;
+        const atEnd = el.scrollLeft >= max - 2;
+        if (prev) prev.style.opacity = atStart ? "0" : "1";
+        if (next) next.style.opacity = atEnd ? "0" : "1";
+        const fadeL = wrap.querySelector(".carousel-fade.left");
+        const fadeR = wrap.querySelector(".carousel-fade.right");
+        if (fadeL) fadeL.style.opacity = atStart ? "0" : "1";
+        if (fadeR) fadeR.style.opacity = atEnd ? "0" : "1";
+      };
+      el.addEventListener("scroll", updateEdges, { passive: true });
+      updateEdges();
+
+      // Momentum drag-to-scroll
+      let down = false, moved = false, startX = 0, startScroll = 0, lastX = 0, vel = 0, raf = null;
+
+      el.addEventListener("pointerdown", (e) => {
+        if (e.pointerType === "mouse" && e.button !== 0) return;
+        down = true; moved = false; vel = 0;
+        startX = lastX = e.clientX;
+        startScroll = el.scrollLeft;
+        cancelAnimationFrame(raf); raf = null;
+        el.classList.add("dragging");
+      });
+
+      el.addEventListener("pointermove", (e) => {
+        if (!down) return;
+        const dx = e.clientX - startX;
+        if (Math.abs(dx) > 3) moved = true;
+        vel = e.clientX - lastX;
+        lastX = e.clientX;
+        el.scrollLeft = startScroll - dx;
+      });
+
+      const end = () => {
+        if (!down) return;
+        down = false;
+        el.classList.remove("dragging");
+        // momentum: keep gliding until friction stops it
+        if (moved && Math.abs(vel) > 1.5) {
+          const stepMomentum = () => {
+            vel *= 0.94;
+            el.scrollLeft -= vel;
+            if (Math.abs(vel) > 0.3 && down === false) {
+              raf = requestAnimationFrame(stepMomentum);
+            } else {
+              vel = 0; raf = null;
+            }
+          };
+          raf = requestAnimationFrame(stepMomentum);
+        }
+      };
+      el.addEventListener("pointerup", end);
+      el.addEventListener("pointercancel", end);
+      el.addEventListener("pointerleave", end);
+      el.addEventListener("click", (e) => {
+        if (moved) {
+          e.preventDefault();
+          e.stopPropagation();
+        }
+      }, true);
     }
 
     document.addEventListener("DOMContentLoaded", loadHome);
+
+    // Cursor parallax — kanji drift gently toward the pointer
+    (function () {
+      const hero = document.querySelector(".hero");
+      if (!hero) return;
+      const chars = hero.querySelectorAll(".hero-char");
+      if (!chars.length) return;
+
+      let rx = 0, ry = 0, tx = 0, ty = 0, raf = null;
+
+      hero.addEventListener("mousemove", (e) => {
+        const r = hero.getBoundingClientRect();
+        tx = ((e.clientX - r.left) / r.width - 0.5) * 2;
+        ty = ((e.clientY - r.top) / r.height - 0.5) * 2;
+        if (!raf) raf = requestAnimationFrame(step);
+      });
+
+      hero.addEventListener("mouseleave", () => {
+        tx = 0; ty = 0;
+        if (!raf) raf = requestAnimationFrame(step);
+      });
+
+      function step() {
+        rx += (tx - rx) * 0.06;
+        ry += (ty - ry) * 0.06;
+        chars.forEach((c, i) => {
+          const depth = 18 + i * 10;
+          c.style.transform = `translate3d(${rx * depth}px, ${ry * depth * 0.6}px, 0)`;
+        });
+        if (Math.abs(tx - rx) > 0.001 || Math.abs(ty - ry) > 0.001) {
+          raf = requestAnimationFrame(step);
+        } else {
+          raf = null;
+        }
+      }
+    })();
   </script>
 </body>
 </html>
