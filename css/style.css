@@ -81,6 +81,105 @@ img {
   opacity: 0.7;
 }
 
+/* Home page: no solid bar — floating transparent nav */
+.navbar.navbar-home {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  background: transparent;
+  border-bottom: none;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 18px 26px;
+  z-index: 60;
+}
+
+.navbar.navbar-home::after {
+  display: none;
+}
+
+.navbar-home .logo {
+  color: var(--text);
+  text-shadow: 0 2px 12px rgba(0, 0, 0, 0.6);
+}
+
+.navbar-home .nav-toggle {
+  display: inline-flex;
+  width: 46px;
+  height: 46px;
+  border-radius: 50%;
+  border: 1px solid rgba(255, 179, 64, 0.4);
+  background: rgba(28, 31, 58, 0.6);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  color: var(--text);
+  font-size: 1.3rem;
+}
+
+.navbar-home .nav-panel {
+  position: absolute;
+  top: 66px;
+  right: 22px;
+  display: none;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 4px;
+  min-width: 230px;
+  padding: 14px;
+  background: rgba(24, 27, 50, 0.96);
+  border: 1px solid var(--border);
+  border-top: 2px solid var(--accent-grad);
+  border-radius: var(--radius);
+  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.55);
+}
+
+.navbar-home.open .nav-panel {
+  display: flex;
+  animation: dropIn 0.25s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+@keyframes dropIn {
+  from { opacity: 0; transform: translateY(-8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.navbar-home .nav-links {
+  flex-direction: column;
+  align-items: stretch;
+  overflow: visible;
+}
+
+.navbar-home .nav-links a {
+  display: block;
+  padding: 10px 12px;
+  border-radius: 6px;
+  font-size: 0.98rem;
+}
+
+.navbar-home .nav-auth {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 8px;
+  margin-left: 0;
+  border-top: 1px solid var(--border);
+  padding-top: 12px;
+  margin-top: 8px;
+}
+
+.navbar-home .nav-auth .btn,
+.navbar-home .nav-auth .user-menu {
+  width: 100%;
+}
+
+@media (min-width: 961px) {
+  .navbar-home .nav-panel {
+    right: 26px;
+  }
+}
+
 .nav-toggle {
   display: none;
   flex: 0 0 auto;
@@ -579,7 +678,7 @@ img {
 .hero {
   position: relative;
   overflow: hidden;
-  min-height: calc(100vh - 62px);
+  min-height: 100vh;
   display: flex;
   align-items: center;
   background:
@@ -1045,9 +1144,128 @@ section {
   gap: 18px;
 }
 
+/* Full-bleed catalog layout, streaming-platform style */
+.catalog-page {
+  width: 100%;
+}
+
+.catalog-hero {
+  padding: 60px clamp(20px, 4vw, 48px);
+  background:
+    radial-gradient(900px 300px at 85% 0%, rgba(230, 70, 92, 0.18), transparent 60%),
+    radial-gradient(700px 260px at 10% 100%, rgba(56, 214, 181, 0.1), transparent 60%),
+    linear-gradient(180deg, var(--bg-alt), var(--bg));
+  border-bottom: 1px solid var(--border);
+}
+
+.catalog-hero-inner {
+  max-width: 1500px;
+  margin: 0 auto;
+}
+
+.catalog-kicker {
+  color: var(--accent-2);
+  font-weight: 700;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  font-size: 0.78rem;
+  margin: 0 0 6px;
+}
+
+.catalog-hero h1 {
+  font-family: var(--font-display);
+  font-size: clamp(2rem, 4vw, 2.8rem);
+  font-weight: 800;
+  margin: 0 0 8px;
+}
+
+.catalog-sub {
+  color: var(--text-dim);
+  margin: 0 0 22px;
+  max-width: 560px;
+}
+
+.catalog-searchbar {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  max-width: 760px;
+}
+
+.catalog-searchbar #searchBox {
+  flex: 1 1 260px;
+  padding: 12px 16px;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: var(--bg-card);
+  color: var(--text);
+  font-family: inherit;
+  font-size: 1rem;
+}
+
+.catalog-searchbar select {
+  padding: 12px 14px;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: var(--bg-card);
+  color: var(--text);
+  font-family: inherit;
+  font-size: 0.92rem;
+}
+
+.catalog-searchbar .btn {
+  padding: 12px 22px;
+}
+
+.catalog-body {
+  max-width: 1600px;
+  margin: 0 auto;
+  padding: 28px clamp(16px, 3vw, 40px) 48px;
+}
+
+.catalog-results-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 20px;
+  padding-left: 14px;
+  border-left: 3px solid var(--accent);
+}
+
+.catalog-results-head h2 {
+  font-family: var(--font-display);
+  font-size: 1.35rem;
+  font-weight: 700;
+  color: var(--text);
+}
+
+.catalog-grid {
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: 20px;
+}
+
+@media (max-width: 960px) {
+  .catalog-body {
+    padding: 24px 16px 40px;
+  }
+}
+
 /* Horizontal scroll-snap slider row (homepage + ranking strips) */
 .carousel-wrap {
   position: relative;
+}
+
+/* The coverflow slider bleeds past the container edges so the 3D arc has
+   room to show the partially-turned side cards. */
+.carousel-wrap:has(.coverflow) {
+  margin-inline: -36px;
+}
+
+@media (max-width: 960px) {
+  .carousel-wrap:has(.coverflow) {
+    margin-inline: 0;
+  }
 }
 
 .carousel {
@@ -1072,6 +1290,38 @@ section {
   scroll-snap-type: none;
   user-select: none;
   scroll-behavior: auto;
+}
+
+.carousel.no-snap {
+  scroll-snap-type: none;
+}
+
+/* Coverflow 3D arc (used on the "Top of the pier" slider) */
+.carousel.coverflow {
+  perspective: 1400px;
+  grid-auto-columns: 240px;
+  scroll-snap-type: x mandatory;
+  scroll-padding-inline: 50%;
+  padding: 46px 8px 58px;
+}
+
+.carousel.coverflow .anime-card {
+  scroll-snap-align: center;
+  animation: none;
+  width: auto;
+  /* No transition on transform/opacity/filter — the JS arc drives them
+     every frame; a CSS transition would restart each frame and jitter. */
+  transition: box-shadow 0.3s ease;
+  will-change: transform, opacity, filter;
+  transform-style: preserve-3d;
+}
+
+.carousel.coverflow.dragging .anime-card {
+  transition: none;
+}
+
+.carousel.coverflow .anime-card:hover {
+  box-shadow: 0 0 0 1px rgba(255, 179, 64, 0.5), 0 24px 46px rgba(0, 0, 0, 0.5), 0 0 30px rgba(230, 70, 92, 0.3);
 }
 
 .carousel .anime-card {
@@ -1935,8 +2185,8 @@ section {
 }
 
 .user-avatar {
-  width: 34px;
-  height: 34px;
+  width: 40px;
+  height: 40px;
   border-radius: 50%;
   overflow: hidden;
   background: var(--accent-grad);
@@ -1944,14 +2194,37 @@ section {
   align-items: center;
   justify-content: center;
   font-weight: 800;
+  font-size: 1rem;
   color: #fff;
   cursor: pointer;
+  position: relative;
+  box-shadow: 0 0 0 2px rgba(255,255,255,.12), 0 4px 14px rgba(230, 70, 92, 0.35);
+  transition: transform 0.2s, box-shadow 0.2s;
+  flex: 0 0 auto;
+}
+
+.user-avatar:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 0 0 2px rgba(255,255,255,.2), 0 6px 20px rgba(230, 70, 92, 0.5);
 }
 
 .user-avatar img {
   width: 100%;
   height: 100%;
   object-fit: cover;
+}
+
+/* Admin shortcut — always visible next to the avatar so it never gets
+   hidden by the scrollable nav link strip on smaller screens */
+.admin-btn {
+  border-color: rgba(255, 179, 64, 0.55) !important;
+  color: var(--accent-2) !important;
+  font-weight: 700 !important;
+}
+
+.admin-btn:hover {
+  background: rgba(255, 179, 64, 0.12) !important;
+  border-color: var(--accent-2) !important;
 }
 
 /* ---------- Toast ---------- */
@@ -2419,24 +2692,30 @@ footer .footer-links {
   padding: 24px;
   margin-bottom: 24px;
   display: flex;
-  gap: 20px;
+  gap: 24px;
   flex-wrap: wrap;
   align-items: center;
 }
 
 .profile-card .avatar-lg {
-  width: 90px;
-  height: 90px;
+  width: 108px;
+  height: 108px;
   border-radius: 50%;
   overflow: hidden;
   background: var(--accent-grad);
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 2rem;
+  font-size: 2.4rem;
   font-weight: 800;
   color: #fff;
-  border: 3px solid rgba(255,255,255,.15);
+  position: relative;
+  box-shadow: 0 0 0 4px var(--bg-card), 0 0 0 5px rgba(230, 70, 92, 0.45), 0 10px 30px rgba(0, 0, 0, 0.35);
+  flex: 0 0 auto;
+}
+
+.profile-card .avatar-lg.avatar-ring {
+  box-shadow: 0 0 0 4px var(--bg-card), 0 0 0 5px rgba(230, 70, 92, 0.9), 0 0 24px rgba(230, 70, 92, 0.5), 0 0 0 9px rgba(56, 214, 181, 0.55);
 }
 
 .profile-card .avatar-lg img {
