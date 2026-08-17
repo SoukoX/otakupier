@@ -472,6 +472,7 @@
           <div class="admin-rp-form">
             <input type="text" id="rpUid" class="search-input" placeholder="User ID" style="flex:1; min-width:200px;">
             <input type="number" id="rpAmount" class="search-input" placeholder="Amount (e.g. 100 or -50)" style="flex:1; min-width:140px;">
+            <input type="text" id="rpNote" class="search-input" placeholder="Remark" value="Admin adjustment" style="flex:1; min-width:160px;">
             <button class="btn btn-primary" onclick="grantPoints()">Apply</button>
           </div>
         </div>
@@ -536,7 +537,11 @@
           if (!found) { showToast(`No user named "${input}"`); return; }
           target = found.id;
         }
-        const { data, error } = await supabase.rpc("grant_rp", { target, amount, reason: "admin" });
+        const { data, error } = await supabase.rpc("grant_rp", {
+          target,
+          amount,
+          reason: (document.getElementById("rpNote")?.value || "Admin adjustment").trim() || "Admin adjustment",
+        });
         if (error) throw error;
         showToast(data === "ok" ? "Points updated" : data);
         searchRpUsers();
