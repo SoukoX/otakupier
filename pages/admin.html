@@ -523,11 +523,19 @@
     }
 
     async function grantPoints() {
-      const target = (document.getElementById("rpUid")?.value || "").trim();
+      const input = (document.getElementById("rpUid")?.value || "").trim();
       const amount = parseInt(document.getElementById("rpAmount")?.value, 10);
-      if (!target) { showToast("Enter a user ID"); return; }
+      if (!input) { showToast("Enter a user ID or name"); return; }
       if (!amount || Math.abs(amount) > 100000) { showToast("Enter a valid amount (-100000 to 100000)"); return; }
       try {
+        let target = input;
+        const uuidRe = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+        if (!uuidRe.test(input)) {
+          const { data: found } = await supabase.from("profiles")
+            .select("id").eq("name", input).maybeSingle();
+          if (!found) { showToast(`No user named "${input}"`); return; }
+          target = found.id;
+        }
         const { data, error } = await supabase.rpc("grant_rp", { target, amount, reason: "admin" });
         if (error) throw error;
         showToast(data === "ok" ? "Points updated" : data);
