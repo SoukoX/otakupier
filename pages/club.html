@@ -96,7 +96,7 @@
         const el = document.createElement("div");
         el.className = "user-row";
         el.innerHTML = `
-          <div class="avatar${perk.avatar_ring ? " avatar-ring" : ""}" style="cursor:pointer;" onclick="location.href='profile.html?id=${m.user_id}'">${(p?.name || "U").charAt(0).toUpperCase()}</div>
+          <div class="avatar" style="cursor:pointer;" onclick="location.href='profile.html?id=${m.user_id}'">${(p?.name || "U").charAt(0).toUpperCase()}</div>
           <a href="profile.html?id=${m.user_id}" style="color:var(--text); text-decoration:none; font-weight:600;">${prestigeNameHTML(p || {}, perk)}</a>
           ${m.role === "owner" ? `<span class="genre-tag" style="font-size:.7rem;">Owner</span>` : ""}
           ${myRole === "owner" && m.role !== "owner" ? `<button class="btn btn-danger btn-small" style="margin-left:auto;" onclick="removeMember('${m.user_id}')">Remove</button>` : ""}`;
@@ -188,7 +188,7 @@
         el.innerHTML = `
           <div class="review-top">
             <div class="review-author">
-              <div class="avatar${perk.avatar_ring ? " avatar-ring" : ""}" style="cursor:pointer;" onclick="location.href='profile.html?id=${p.user_id}'">${(author?.name || "U").charAt(0).toUpperCase()}</div>
+              <div class="avatar" style="cursor:pointer;" onclick="location.href='profile.html?id=${p.user_id}'">${(author?.name || "U").charAt(0).toUpperCase()}</div>
               <a href="profile.html?id=${p.user_id}" style="color:var(--text); text-decoration:none;">${prestigeNameHTML(author || {}, perk)}</a>
             </div>
           </div>
