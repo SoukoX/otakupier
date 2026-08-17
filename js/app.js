@@ -260,7 +260,6 @@ function renderNav() {
         { label: "My List", href: "pages/mylist.html", file: "mylist.html", inPages: true },
         { label: "Friends", href: "pages/friends.html", file: "friends.html", inPages: true },
         { label: "Messages", href: "pages/dms.html", file: "dms.html", inPages: true },
-        { label: "Profile", href: "pages/profile.html", file: "profile.html", inPages: true },
       ])
     : NAV_LINKS;
 
