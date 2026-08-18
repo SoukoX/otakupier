@@ -440,9 +440,12 @@ img {
   50% { transform: scale(1.04); box-shadow: 0 0 0 14px rgba(230, 70, 92, 0); }
   100% { transform: scale(1); box-shadow: 0 0 0 0 rgba(230, 70, 92, 0); }
 }
+.watch-page .container {
+  max-width: 1500px;
+}
 .watch-theater {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 240px;
+  grid-template-columns: minmax(0, 1fr) 250px;
   gap: 14px;
   margin: 4px 0 22px;
   border: 1px solid var(--border);
@@ -583,6 +586,77 @@ img {
   box-shadow: inset 0 0 0 1px var(--accent);
 }
 
+.watch-top {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 14px;
+  flex-wrap: wrap;
+  margin: 6px 0 14px;
+}
+.watch-top-title {
+  font-size: clamp(1.2rem, 3vw, 1.7rem);
+  margin-bottom: 2px;
+}
+.watch-top-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding-top: 4px;
+}
+.watch-mini-info {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+  padding: 14px;
+  margin: 0 0 16px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--bg-card);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.18);
+}
+.watch-mini-img {
+  width: 64px;
+  height: 92px;
+  object-fit: cover;
+  border-radius: 8px;
+  flex: 0 0 auto;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.35);
+}
+.watch-mini-body {
+  min-width: 0;
+}
+.watch-mini-title {
+  font-weight: 700;
+  font-size: 0.95rem;
+  line-height: 1.3;
+}
+.watch-mini-jp {
+  color: var(--text-dim);
+  font-size: 0.72rem;
+  margin-top: 2px;
+}
+.watch-mini-stats {
+  display: grid;
+  gap: 3px;
+  margin-top: 8px;
+  font-size: 0.76rem;
+}
+.watch-mini-stats .stat {
+  color: var(--text-dim);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.watch-mini-stats .stat strong {
+  color: var(--accent-3);
+  font-weight: 600;
+}
+.watch-mini-info .btn {
+  margin-top: 10px;
+  width: 100%;
+  justify-content: center;
+}
 .watch-head {
   display: flex;
   gap: 18px;
@@ -624,6 +698,9 @@ img {
   .watch-head-img {
     width: 72px;
     height: 104px;
+  }
+  .watch-top {
+    flex-direction: column;
   }
 }
 
@@ -866,7 +943,7 @@ img {
 }
 .stream-modal {
   position: relative;
-  width: min(920px, 100%);
+  width: min(1100px, 100%);
   background: var(--bg-card);
   border: 1px solid var(--border);
   border-radius: 14px;
