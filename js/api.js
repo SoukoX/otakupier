@@ -132,6 +132,176 @@ const JIKAN = {
     }
   },
 
+  // ---------- Smarter search (fuzzy + genre-aware) ----------
+  // Beyond Jikan's plain relevance search: candidates are gathered from the
+  // search endpoint, the title it matches to a genre (so typing "romance"
+  // lists romance anime), and the top list — then every candidate is scored
+  // client-side so exact, starts-with, contains, token-overlap, and typo-
+  // tolerant (edit-distance) matches all surface, ranked best-first.
+
+  // Normalize for matching: lowercase, strip accents, collapse symbols/spaces.
+  _norm(s) {
+    return String(s || "")
+      .toLowerCase()
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .replace(/[^a-z0-9]+/g, " ")
+      .replace(/\s+/g, " ")
+      .trim();
+  },
+
+  // Levenshtein edit distance (backing the typo-tolerant scoring).
+  _lev(a, b) {
+    const m = a.length, n = b.length;
+    if (!m) return n;
+    if (!n) return m;
+    let prev = new Array(n + 1);
+    let cur = new Array(n + 1);
+    for (let j = 0; j <= n; j++) prev[j] = j;
+    for (let i = 1; i <= m; i++) {
+      cur[0] = i;
+      for (let j = 1; j <= n; j++) {
+        const cost = a[i - 1] === b[j - 1] ? 0 : 1;
+        cur[j] = Math.min(prev[j] + 1, cur[j - 1] + 1, prev[j - 1] + cost);
+      }
+      const t = prev; prev = cur; cur = t;
+    }
+    return prev[n];
+  },
+
+  // Score one title against the normalized query → 0..1 (1 = exact).
+  _fuzzyScore(qn, title) {
+    if (!title || !qn) return 0;
+    const tn = this._norm(title);
+    if (!tn) return 0;
+    if (tn === qn) return 1;
+    if (tn.startsWith(qn)) return 0.94;
+    if (tn.includes(qn)) return 0.88;
+    const qTokens = qn.split(" ").filter(Boolean);
+    const tTokens = tn.split(" ").filter(Boolean);
+    if (qTokens.length > 1 && qTokens.every((w) => tn.includes(w))) return 0.84;
+    if (qTokens.length && qTokens.every((w) => tTokens.some((tw) => tw.startsWith(w)))) return 0.8;
+    if (qTokens.some((w) => tTokens.some((tw) => tw.startsWith(w)))) return 0.66;
+    // Typo-tolerant: close spelling variants still match.
+    const dist = this._lev(qn, tn);
+    const sim = 1 - dist / Math.max(qn.length, tn.length);
+    return sim >= 0.7 ? Math.min(0.82, 0.6 + (sim - 0.7) * 2) : 0;
+  },
+
+  // Best fuzzy score across every title a candidate carries.
+  _bestScore(qn, a) {
+    const titles = [a.title, a.title_english, a.title_japanese, a.title_synonyms].flat();
+    let best = 0;
+    for (const t of titles) best = Math.max(best, this._fuzzyScore(qn, t));
+    return best;
+  },
+
+  _genreCache: null,
+  async _genresCached() {
+    if (this._genreCache) return this._genreCache;
+    const res = await this.genres().catch(() => null);
+    this._genreCache = (res || []).map((g) => ({ id: g.mal_id, name: this._norm(g.name) }));
+    return this._genreCache || [];
+  },
+
+  // If the query is basically a genre name, return it (exact, prefix, fuzzy).
+  async _matchGenre(qn) {
+    const list = await this._genresCached();
+    let best = null, bestScore = 0;
+    for (const g of list) {
+      const s = this._fuzzyScore(qn, g.name);
+      if (s > bestScore) { bestScore = s; best = g; }
+    }
+    return bestScore >= 0.8 ? best : null;
+  },
+
+  _searchCache: new Map(), // norm(query)|genre -> { at, merged }
+
+  // Merge + score a fuzzy result pool, cached 5 min, then slice for paging.
+  async smartSearch(query, page = 1, genreId = "") {
+    const qn = this._norm(query);
+    const cacheKey = (qn || "*") + "|" + (genreId || "");
+    let merged = null;
+    const hit = this._searchCache.get(cacheKey);
+    if (hit && Date.now() - hit.at < 5 * 60 * 1000) merged = hit.merged;
+    if (!merged) {
+      merged = await this._buildSearchPool(query, qn, genreId);
+      this._searchCache.set(cacheKey, { at: Date.now(), merged });
+    }
+    const PER = 24;
+    const start = (page - 1) * PER;
+    const data = merged.slice(start, start + PER);
+    return {
+      data,
+      pagination: {
+        last_visible_page: Math.max(1, Math.ceil(merged.length / PER)),
+        items: { total: merged.length, per_page: PER, count: data.length },
+      },
+    };
+  },
+
+  async _buildSearchPool(query, qn, genreId) {
+    const pool = [];
+    if (query && !genreId) {
+      pool.push(this.get(`/anime?type=anime&sfw=true&page=1&q=${encodeURIComponent(query)}`));
+      pool.push(this.get(`/anime?type=anime&sfw=true&page=2&q=${encodeURIComponent(query)}`));
+    }
+    let genre = null;
+    if (genreId) {
+      genre = { id: genreId };
+    } else if (query) {
+      genre = await this._matchGenre(qn);
+    }
+    let genrePool = false;
+    if (genre && genre.id) {
+      genrePool = true;
+      pool.push(this.get(`/anime?genres=${genre.id}&order_by=popularity&sfw=true&page=1`));
+      pool.push(this.get(`/anime?genres=${genre.id}&order_by=popularity&sfw=true&page=2`));
+    }
+    // Top list = a wider fuzzy-matching pool for near/partial titles Jikan's
+    // search endpoint misses (and a client-side fallback when it's down).
+    pool.push(this.get(`/top/anime?page=1`));
+    pool.push(this.get(`/top/anime?page=2`));
+    pool.push(this.get(`/top/anime?page=3`));
+
+    const settled = await Promise.allSettled(pool);
+    const map = new Map(); // mal_id -> { anime, score }
+    const add = (a, score) => {
+      if (!a || !a.mal_id) return;
+      const cur = map.get(a.mal_id);
+      if (!cur || score > cur.score) map.set(a.mal_id, { anime: a, score });
+    };
+
+    settled.forEach((s, i) => {
+      if (s.status !== "fulfilled" || !s.value?.data) return;
+      const fromGenrePool = genrePool && i >= 2 && i < 4;
+      for (const a of s.value.data) {
+        let score = this._bestScore(qn, a);
+        // Genre-pool titles are valid answers for a genre query even when the
+        // title itself doesn't contain the genre word.
+        if (fromGenrePool && qn) score = Math.max(score, 0.55);
+        add(a, score);
+      }
+    });
+
+    const minScore = qn ? 0.5 : 0.6;
+    const list = Array.from(map.values())
+      .filter((e) => e.score >= minScore)
+      .sort((a, b) =>
+        b.score - a.score ||
+        (a.anime.rank || 99999) - (b.anime.rank || 99999) ||
+        (a.anime.title || "").localeCompare(b.anime.title || ""))
+      .map((e) => e.anime);
+    return list.slice(0, 150);
+  },
+
+  // Lightweight top suggestions for the typeahead dropdown (uses the same
+  // merged pool so repeated typing is served from cache).
+  async suggest(query) {
+    const res = await this.smartSearch(query, 1);
+    return (res.data || []).slice(0, 6);
+  },
+
   // Anime list filtered by genre
   async byGenre(genreId, page = 1) {
     return this.get(`/anime?genres=${genreId}&order_by=popularity&page=${page}`);
@@ -383,15 +553,12 @@ const JIKAN = {
   },
 
   // ---------- Watch Online (third-party streaming providers) ----------
-  // Enabled streaming providers configured in CONFIG.STREAMING. The
-  // Archive.org player is always sorted to the end of the list so the
-  // on-site community sources (AniPub) appear first. The 9anime provider
-  // stays hidden until its hosted API base URL is configured.
+  // Enabled streaming providers configured in CONFIG.STREAMING. The 9anime
+  // provider stays hidden until its hosted API base URL is configured.
   streamingProviders() {
     return (CONFIG.STREAMING || [])
       .filter((s) => s && s.enabled)
-      .filter((s) => !(s.id === "nineanime") || CONFIG.NINEANIME_API_BASE)
-      .sort((a, b) => (a.id === "archive" ? 1 : 0) - (b.id === "archive" ? 1 : 0));
+      .filter((s) => !(s.id === "nineanime") || CONFIG.NINEANIME_API_BASE);
   },
 
   // Look up an enabled streaming provider by its id (e.g. "anipub").
