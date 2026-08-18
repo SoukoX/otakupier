@@ -8,7 +8,7 @@
   <meta name="robots" content="index, follow">
   <meta name="description" content="Full anime details on OtakuPier — synopsis, episodes, characters, trailers, community rankings and user reviews.">
   <link rel="canonical" href="https://otakupier.2bd.net/pages/anime.html">
-  <link rel="icon" type="image/svg+xml" href="../favicon.svg">
+  <link rel="icon" type="image/svg+xml" href="../favicon.svg?v=2">
   <link rel="preconnect" href="https://api.jikan.moe">
   <link rel="preconnect" href="https://cdn.jsdelivr.net">
   <link rel="stylesheet" href="../css/style.css">
@@ -394,45 +394,17 @@
       })();
     }
 
-    // ---------- Where to Watch (single combined panel) ----------
-    // One panel that merges: the free streaming providers from CONFIG.STREAMING
-    // (with in-site episode picker), the official platforms reported by MAL,
-    // and open search gateways — so visitors see everything in one place.
+    // ---------- Where to Watch (external links panel) ----------
+    // External ways to watch: the official platforms reported by MAL plus
+    // open search gateways and (separately) community-submitted links.
+    // On-site streaming is launched from the hero "▶ Watch Now" button, so the
+    // providers themselves are not duplicated in this panel.
     async function renderWatchPanel() {
       const slot = document.getElementById("watchSlot");
       if (!slot) return;
       const a = animeData;
       const mainTitle = JIKAN.title(a);
       const q = encodeURIComponent(mainTitle);
-      const providers = getStreamingProviders();
-      const epCount = animeData?.episodes || episodeCount || 0;
-
-      // Free/watch-on providers from config (Tubi, Pluto TV, RetroCrush...).
-      // Providers in "embed"/"video" mode stream right on this page; the
-      // rest open a search on the provider's own site in a new tab.
-      let streamHtml = "";
-      if (providers.length) {
-        const chips = providers.map((p, i) => {
-          const onSite = p.mode === "embed" || p.mode === "video";
-          return `<button class="watch-btn ep-chip provider-chip${i === activeProviderIndex ? " is-active" : ""}"
-                  data-provider="${i}" onclick="onPickProvider(${i})"
-                  title="${JIKAN.esc(p.name)} — ${JIKAN.esc(JIKAN.modeLabel(p))}">
-                  <span class="provider-chip-name">${JIKAN.esc(p.name)}</span>
-                  ${onSite ? `<span class="mode-dot" title="Streams on this site"></span>` : ""}
-                </button>`;
-        }).join("");
-        streamHtml = `
-          <div class="stream-panel">
-            <div class="stream-panel-head">
-              <strong>Watch now</strong>
-              <span class="stream-panel-hint">Pick a source, then an episode</span>
-            </div>
-            <div class="stream-providers">${chips}</div>
-            ${epCount > 0
-              ? `<div class="episodes-row" id="epRow"></div>`
-              : `<div class="stream-notice">This title has no episode list yet.</div>`}
-          </div>`;
-      }
 
       // Official streaming platforms reported by MAL (via Jikan /full).
       const seen = new Set();
@@ -460,7 +432,6 @@
       slot.innerHTML = `
         <h3 class="sub-head">Links to Watch</h3>
         <div class="watch-panel">
-          ${streamHtml}
           ${official.length ? `<div class="watch-divider">Streaming</div>` : ""}
           ${officialHtml}
           <div class="watch-search">Still can't find it? Search:
@@ -468,7 +439,6 @@
           </div>
         </div>
         <div id="communityWatch"></div>`;
-      if (epCount > 0) renderEpRow(listOfEpisodes());
       renderCommunityLinks();
     }
 
@@ -592,12 +562,6 @@
       });
     }
 
-    function onPickProvider(i) {
-      activeProviderIndex = i;
-      document.querySelectorAll(".stream-panel .ep-chip[data-provider]").forEach((c, idx) =>
-        c.classList.toggle("is-active", idx === i));
-    }
-
     // Hero "▶ Watch Now" — asks which on-site provider to use. Only providers
     // that stream on this site (embed mode) are shown; the "Links to Watch"
     // panel below is where external providers open in a new tab.
@@ -688,6 +652,21 @@
         ]);
         if (!url) {
           showToast(`Couldn't resolve episode ${ep} on ${provider.name}.`);
+          const slot = document.getElementById("watchSlot");
+          if (slot) slot.scrollIntoView({ behavior: "smooth", block: "center" });
+          return;
+        }
+      } else if (provider.id === "anikoto") {
+        showToast("Resolving AniKoto source…");
+        // AniKoto resolves each episode to a megaplay embed URL via its public
+        // catalog API (search → episodes → servers → stream). Timeboxed so a
+        // slow/offline API never leaves the modal hanging.
+        url = await Promise.race([
+          JIKAN.anikotoUrl(animeData, ep, streamLang),
+          new Promise((r) => setTimeout(() => r(null), 12000)),
+        ]);
+        if (!url) {
+          showToast(`Couldn't resolve episode ${ep} on ${provider.name}. Try another provider.`);
           const slot = document.getElementById("watchSlot");
           if (slot) slot.scrollIntoView({ behavior: "smooth", block: "center" });
           return;
@@ -822,7 +801,7 @@
             </div>
           </div>
           ${frame}
-          ${provider.id === "anipub" ? `<div class="watch-lang-bar stream-lang-bar">
+          ${provider.id === "anipub" || provider.id === "anikoto" ? `<div class="watch-lang-bar stream-lang-bar">
             <span class="watch-lang-label">Audio</span>
             <button class="lang-btn${streamLang === "sub" ? " is-active" : ""}" data-lang="sub" onclick="streamSetLang('sub')">Sub</button>
             <button class="lang-btn${streamLang === "dub" ? " is-active" : ""}" data-lang="dub" onclick="streamSetLang('dub')">Dub</button>
@@ -865,14 +844,23 @@
     async function streamSetLang(lang) {
       if (lang === streamLang) return;
       if (lang === "dub") {
+        const provider = getStreamingProviders()[activeProviderIndex] || getStreamingProviders()[0];
         try {
-          const info = await JIKAN.anipubEpisodes(animeData);
-          const item = info?.eps?.[Math.min(Math.max(lastStreamEpisode - 1, 0), (info?.eps?.length || 1) - 1)];
-          if (item) {
-            const ok = await JIKAN.anipubDubAvailable(item.id);
+          if (provider?.id === "anikoto") {
+            const ok = await JIKAN.anikotoDubAvailable(animeData);
             if (!ok) {
-              showToast("No English dub available for this title.");
+              showToast("No English dub for this title on AniKoto — try switching provider.");
               return;
+            }
+          } else {
+            const info = await JIKAN.anipubEpisodes(animeData);
+            const item = info?.eps?.[Math.min(Math.max(lastStreamEpisode - 1, 0), (info?.eps?.length || 1) - 1)];
+            if (item) {
+              const ok = await JIKAN.anipubDubAvailable(item.id);
+              if (!ok) {
+                showToast("No English dub for this title on AniPub — try switching provider.");
+                return;
+              }
             }
           }
         } catch (e) {}
