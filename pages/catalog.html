@@ -23,11 +23,15 @@
         <h1>Anime Catalog</h1>
         <p class="catalog-sub">Search thousands of titles, filter by genre, and find watch links for everything you love.</p>
         <div class="catalog-searchbar">
-          <input type="text" id="searchBox" placeholder="Search anime..." onkeydown="if(event.key==='Enter')applyFilters(1)">
+          <div class="search-box">
+            <input type="text" id="searchBox" placeholder="Search anime..." autocomplete="off"
+                   oninput="onSearchInput(this.value)" onkeydown="onSearchKey(event)">
+            <div class="search-suggest" id="searchSuggest" hidden></div>
+          </div>
           <select id="genreSelect" onchange="applyFilters(1)">
             <option value="">All genres</option>
           </select>
-          <button class="btn btn-primary" onclick="applyFilters(1)">Search</button>
+          <button class="btn btn-primary" id="searchBtn" onclick="applyFilters(1)">Search</button>
           <button class="btn btn-outline" onclick="clearFilters()">Clear</button>
         </div>
       </div>
@@ -80,8 +84,89 @@
       state.q = document.getElementById("searchBox").value.trim();
       state.genre = document.getElementById("genreSelect").value;
       state.page = p || 1;
+      hideSuggest();
       loadCatalog();
     }
+
+    // ---------- Live typeahead suggestions ----------
+    let suggestTimer = null;
+    let suggestIndex = -1;
+
+    function onSearchInput(v) {
+      clearTimeout(suggestTimer);
+      const q = v.trim();
+      if (q.length < 2) { hideSuggest(); return; }
+      suggestTimer = setTimeout(async () => {
+        try {
+          const items = await JIKAN.suggest(q);
+          renderSuggest(items, q);
+        } catch (e) { hideSuggest(); }
+      }, 260);
+    }
+
+    function renderSuggest(items, q) {
+      const box = document.getElementById("searchSuggest");
+      if (!box) return;
+      if (!items.length) { hideSuggest(); return; }
+      box.innerHTML = items.map((a, i) => `
+        <a class="suggest-item" data-i="${i}" href="${pageHref("anime")}?id=${a.mal_id}">
+          <img class="suggest-img" src="${JIKAN.esc(a.images?.jpg?.image_url || "https://placehold.co/60x85?text=?")}"
+               alt="" loading="lazy"
+               onerror="this.src='https://placehold.co/60x85?text=?'">
+          <span class="suggest-body">
+            <span class="suggest-title">${JIKAN.esc(JIKAN.title(a))}</span>
+            <span class="suggest-meta">${JIKAN.esc(a.type || "Anime")}${a.year ? " · " + a.year : ""}</span>
+          </span>
+          <span class="suggest-score">${a.score ? "★ " + a.score.toFixed(1) : ""}</span>
+        </a>`).join("");
+      box.hidden = false;
+      suggestIndex = -1;
+      box.querySelectorAll(".suggest-item").forEach((el, i) =>
+        el.addEventListener("mousedown", (e) => {
+          e.preventDefault();
+          hideSuggest();
+          window.location.href = el.getAttribute("href");
+        }));
+      box.classList.add("show");
+    }
+
+    function moveSuggest(dir) {
+      const box = document.getElementById("searchSuggest");
+      const items = box ? box.querySelectorAll(".suggest-item") : [];
+      if (!items.length) return;
+      suggestIndex = (suggestIndex + dir + items.length) % items.length;
+      items.forEach((el, i) => el.classList.toggle("is-active", i === suggestIndex));
+    }
+
+    function hideSuggest() {
+      const box = document.getElementById("searchSuggest");
+      if (box) { box.hidden = true; box.classList.remove("show"); }
+      suggestIndex = -1;
+    }
+
+    function onSearchKey(e) {
+      const box = document.getElementById("searchSuggest");
+      const open = box && !box.hidden && box.querySelectorAll(".suggest-item").length > 0;
+      if (e.key === "Escape") { hideSuggest(); return; }
+      if (open && (e.key === "ArrowDown" || e.key === "ArrowUp")) {
+        e.preventDefault();
+        moveSuggest(e.key === "ArrowDown" ? 1 : -1);
+        return;
+      }
+      if (e.key === "Enter") {
+        if (open && suggestIndex >= 0) {
+          e.preventDefault();
+          const el = box.querySelectorAll(".suggest-item")[suggestIndex];
+          if (el) { hideSuggest(); window.location.href = el.getAttribute("href"); return; }
+        }
+        hideSuggest();
+        applyFilters(1);
+      }
+    }
+
+    document.addEventListener("click", (e) => {
+      if (!e.target.closest(".search-box")) hideSuggest();
+    });
 
     async function loadCatalog() {
       const grid = document.getElementById("catalogGrid");
@@ -97,7 +182,10 @@
         const fetchers = [];
         for (let p = 0; p < PER_PAGE; p++) {
           if (state.q) {
-            fetchers.push(JIKAN.search(state.q, firstPage + p));
+            // Fuzzy + genre-aware: merges the search pool, a genre-matched
+            // pool (when the query is basically a genre name), and the top
+            // list — scored client-side so near/partial matches surface too.
+            fetchers.push(JIKAN.smartSearch(state.q, firstPage + p, state.genre || ""));
           } else if (state.genre) {
             fetchers.push(JIKAN.byGenre(state.genre, firstPage + p));
           } else {
@@ -114,7 +202,10 @@
         let count = 0;
         results.forEach((res) => {
           res.data.forEach((a) => {
-            grid.appendChild(JIKAN.card(a));
+            const el = JIKAN.card(a);
+            // Staggered entrance so the grid feels alive (capped delay).
+            el.style.animationDelay = ((count % 30) * 40) + "ms";
+            grid.appendChild(el);
             count++;
           });
         });
