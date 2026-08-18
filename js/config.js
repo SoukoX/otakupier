@@ -82,6 +82,19 @@ const CONFIG = {
     { id: "vudu", name: "Fandango at Home", mode: "link",
       url: "https://www.vudu.com/content/movies/search?q={title}", enabled: true },
 
+    // AniKoto — free public catalog API (https://anikototvapi.vercel.app,
+    // CORS-open) with broad coverage including titles missing from AniPub
+    // (e.g. Fullmetal Alchemist: Brotherhood) and both sub & dub tracks. Its
+    // /api/stream resolves each episode to a megaplay embed URL; api.js proxies
+    // those through AniPub's generic player wrapper so megaplay always receives
+    // a Referer and serves its player inside an iframe ("dynamic" provider).
+    // Listed first — it is the preferred on-site provider.
+    { id: "anikoto", name: "AniKoto", mode: "embed", dynamic: "anikoto",
+      referrerPolicy: "no-referrer-when-downgrade",
+      // Its embeds are proxied through AniPub's generic player wrapper, which
+      // refuses to run inside a sandboxed frame — so sandbox is disabled.
+      sandbox: false, url: "", enabled: true },
+
     // AniPub — open-source, ad-free community anime catalog with a free public
     // API (https://anipub.xyz) that is CORS-open. Its embeddable episode pages
     // (https://anipub.xyz/video/{id}/sub) stream reliably inside an iframe, but
@@ -94,26 +107,6 @@ const CONFIG = {
     { id: "anipub", name: "AniPub", mode: "embed", sandbox: false, dynamic: "anipub",
       referrerPolicy: "no-referrer-when-downgrade",
       url: "https://anipub.xyz/video/{anipub_ep_id}/sub", enabled: true },
-
-    // AniKoto — free public catalog API (https://anikototvapi.vercel.app,
-    // CORS-open) with broad coverage including titles missing from AniPub
-    // (e.g. Fullmetal Alchemist: Brotherhood) and both sub & dub tracks. Its
-    // /api/stream resolves each episode to a megaplay embed URL; api.js proxies
-    // those through AniPub's generic player wrapper so megaplay always receives
-    // a Referer and serves its player inside an iframe ("dynamic" provider).
-    { id: "anikoto", name: "AniKoto", mode: "embed", dynamic: "anikoto",
-      referrerPolicy: "no-referrer-when-downgrade",
-      // Its embeds are proxied through AniPub's generic player wrapper, which
-      // refuses to run inside a sandboxed frame — so sandbox is disabled.
-      sandbox: false, url: "", enabled: true },
-
-    // On-site embed: plays inside the page player (no redirect). Archive.org
-    // hosts public-domain / Creative Commons anime and its /embed player
-    // works in an iframe. The {archive_id} is resolved by searching
-    // Archive.org for the anime title when the user picks this provider.
-    // Kept last — api.js always sorts it to the end of the provider list.
-    { id: "archive", name: "Archive.org Player", mode: "embed",
-      url: "https://archive.org/embed/{archive_id}", enabled: true },
 
     // 9anime via the hosted NineAnimeClient API ("dynamic" provider — the
     // URL is resolved by JIKAN.nineAnimeUrl). Plays HLS through the on-site
