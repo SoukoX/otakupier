@@ -745,4 +745,163 @@ const JIKAN = {
     const m3u8 = hit.urls.find((u) => /\.m3u8(\?|$)/i.test(u)) || hit.urls[0];
     return `${base}/api/proxy/m3u8?url=${encodeURIComponent(m3u8)}&ref=${encodeURIComponent(hit.ref || "")}`;
   },
+
+  // ---------- AniKotoAPI dynamic provider (megaplay embed URLs) ----------
+  // AniKotoAPI (https://anikototvapi.vercel.app) is a free, CORS-open anime
+  // catalog API scraping anikototv.to. It covers titles AniPub lacks (e.g.
+  // Fullmetal Alchemist: Brotherhood) and exposes both sub & dub. Its flow:
+  //   search?keyword=   -> candidates (animeId, sub/dub counts)
+  //   /episodes/{animeId} -> episode list (episode_no + server_ids + mal_id)
+  //   /servers?ids=...  -> per-episode servers typed sub / dub / hsub
+  //   /stream?id=...    -> the embed URL (megaplay, streams inside an iframe)
+  // Episode data is cached per MAL id (5 min TTL), stream URLs per episode.
+  _anikotoCache: new Map(),        // mal_id -> { at, value: { animeId, eps, dub } | null }
+  _anikotoStreamCache: new Map(),  // server_ids|variant -> { at, url }
+
+  anikotoBase() {
+    return "https://anikototvapi.vercel.app/api";
+  },
+
+  // Resolve an anime's AniKoto episode list, cached per MAL id (same 5-min
+  // TTL + transient-failure tolerance as the AniPub cache).
+  async anikotoEpisodes(anime) {
+    const key = anime?.mal_id;
+    if (!key) return null;
+    const cached = this._anikotoCache.get(key);
+    if (cached && Date.now() - cached.at < 5 * 60 * 1000) return cached.value;
+    const found = await this._resolveAnikoto(anime).catch(() => null);
+    this._anikotoCache.set(key, { at: Date.now(), value: found });
+    return found;
+  },
+
+  // Whether the catalog lists English-dub tracks for the title.
+  async anikotoDubAvailable(anime) {
+    const info = await this.anikotoEpisodes(anime);
+    return !!(info && info.dub);
+  },
+
+  // Full embed URL for one episode, or null if unresolvable. `variant`
+  // ("sub"|"dub") picks the matching server; sub is the fallback.
+  async anikotoUrl(anime, ep, variant) {
+    const info = await this.anikotoEpisodes(anime);
+    if (!info) return null;
+    const item = (info.eps || []).find((e) => e.n === Number(ep)) ||
+      (info.eps || [])[Number(ep) - 1];
+    if (!item?.server_ids) return null;
+    const want = variant === "dub" ? "dub" : "sub";
+    const cacheKey = item.server_ids + "|" + want;
+    const cached = this._anikotoStreamCache.get(cacheKey);
+    if (cached && Date.now() - cached.at < 5 * 60 * 1000) return cached.url;
+
+    const servers = await this._anikotoGet(
+      `${this.anikotoBase()}/servers?ids=${encodeURIComponent(item.server_ids)}`);
+    const list = Array.isArray(servers?.results) ? servers.results : [];
+    let server = list.find((s) => s.type === want);
+    if (!server && want === "dub") {
+      server = list.find((s) => s.type === "dub") || list.find((s) => s.type === "hsub");
+    }
+    if (!server) server = list.find((s) => s.type === "sub") || list[0];
+    if (!server?.link_id) return null;
+
+    const stream = await this._anikotoGet(
+      `${this.anikotoBase()}/stream?id=${encodeURIComponent(server.link_id)}`);
+    const raw = stream?.results?.url || null;
+    if (!raw) return null;
+    // The API returns a megaplay embed (https://megaplay.buzz/stream/s-2/{id}/{sub|dub}).
+    // megaplay only serves its player when the request carries a Referer, and
+    // inside an iframe that depends on the embedder's referrer policy. To match
+    // the exact conditions of the proven-working AniPub provider, proxy through
+    // AniPub's generic player wrapper (the same page AniPub uses), which always
+    // embeds megaplay with a Referer. Re-host by extracting the megaplay id and
+    // track, falling back to the raw URL if the shape ever changes.
+    const m = raw.match(/\/s-2\/([^/?#]+)\/(sub|dub)/);
+    const id = m && m[1];
+    const track = (m && m[2]) || want;
+    const url = id ? `https://anipub.xyz/video/${encodeURIComponent(id)}/${track}` : raw;
+    this._anikotoStreamCache.set(cacheKey, { at: Date.now(), url });
+    return url;
+  },
+
+  async _anikotoGet(url) {
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), 10000);
+    try {
+      const res = await fetch(url, { signal: ctrl.signal });
+      if (!res.ok) return null;
+      return await res.json().catch(() => null);
+    } catch (e) {
+      return null;
+    } finally {
+      clearTimeout(timer);
+    }
+  },
+
+  // Search the AniKoto catalog for the anime and return its episode list.
+  // Candidates are confirmed against the anime's MAL id via the episode list
+  // (every episode carries mal_id); a fuzzy match additionally needs a
+  // plausible episode count so movies/OVAs aren't mislabeled as the series.
+  async _resolveAnikoto(anime) {
+    const base = this.anikotoBase();
+    const seenTitles = new Set();
+    const searchTitles = [
+      this.title(anime) || anime?.title,
+      anime?.title_english,
+      anime?.title,
+      anime?.title_japanese,
+      ...(anime?.title_synonyms || []),
+    ].filter((t) => t && !seenTitles.has(t) && seenTitles.add(t));
+
+    const tryTitle = async (title) => {
+      let search = await this._anikotoGet(`${base}/search?keyword=${encodeURIComponent(title)}`);
+      if (!search) search = await this._anikotoGet(`${base}/search?keyword=${encodeURIComponent(title)}`);
+      const results = Array.isArray(search?.results?.data) ? search.results.data : [];
+      if (!results.length) return null;
+
+      const norm = (s) => String(s || "").toLowerCase().replace(/[^\p{L}\p{N}]/gu, "");
+      const needle = norm(title);
+      const score = (name) => {
+        const n = norm(name);
+        if (!needle || !n) return 0;
+        if (n === needle) return 100;
+        if (n.startsWith(needle) || needle.startsWith(n)) return 60;
+        if (n.includes(needle) || needle.includes(n)) return 30;
+        return 0;
+      };
+      const ranked = results
+        .map((r) => ({ r, s: score(r.title || r.name || "") }))
+        .sort((a, b) => b.s - a.s);
+      const candidates = ranked.slice(0, 10);
+
+      const malId = anime?.mal_id ? String(anime.mal_id) : "";
+      const malEps = Number(anime?.episodes) || 0;
+      const plausible = (count) => !malEps || !count ||
+        Math.abs(count - malEps) <= Math.max(2, malEps * 0.15);
+
+      let pick = null;
+      for (const { r, s } of candidates) {
+        if (s <= 0) continue;
+        const epsRes = await this._anikotoGet(`${base}/episodes/${r.animeId}`);
+        const eps = Array.isArray(epsRes?.results?.episodes) ? epsRes.results.episodes : [];
+        if (!eps.length) continue;
+        const epMal = String(eps[0]?.mal_id || "");
+        const total = Number(epsRes?.results?.totalEpisodes) || eps.length;
+        if (malId && epMal === malId) { pick = { r, eps, total }; break; }
+        if (s >= 60 && plausible(total)) { pick = { r, eps, total }; break; }
+      }
+      if (!pick) return null;
+
+      const items = pick.eps
+        .map((e) => ({ n: Number(e.episode_no ?? e.episode), server_ids: e.server_ids || "" }))
+        .filter((e) => e.n && e.server_ids)
+        .sort((a, b) => a.n - b.n);
+      if (!items.length) return null;
+      return { animeId: pick.r.animeId, eps: items, dub: Number(pick.r.dub) > 0 };
+    };
+
+    for (const title of searchTitles) {
+      const found = await tryTitle(title);
+      if (found) return found;
+    }
+    return null;
+  },
 };
