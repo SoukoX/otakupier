@@ -441,28 +441,50 @@ const JIKAN = {
   // AniPub's public (CORS-open) API: search for the anime by title to get
   // its AniPub id, then /v1/api/details for the per-episode video links.
   // Results are cached per MAL id (including failed lookups).
-  _anipubCache: new Map(), // mal_id -> { anipubId, eps: [{n, id}] } | null
+  _anipubCache: new Map(), // mal_id -> { at: timestamp, value: { anipubId, eps } | null }
 
+  // Resolve an anime's AniPub episode list, cached per MAL id. Results (even
+  // null) are cached briefly so a transient API failure doesn't permanently
+  // fail the title for the rest of the session, while genuinely-missing
+  // titles aren't re-resolved on every episode click.
   async anipubEpisodes(anime) {
     const key = anime?.mal_id;
     if (!key) return null;
-    if (this._anipubCache.has(key)) return this._anipubCache.get(key);
+    const cached = this._anipubCache.get(key);
+    if (cached && Date.now() - cached.at < 5 * 60 * 1000) return cached.value;
     const found = await this._resolveAnipub(anime).catch(() => null);
-    this._anipubCache.set(key, found);
+    this._anipubCache.set(key, { at: Date.now(), value: found });
     return found;
   },
 
   // Full embed URL for a given episode on AniPub, or null if unresolvable.
-  async anipubUrl(anime, ep) {
+  // `variant` (optional) forces the sub/dub suffix; otherwise the variant the
+  // API returned for that episode is kept.
+  async anipubUrl(anime, ep, variant) {
     const info = await this.anipubEpisodes(anime);
     const item = (info?.eps || []).find((e) => e.n === Number(ep)) ||
       (info?.eps || [])[Number(ep) - 1];
-    return item ? `https://anipub.xyz/video/${item.id}/${item.variant || "sub"}` : null;
+    if (!item) return null;
+    return `https://anipub.xyz/video/${item.id}/${variant || item.variant || "sub"}`;
+  },
+
+  // Whether an AniPub episode has an English-dub file. megaplay serves its
+  // player from /stream/s-2/{id}/dub and omits `data-id` (showing an
+  // "Error - MegaPlay" page) when the dub file is missing, so the availability
+  // is sniffed from that page. Fails open (returns true) if the probe can't
+  // run, letting the player attempt the dub anyway.
+  async anipubDubAvailable(id) {
+    try {
+      const r = await fetch(`https://megaplay.buzz/stream/s-2/${id}/dub`);
+      if (!r.ok) return false;
+      const t = await r.text();
+      return /data-id="\d+"/.test(t) && !/Error - MegaPlay/.test(t);
+    } catch (e) {
+      return true;
+    }
   },
 
   async _resolveAnipub(anime) {
-    const title = this.title(anime) || anime?.title;
-    if (!title) return null;
     const getJson = async (url) => {
       const ctrl = new AbortController();
       const timer = setTimeout(() => ctrl.abort(), 8000);
@@ -477,42 +499,112 @@ const JIKAN = {
       }
     };
 
-    // 1) search AniPub for the anime by title
-    const search = await getJson(
-      `https://anipub.xyz/api/searchall/${encodeURIComponent(title)}?page=1`);
-    const results = search?.AniData || [];
-    if (!results.length) return null;
+    // Search titles tried in order — the localized/English name first, then
+    // the original (often the one AniPub indexes) and any synonyms. Stops at
+    // the first variant that resolves a playable episode list.
+    const seenTitles = new Set();
+    const searchTitles = [
+      this.title(anime) || anime?.title,
+      anime?.title_english,
+      anime?.title,
+      anime?.title_japanese,
+      ...(anime?.title_synonyms || []),
+    ].filter((t) => t && !seenTitles.has(t) && seenTitles.add(t));
 
-    // 2) pick the best title match (exact > prefix/contains > first result)
-    const norm = (s) => String(s || "").toLowerCase()
-      .replace(/[^\p{L}\p{N}]/gu, "");
-    const needle = norm(title);
-    const score = (name) => {
-      const n = norm(name);
-      if (!needle || !n) return 0;
-      if (n === needle) return 100;
-      if (n.startsWith(needle) || needle.startsWith(n)) return 60;
-      if (n.includes(needle) || needle.includes(n)) return 30;
-      return 0;
+    // Resolve one title variant to an episode list (or null).
+    const tryTitle = async (title) => {
+      // 1) search AniPub for the anime by title (one retry — the search
+      // endpoint occasionally returns an empty response)
+      let search = await getJson(
+        `https://anipub.xyz/api/searchall/${encodeURIComponent(title)}?page=1`);
+      if (!search) search = await getJson(
+        `https://anipub.xyz/api/searchall/${encodeURIComponent(title)}?page=1`);
+      const results = search?.AniData || [];
+      if (!results.length) return null;
+
+      // 2) pick the best title match (exact > prefix/contains > first result)
+      const norm = (s) => String(s || "").toLowerCase()
+        .replace(/[^\p{L}\p{N}]/gu, "");
+      const needle = norm(title);
+      const score = (name) => {
+        const n = norm(name);
+        if (!needle || !n) return 0;
+        if (n === needle) return 100;
+        if (n.startsWith(needle) || needle.startsWith(n)) return 60;
+        if (n.includes(needle) || needle.includes(n)) return 30;
+        return 0;
+      };
+      // Rank by title match, then confirm against AniPub's own MAL id so we
+      // land on the exact entry (not a movie/OVA/sequel with a similar name).
+      // AniPub exposes MALID via /api/info/{id}; scan the search results (the
+      // correct entry can rank well below similarly-named movies/OVAs) and
+      // prefer a MAL id match, falling back to the best title score.
+      const malId = anime?.mal_id ? String(anime.mal_id) : "";
+      const malEps = Number(anime?.episodes) || 0;
+      const plausible = (count) => !malEps || !count ||
+        Math.abs(count - malEps) <= Math.max(2, malEps * 0.15);
+      let ranked = results
+        .map((r) => ({ r, s: score(r.Name) }))
+        .sort((a, b) => b.s - a.s);
+      const candidates = ranked.slice(0, 20).map((x) => x.r);
+      let best = null;
+      if (malId) {
+        for (const c of candidates) {
+          const info = await getJson(`https://anipub.xyz/api/info/${c._id}`);
+          if (info && String(info.MALID) === malId) {
+            // AniPub's MAL ids/episode counts are occasionally mislabeled
+            // (e.g. "Gintama: Enchousen" carrying the 201-ep "Gintama" MAL
+            // id). Skip a match whose episode count is implausible so the
+            // real entry wins.
+            if (plausible(Number(info?.epCount) || 0)) { best = c; break; }
+          }
+        }
+      }
+      if (!best) {
+        // No MAL-id match: accept the best title-scored candidate. Exact-name
+        // matches are taken as-is (the ep count metadata is often missing or
+        // off); fuzzy matches additionally need a plausible episode count so
+        // OVAs/movies with similar names aren't mislabeled as the series.
+        const top = ranked[0];
+        const topScore = top?.s || 0;
+        if (top && topScore >= 60) {
+          const info = await getJson(`https://anipub.xyz/api/info/${top.r._id}`);
+          const count = Number(info?.epCount) || 0;
+          if (topScore >= 100 || plausible(count)) best = top.r;
+        } else if (top && topScore > 0) {
+          best = top.r;
+        }
+      }
+      if (!best?._id) return null;
+
+      // 3) episode list → /video/{id}/sub|dub links. The details response
+      // stores Episode 1 in `local.link` and `local.ep[]` starts at Episode
+      // 2 — so prepend `local.link` to keep the correct 1..N order (some
+      // titles are off-by-one otherwise). Links may use www.anipub.xyz and
+      // carry a sub/dub suffix — normalize the domain and keep the variant.
+      let det = await getJson(`https://anipub.xyz/v1/api/details/${best._id}`);
+      if (!det) det = await getJson(`https://anipub.xyz/v1/api/details/${best._id}`);
+      const parse = (link) => {
+        const m = /(?:www\.)?anipub\.xyz\/video\/(\d+)\/(sub|dub)/i.exec(link || "");
+        return m ? { id: m[1], variant: m[2] } : null;
+      };
+      const eps = (det?.local?.ep || []).map((e, i) => {
+        const p = parse(e?.link);
+        return p ? { n: i + 2, ...p } : null;
+      }).filter(Boolean);
+      const first = parse(det?.local?.link);
+      if (first && (eps.length === 0 || first.id !== eps[0].id)) {
+        eps.unshift({ n: 1, ...first });
+      }
+      if (!eps.length) return null;
+      return { anipubId: best._id, eps };
     };
-    let best = results[0];
-    let bestScore = -1;
-    results.forEach((r) => {
-      const s = score(r.Name);
-      if (s > bestScore) { bestScore = s; best = r; }
-    });
-    if (!best?._id) return null;
 
-    // 3) episode list → /video/{id}/sub|dub links, in order (1..N). Links may
-    // use www.anipub.xyz and carry a sub/dub suffix — normalize the domain and
-    // keep the original variant.
-    const det = await getJson(`https://anipub.xyz/v1/api/details/${best._id}`);
-    const eps = (det?.local?.ep || []).map((e, i) => {
-      const m = /(?:www\.)?anipub\.xyz\/video\/(\d+)\/(sub|dub)/i.exec(e?.link || "");
-      return m ? { n: i + 1, id: m[1], variant: m[2] } : null;
-    }).filter(Boolean);
-    if (!eps.length) return null;
-    return { anipubId: best._id, eps };
+    for (const title of searchTitles) {
+      const found = await tryTitle(title);
+      if (found) return found;
+    }
+    return null;
   },
 
   // ---------- 9anime dynamic provider (hosted NineAnimeClient API) ----------
