@@ -95,6 +95,18 @@ const CONFIG = {
       referrerPolicy: "no-referrer-when-downgrade",
       url: "https://anipub.xyz/video/{anipub_ep_id}/sub", enabled: true },
 
+    // AniKoto — free public catalog API (https://anikototvapi.vercel.app,
+    // CORS-open) with broad coverage including titles missing from AniPub
+    // (e.g. Fullmetal Alchemist: Brotherhood) and both sub & dub tracks. Its
+    // /api/stream resolves each episode to a megaplay embed URL; api.js proxies
+    // those through AniPub's generic player wrapper so megaplay always receives
+    // a Referer and serves its player inside an iframe ("dynamic" provider).
+    { id: "anikoto", name: "AniKoto", mode: "embed", dynamic: "anikoto",
+      referrerPolicy: "no-referrer-when-downgrade",
+      // Its embeds are proxied through AniPub's generic player wrapper, which
+      // refuses to run inside a sandboxed frame — so sandbox is disabled.
+      sandbox: false, url: "", enabled: true },
+
     // On-site embed: plays inside the page player (no redirect). Archive.org
     // hosts public-domain / Creative Commons anime and its /embed player
     // works in an iframe. The {archive_id} is resolved by searching
