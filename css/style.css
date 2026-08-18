@@ -716,12 +716,36 @@ img {
 .stream-panel {
   display: flex;
   flex-direction: column;
+  gap: 12px;
+  margin: 6px 0 14px;
+  padding: 14px;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: var(--bg-card);
+  box-shadow: var(--shadow);
+}
+.stream-panel-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
   gap: 10px;
-  margin: 4px 0 6px;
+  flex-wrap: wrap;
+}
+.stream-panel-head strong {
+  font-size: 1rem;
+  background: linear-gradient(120deg, #fff, #ffb340);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+.stream-panel-hint {
+  font-size: 0.75rem;
+  color: var(--text-dim);
+  opacity: 0.8;
 }
 .stream-panel .stream-panel-inner {
   border: 1px solid var(--border);
-  background: var(--bg-card);
+  background: var(--bg-alt);
   border-radius: 12px;
   padding: 14px;
 }
@@ -752,6 +776,15 @@ img {
   gap: 8px;
   max-height: 132px;
   overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: var(--accent) transparent;
+}
+.stream-panel .episodes-row::-webkit-scrollbar {
+  width: 8px;
+}
+.stream-panel .episodes-row::-webkit-scrollbar-thumb {
+  background: rgba(230, 70, 92, 0.5);
+  border-radius: 4px;
 }
 .stream-panel .ep-chip {
   flex: 0 0 auto;
@@ -798,6 +831,25 @@ img {
   font-size: 0.7rem;
   color: var(--text-dim);
   opacity: 0.7;
+}
+
+/* Provider chips: name + a green dot marks sources that stream on-site. */
+.stream-panel .provider-chip,
+.watch-providers .provider-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+}
+.provider-chip-name {
+  line-height: 1.2;
+}
+.mode-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--accent-3);
+  box-shadow: 0 0 0 3px rgba(56, 214, 181, 0.18);
+  flex: 0 0 auto;
 }
 
 /* ---------- Streaming player modal ---------- */
@@ -860,8 +912,9 @@ img {
 }
 .provider-pick {
   display: flex;
-  flex-direction: column;
-  gap: 6px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
   text-align: left;
   padding: 12px 14px;
   border-radius: 10px;
@@ -881,7 +934,7 @@ img {
   font-size: 0.95rem;
 }
 .watch-pill {
-  align-self: flex-start;
+  flex: 0 0 auto;
   font-size: 0.7rem;
   font-weight: 700;
   color: var(--accent-3);
@@ -933,6 +986,135 @@ img {
 .stream-exit:hover {
   color: var(--text);
   text-decoration: underline;
+}
+
+/* ---------- Streaming player chrome (modal + theater) ---------- */
+.stream-modal-overlay {
+  animation: overlayIn 0.22s ease both;
+}
+@keyframes overlayIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+.stream-modal {
+  animation: modalIn 0.3s cubic-bezier(0.2, 0.9, 0.3, 1.15) both;
+}
+@keyframes modalIn {
+  from { opacity: 0; transform: translateY(18px) scale(0.98); }
+  to { opacity: 1; transform: none; }
+}
+
+/* Two-line modal title: main title + episode/provider sub-label. */
+.stream-modal-head .stream-modal-title {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  overflow: hidden;
+}
+.stream-title-main {
+  font-size: 0.95rem;
+  font-weight: 700;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.stream-title-sub {
+  font-size: 0.72rem;
+  color: var(--text-dim);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.stream-head-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: 0 0 auto;
+}
+
+/* Prev / next episode round buttons (modal + theater). */
+.stream-nav {
+  flex: 0 0 auto;
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  border: 1px solid var(--border);
+  background: var(--bg-alt);
+  color: var(--text);
+  font-size: 1.15rem;
+  line-height: 1;
+  cursor: pointer;
+  font-family: inherit;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: transform 0.15s, border-color 0.2s, box-shadow 0.2s, color 0.2s;
+}
+.stream-nav:hover:not(:disabled) {
+  transform: translateY(-1px);
+  border-color: var(--accent);
+  color: var(--accent);
+  box-shadow: 0 4px 14px rgba(230, 70, 92, 0.25);
+}
+.stream-nav:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+
+/* Buffering / loading shimmer that overlays the player frame. */
+.stream-loading {
+  position: absolute;
+  inset: 0;
+  z-index: 3;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  color: var(--text-dim);
+  font-size: 0.85rem;
+  background:
+    linear-gradient(110deg, transparent 35%, rgba(255, 255, 255, 0.05) 50%, transparent 65%),
+    rgba(8, 8, 16, 0.55);
+  background-size: 200% 100%;
+  animation: streamShimmer 1.6s linear infinite;
+  opacity: 1;
+  transition: opacity 0.35s ease, visibility 0.35s ease;
+}
+.stream-loading.hide {
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+}
+@keyframes streamShimmer {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+.stream-frame-wrap iframe,
+.watch-frame iframe {
+  animation: fadeIn 0.3s ease both;
+}
+
+/* Watch theater chrome: actions + episode sub-line. */
+.watch-player-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-left: auto;
+}
+.watch-player-sub {
+  margin-top: 10px;
+  font-size: 0.8rem;
+  color: var(--text-dim);
+  opacity: 0.85;
+}
+.watch-frame .stream-loading {
+  background:
+    linear-gradient(110deg, transparent 35%, rgba(255, 255, 255, 0.05) 50%, transparent 65%),
+    #000;
+  background-size: 200% 100%;
+  animation: streamShimmer 1.6s linear infinite;
 }
 
 /* ---------- Search bar ---------- */
