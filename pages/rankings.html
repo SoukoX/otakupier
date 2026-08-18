@@ -112,7 +112,7 @@
           <div class="rank-vote" style="text-align:right;">
             <button class="btn btn-primary btn-small" onclick="event.stopPropagation();openVote(${r.id})">${mine && !isAdmin() ? "Change vote" : "Vote"}</button>
           </div>`;
-        el.addEventListener("click", () => (window.location.href = `anime?id=${r.id}`));
+        el.addEventListener("click", () => (window.location.href = `${pageHref("anime")}?id=${r.id}`));
         list.appendChild(el);
       });
     }
