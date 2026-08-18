@@ -34,6 +34,8 @@
     let animeData = null;
     let activeEmbedIndex = 0;
     let lastStreamEpisode = 0;
+    let streamLang = "sub"; // "sub" | "dub" (AniPub); other providers ignore it
+    let anipubEpCount = 0;  // playable episodes AniPub actually lists for this title
 
     async function load() {
       const main = document.getElementById("main");
@@ -114,7 +116,8 @@
     }
 
     function listOfEpisodes() {
-      return Array.from({ length: Math.min(animeData?.episodes || 1, 500) }, (_, i) => i + 1);
+      const base = Math.min(animeData?.episodes || 1, 500);
+      return Array.from({ length: Math.max(base, anipubEpCount) }, (_, i) => i + 1);
     }
 
     // ---------- On-site theater ----------
@@ -142,6 +145,11 @@
             </div>
             <div class="watch-frame" id="watchFrame">
               <div class="stream-loading"><div class="spinner"></div><span>Preparing player…</span></div>
+            </div>
+            <div class="watch-lang-bar" id="watchLangBar" style="display:none">
+              <span class="watch-lang-label">Audio</span>
+              <button class="lang-btn" data-lang="sub" onclick="setLang('sub')">Sub</button>
+              <button class="lang-btn" data-lang="dub" onclick="setLang('dub')">Dub</button>
             </div>
             <div class="watch-player-sub" id="watchPlayerSub">Pick an episode to start watching</div>
           </div>
@@ -211,6 +219,13 @@
       if (nextBtn) nextBtn.disabled = ep >= eps.length;
       if (titleEl) titleEl.textContent = `Episode ${ep}`;
       if (subEl) subEl.textContent = `${JIKAN.esc(provider.name)} · streaming on this site`;
+      const langBar = document.getElementById("watchLangBar");
+      if (langBar) {
+        const showLang = provider.id === "anipub";
+        langBar.style.display = showLang ? "" : "none";
+        langBar.querySelectorAll(".lang-btn").forEach((b) =>
+          b.classList.toggle("is-active", b.dataset.lang === streamLang));
+      }
       frame.innerHTML = `<div class="stream-loading"><div class="spinner"></div><span>Loading ${JIKAN.esc(provider.name)}…</span></div>`;
 
       let url;
@@ -231,7 +246,7 @@
         // slow or blocked from the viewer's network (→ falls through to the
         // "couldn't resolve" notice below).
         url = await Promise.race([
-          JIKAN.anipubUrl(animeData, ep),
+          JIKAN.anipubUrl(animeData, ep, streamLang),
           new Promise((r) => setTimeout(() => r(null), 10000)),
         ]);
         if (!url) {
@@ -242,6 +257,17 @@
           </div>`;
           return;
         }
+        // AniPub may list more playable episodes than Jikan reports — extend
+        // the episode grid to match so every available episode is reachable.
+        try {
+          const info = await JIKAN.anipubEpisodes(animeData);
+          if (info?.eps?.length > anipubEpCount) {
+            anipubEpCount = info.eps.length;
+            renderTheaterEps();
+            const nextBtn = document.getElementById("nextEpBtn");
+            if (nextBtn) nextBtn.disabled = ep >= listOfEpisodes().length;
+          }
+        } catch (e) {}
       } else {
         url = JIKAN.streamingUrl(provider, { mal_id: animeData?.mal_id, ep, title: JIKAN.title(animeData) });
         if (!url) {
@@ -272,6 +298,30 @@
       iframe.addEventListener("load", hideLoad);
       frame.replaceChildren(loading, iframe);
       setTimeout(hideLoad, 12000); // safety net for pages that never fire load
+    }
+
+    // Switch the AniPub player between subtitled and English-dubbed audio and
+    // reload the current episode. Dub availability is pre-checked so a title
+    // without an English dub falls back to sub instead of showing an error.
+    async function setLang(lang) {
+      if (lang === streamLang) return;
+      if (lang === "dub") {
+        const eps = listOfEpisodes();
+        const idx = Math.min(Math.max(lastStreamEpisode - 1, 0), eps.length - 1);
+        try {
+          const info = await JIKAN.anipubEpisodes(animeData);
+          const item = info?.eps?.[idx];
+          if (item) {
+            const ok = await JIKAN.anipubDubAvailable(item.id);
+            if (!ok) {
+              showToast("No English dub available for this title.");
+              return;
+            }
+          }
+        } catch (e) {}
+      }
+      streamLang = lang;
+      if (lastStreamEpisode) playEpisode(lastStreamEpisode);
     }
 
     // Find an Archive.org item for a specific episode. Episode-targeted
