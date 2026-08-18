@@ -8,6 +8,12 @@ const CONFIG = {
   // Jikan (MyAnimeList) API - free, no key needed
   JIKAN_BASE: "https://api.jikan.moe/v4",
 
+  // 9anime API (NineAnimeClient demo server, https://github.com/.../NineAnime).
+  // Node-only, so it CANNOT run on static GitHub Pages — it must be hosted
+  // separately (Railway/Render/Vercel). Set this to your deployed base URL to
+  // enable on-site HLS streaming from 9anime. Leave "" to keep it disabled.
+  NINEANIME_API_BASE: "",
+
   // CAPTCHA (bot protection) for login/signup forms.
   // Provider: "turnstile" (Cloudflare) or "hcaptcha".
   // CAPTCHA_SITE_KEY is the PUBLIC site key from your provider dashboard.
@@ -48,6 +54,10 @@ const CONFIG = {
       url: "https://pluto.tv/on-demand/search?q={title}", enabled: true },
     { id: "retro", name: "RetroCrush", mode: "link",
       url: "https://retrocrush.tv/search?q={title}", enabled: true },
+    { id: "roku", name: "Roku Channel", mode: "link",
+      url: "https://therokuchannel.roku.com/search#!q={title}", enabled: true },
+    { id: "plex", name: "Plex", mode: "link",
+      url: "https://app.plex.tv/desktop/#!/search?query={title}", enabled: true },
 
     // More reputable third-party streamers. Link mode opens their search /
     // watch page for the title so the visitor can stream it there.
@@ -72,14 +82,34 @@ const CONFIG = {
     { id: "vudu", name: "Fandango at Home", mode: "link",
       url: "https://www.vudu.com/content/movies/search?q={title}", enabled: true },
 
+    // AniPub — open-source, ad-free community anime catalog with a free public
+    // API (https://anipub.xyz) that is CORS-open. Its embeddable episode pages
+    // (https://anipub.xyz/video/{id}/sub) stream reliably inside an iframe, but
+    // they are keyed by AniPub's OWN episode ids — so api.js resolves them at
+    // runtime: search by title to get the AniPub id, then /v1/api/details for
+    // the per-episode /video/{id}/sub links ("dynamic" provider).
+    // NOTE: its player refuses to run inside a sandboxed frame, so sandbox is
+    // disabled; it also streams with a referrer sent (matches its working
+    // embeds), hence referrerPolicy below.
+    { id: "anipub", name: "AniPub", mode: "embed", sandbox: false, dynamic: "anipub",
+      referrerPolicy: "no-referrer-when-downgrade",
+      url: "https://anipub.xyz/video/{anipub_ep_id}/sub", enabled: true },
+
     // On-site embed: plays inside the page player (no redirect). Archive.org
     // hosts public-domain / Creative Commons anime and its /embed player
     // works in an iframe. The {archive_id} is resolved by searching
     // Archive.org for the anime title when the user picks this provider.
+    // Kept last — api.js always sorts it to the end of the provider list.
     { id: "archive", name: "Archive.org Player", mode: "embed",
       url: "https://archive.org/embed/{archive_id}", enabled: true },
-    { id: "vudu", name: "Fandango at Home", mode: "link",
-      url: "https://www.vudu.com/content/movies/search?q={title}", enabled: true },
+
+    // 9anime via the hosted NineAnimeClient API ("dynamic" provider — the
+    // URL is resolved by JIKAN.nineAnimeUrl). Plays HLS through the on-site
+    // <video> player (mode "video"). api.js hides this provider until
+    // CONFIG.NINEANIME_API_BASE is set (requires the NineAnime demo server
+    // deployed separately — it can't run on static GitHub Pages).
+    { id: "nineanime", name: "9anime", mode: "video", dynamic: "nineanime",
+      enabled: true, url: "" },
 
     // Direct video playback (mode "video") plays an actual MP4/HLS file
     // inline with the built-in player. Only add sources whose hosting you
