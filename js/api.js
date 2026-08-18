@@ -383,9 +383,28 @@ const JIKAN = {
   },
 
   // ---------- Watch Online (third-party streaming providers) ----------
-  // Enabled streaming providers configured in CONFIG.STREAMING.
+  // Enabled streaming providers configured in CONFIG.STREAMING. The
+  // Archive.org player is always sorted to the end of the list so the
+  // on-site community sources (AniPub) appear first. The 9anime provider
+  // stays hidden until its hosted API base URL is configured.
   streamingProviders() {
-    return (CONFIG.STREAMING || []).filter((s) => s && s.enabled);
+    return (CONFIG.STREAMING || [])
+      .filter((s) => s && s.enabled)
+      .filter((s) => !(s.id === "nineanime") || CONFIG.NINEANIME_API_BASE)
+      .sort((a, b) => (a.id === "archive" ? 1 : 0) - (b.id === "archive" ? 1 : 0));
+  },
+
+  // Look up an enabled streaming provider by its id (e.g. "anipub").
+  providerById(id) {
+    return this.streamingProviders().find((p) => p.id === id) || null;
+  },
+
+  // Human-friendly label for a provider's playback mode.
+  modeLabel(provider) {
+    if (!provider) return "";
+    if (provider.mode === "embed") return "Plays on-site";
+    if (provider.mode === "video") return "Inline player";
+    return "Opens in new tab";
   },
 
   // Zero-pad an episode number (Jikan gives "012" for ep 12 in some fields).
@@ -413,5 +432,225 @@ const JIKAN = {
       return null;
     }
     return url;
+  },
+
+  // ---------- AniPub dynamic provider (API-resolved episode links) ----------
+  // AniPub's embeddable episode pages (https://anipub.xyz/video/{id}/sub)
+  // stream reliably inside an iframe, but they are keyed by AniPub's own
+  // episode ids, not the MAL id / episode number. These resolve them via
+  // AniPub's public (CORS-open) API: search for the anime by title to get
+  // its AniPub id, then /v1/api/details for the per-episode video links.
+  // Results are cached per MAL id (including failed lookups).
+  _anipubCache: new Map(), // mal_id -> { anipubId, eps: [{n, id}] } | null
+
+  async anipubEpisodes(anime) {
+    const key = anime?.mal_id;
+    if (!key) return null;
+    if (this._anipubCache.has(key)) return this._anipubCache.get(key);
+    const found = await this._resolveAnipub(anime).catch(() => null);
+    this._anipubCache.set(key, found);
+    return found;
+  },
+
+  // Full embed URL for a given episode on AniPub, or null if unresolvable.
+  async anipubUrl(anime, ep) {
+    const info = await this.anipubEpisodes(anime);
+    const item = (info?.eps || []).find((e) => e.n === Number(ep)) ||
+      (info?.eps || [])[Number(ep) - 1];
+    return item ? `https://anipub.xyz/video/${item.id}/${item.variant || "sub"}` : null;
+  },
+
+  async _resolveAnipub(anime) {
+    const title = this.title(anime) || anime?.title;
+    if (!title) return null;
+    const getJson = async (url) => {
+      const ctrl = new AbortController();
+      const timer = setTimeout(() => ctrl.abort(), 8000);
+      try {
+        const res = await fetch(url, { signal: ctrl.signal });
+        if (!res.ok) return null;
+        return await res.json().catch(() => null);
+      } catch (e) {
+        return null;
+      } finally {
+        clearTimeout(timer);
+      }
+    };
+
+    // 1) search AniPub for the anime by title
+    const search = await getJson(
+      `https://anipub.xyz/api/searchall/${encodeURIComponent(title)}?page=1`);
+    const results = search?.AniData || [];
+    if (!results.length) return null;
+
+    // 2) pick the best title match (exact > prefix/contains > first result)
+    const norm = (s) => String(s || "").toLowerCase()
+      .replace(/[^\p{L}\p{N}]/gu, "");
+    const needle = norm(title);
+    const score = (name) => {
+      const n = norm(name);
+      if (!needle || !n) return 0;
+      if (n === needle) return 100;
+      if (n.startsWith(needle) || needle.startsWith(n)) return 60;
+      if (n.includes(needle) || needle.includes(n)) return 30;
+      return 0;
+    };
+    let best = results[0];
+    let bestScore = -1;
+    results.forEach((r) => {
+      const s = score(r.Name);
+      if (s > bestScore) { bestScore = s; best = r; }
+    });
+    if (!best?._id) return null;
+
+    // 3) episode list → /video/{id}/sub|dub links, in order (1..N). Links may
+    // use www.anipub.xyz and carry a sub/dub suffix — normalize the domain and
+    // keep the original variant.
+    const det = await getJson(`https://anipub.xyz/v1/api/details/${best._id}`);
+    const eps = (det?.local?.ep || []).map((e, i) => {
+      const m = /(?:www\.)?anipub\.xyz\/video\/(\d+)\/(sub|dub)/i.exec(e?.link || "");
+      return m ? { n: i + 1, id: m[1], variant: m[2] } : null;
+    }).filter(Boolean);
+    if (!eps.length) return null;
+    return { anipubId: best._id, eps };
+  },
+
+  // ---------- 9anime dynamic provider (hosted NineAnimeClient API) ----------
+  // The NineAnimeClient npm lib is Node-only, so it cannot run on static
+  // GitHub Pages. When CONFIG.NINEANIME_API_BASE points at a hosted copy of
+  // its demo server (Vercel/Railway/Render), these helpers resolve 9anime
+  // streams and play them through the on-site <video> player (mode "video"),
+  // tunneling around referer/CORS limits via the demo's /proxy/m3u8 +
+  // /proxy/segment endpoints. Every step resolves to null when the API is
+  // missing, disabled, or the title/episode can't be found (callers show a
+  // graceful fallback). Enabled only once CONFIG.NINEANIME_API_BASE is set.
+  nineAnimeBase() {
+    return (CONFIG.NINEANIME_API_BASE || "").replace(/\/+$/, "");
+  },
+
+  _nineCache: new Map(), // mal_id -> { animeId, eps: [{n, season}] } | null
+
+  async nineAnimeUrl(anime, ep) {
+    const base = this.nineAnimeBase();
+    if (!base) return null;
+    const key = anime?.mal_id;
+    if (key && this._nineCache.has(key)) {
+      return this._nineStreamUrl(base, this._nineCache.get(key), ep);
+    }
+    const resolved = await this._resolveNineAnime(anime).catch(() => null);
+    if (key) this._nineCache.set(key, resolved);
+    return resolved ? this._nineStreamUrl(base, resolved, ep) : null;
+  },
+
+  async _nineGet(url) {
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), 10000);
+    try {
+      const res = await fetch(url, { signal: ctrl.signal });
+      if (!res.ok) return null;
+      return await res.json().catch(() => null);
+    } catch (e) {
+      return null;
+    } finally {
+      clearTimeout(timer);
+    }
+  },
+
+  async _resolveNineAnime(anime) {
+    const base = this.nineAnimeBase();
+    const title = this.title(anime) || anime?.title;
+    if (!base || !title) return null;
+
+    // 1) search the 9anime catalog for the title
+    const search = await this._nineGet(`${base}/api/search?q=${encodeURIComponent(title)}`);
+    const results = Array.isArray(search) ? search
+      : (Array.isArray(search?.data) ? search.data : []);
+    if (!results.length) return null;
+
+    // 2) pick the best title match (exact > prefix > contains > first)
+    const norm = (s) => String(s || "").toLowerCase().replace(/[^\p{L}\p{N}]/gu, "");
+    const needle = norm(title);
+    const score = (name) => {
+      const n = norm(name);
+      if (!needle || !n) return 0;
+      if (n === needle) return 100;
+      if (n.startsWith(needle) || needle.startsWith(n)) return 60;
+      if (n.includes(needle) || needle.includes(n)) return 30;
+      return 0;
+    };
+    let best = results[0];
+    let bestScore = -1;
+    results.forEach((r) => {
+      const s = score(r.title || r.name || r.animeTitle || "");
+      if (s > bestScore) { bestScore = s; best = r; }
+    });
+    const animeId = best?.id || best?.animeId || best?.anime_id;
+    if (!animeId) return null;
+
+    // 3) episode list (accepts the common response shapes)
+    const details = await this._nineGet(`${base}/api/anime/${animeId}/details`);
+    const eps = this._nineEpisodes(details);
+    if (!eps.length) return null;
+    return { animeId, eps };
+  },
+
+  // Normalize the episode list from a details response. Accepts:
+  //   { seasons: [{ id, episodes: [{number, episodeId}] }] }
+  //   { episodes: [{number, episodeId}] }
+  //   { data: { episodes: [...] } }
+  _nineEpisodes(details) {
+    const out = [];
+    const push = (n, season) => { if (n) out.push({ n: Number(n), season }); };
+    const src = details?.data || details;
+    const seasons = Array.isArray(src?.seasons) ? src.seasons
+      : (Array.isArray(src?.seasonList) ? src.seasonList : []);
+    if (seasons.length) {
+      seasons.forEach((s) => {
+        const id = s.id || s.season || "season-1";
+        (Array.isArray(s.episodes) ? s.episodes : []).forEach((e) =>
+          push(e.number ?? e.ep ?? e.episodeId, id));
+      });
+    } else {
+      const flat = Array.isArray(src?.episodes) ? src.episodes
+        : (Array.isArray(src?.epList) ? src.epList : []);
+      flat.forEach((e) => push(e.number ?? e.ep ?? e.episodeId, "season-1"));
+    }
+    return out.sort((a, b) => a.n - b.n);
+  },
+
+  // Resolve one episode to a proxied HLS URL on the demo server.
+  async _nineStreamUrl(base, info, ep) {
+    if (!info) return null;
+    const item = info.eps.find((e) => e.n === Number(ep)) || info.eps[Number(ep) - 1];
+    if (!item) return null;
+    const q = `season=${encodeURIComponent(item.season || "season-1")}&episode=${Number(ep)}`;
+    const streams = await this._nineGet(`${base}/api/anime/${info.animeId}/streams?${q}`);
+    if (!streams) return null;
+
+    // Flatten every plausible source shape into { urls, ref } candidates.
+    const candidates = [];
+    const add = (c) => {
+      if (!c || typeof c !== "object") return;
+      const urls = [];
+      if (typeof c.streamUrl === "string") urls.push(c.streamUrl);
+      (Array.isArray(c.streams) ? c.streams : []).forEach((st) => {
+        if (st && typeof st === "object" && st.url) urls.push(st.url);
+        else if (typeof st === "string") urls.push(st);
+      });
+      if (typeof c.url === "string") urls.push(c.url);
+      const ref = c.headers?.referer || c.headers?.Referer || c.headers?.referrer || "";
+      if (urls.length) candidates.push({ urls, ref });
+    };
+    [streams, streams?.sources, streams?.sub, streams?.dub, streams?.unknown]
+      .forEach((x) => {
+        if (Array.isArray(x)) x.forEach(add);
+        else add(x);
+      });
+
+    const hit = candidates.find((c) => c.urls.some((u) => /\.m3u8(\?|$)/i.test(u))) ||
+      candidates[0];
+    if (!hit) return null;
+    const m3u8 = hit.urls.find((u) => /\.m3u8(\?|$)/i.test(u)) || hit.urls[0];
+    return `${base}/api/proxy/m3u8?url=${encodeURIComponent(m3u8)}&ref=${encodeURIComponent(hit.ref || "")}`;
   },
 };
