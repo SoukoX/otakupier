@@ -123,18 +123,27 @@
       if (!theater) return;
       const embed = getStreamingProviders().filter((p) => p.mode === "embed");
       const provChips = embed.map((p, i) =>
-        `<button class="ep-chip${i === activeEmbedIndex ? " is-active" : ""}" data-eprov="${i}" onclick="pickEmbedProvider(${i})">${JIKAN.esc(p.name)}</button>`
+        `<button class="ep-chip provider-chip${i === activeEmbedIndex ? " is-active" : ""}" data-eprov="${i}" onclick="pickEmbedProvider(${i})"
+           title="${JIKAN.esc(p.name)} — streams on this site">
+           <span class="provider-chip-name">${JIKAN.esc(p.name)}</span>
+           <span class="mode-dot" title="Streams on this site"></span>
+         </button>`
       ).join("");
       theater.innerHTML = `
         <div class="watch-theater">
           <div class="watch-player">
             <div class="watch-player-bar">
               <span class="watch-player-title" id="watchPlayerTitle">On-site player</span>
-              <button class="watch-hide" onclick="hideTheater()" title="Hide player">&times;</button>
+              <div class="watch-player-actions">
+                <button class="stream-nav" id="prevEpBtn" onclick="playEpisode(lastStreamEpisode - 1)" title="Previous episode (←)">‹</button>
+                <button class="stream-nav" id="nextEpBtn" onclick="playEpisode(lastStreamEpisode + 1)" title="Next episode (→)">›</button>
+                <button class="watch-hide" onclick="hideTheater()" title="Hide player">&times;</button>
+              </div>
             </div>
             <div class="watch-frame" id="watchFrame">
-              <div class="loading"><div class="spinner"></div>Preparing player…</div>
+              <div class="stream-loading"><div class="spinner"></div><span>Preparing player…</span></div>
             </div>
+            <div class="watch-player-sub" id="watchPlayerSub">Pick an episode to start watching</div>
           </div>
           <div class="watch-side">
             ${embed.length ? `<div class="watch-side-title">Provider</div>
@@ -172,9 +181,9 @@
       if (theater) theater.innerHTML = "";
     }
 
-    // Load an episode into the on-site player. Embed providers resolve an
-    // episode-accurate playable source (Archive.org item) and stream it
-    // inside the page. If no accurate match exists, show a clear message.
+    // Load an episode into the on-site player. Embed providers stream right in
+    // the page (AniPub / Archive.org); a shimmer overlays the frame until the
+    // player has loaded, and prev/next buttons jump between episodes.
     async function playEpisode(ep) {
       const embed = getStreamingProviders().filter((p) => p.mode === "embed");
       if (!embed.length) {
@@ -184,15 +193,27 @@
       const provider = embed[activeEmbedIndex] || embed[0];
       const frame = document.getElementById("watchFrame");
       const titleEl = document.getElementById("watchPlayerTitle");
+      const subEl = document.getElementById("watchPlayerSub");
       if (!frame) {
         renderTheater();
         return playEpisode(ep);
       }
+      const eps = listOfEpisodes();
+      if (ep < 1 || ep > eps.length) {
+        showToast(`Episode ${ep} is out of range`);
+        return;
+      }
       lastStreamEpisode = ep;
       markTheaterEpisode(ep);
-      if (titleEl) titleEl.textContent = `Episode ${ep} — ${JIKAN.esc(provider.name)}`;
-      frame.innerHTML = `<div class="loading"><div class="spinner"></div>Searching ${JIKAN.esc(provider.name)}…</div>`;
+      const prevBtn = document.getElementById("prevEpBtn");
+      const nextBtn = document.getElementById("nextEpBtn");
+      if (prevBtn) prevBtn.disabled = ep <= 1;
+      if (nextBtn) nextBtn.disabled = ep >= eps.length;
+      if (titleEl) titleEl.textContent = `Episode ${ep}`;
+      if (subEl) subEl.textContent = `${JIKAN.esc(provider.name)} · streaming on this site`;
+      frame.innerHTML = `<div class="stream-loading"><div class="spinner"></div><span>Loading ${JIKAN.esc(provider.name)}…</span></div>`;
 
+      let url;
       if (provider.id === "archive") {
         const item = await findArchiveItem(JIKAN.title(animeData), ep);
         if (!item) {
@@ -203,20 +224,54 @@
           </div>`;
           return;
         }
-        const url = `https://archive.org/embed/${item}`;
-        frame.innerHTML = `<iframe src="${JIKAN.esc(url)}" title="${JIKAN.esc(provider.name + " — Episode " + ep)}"
-          referrerpolicy="no-referrer" allow="autoplay; fullscreen; encrypted-media; picture-in-picture"
-          sandbox="allow-scripts allow-same-origin" allowfullscreen></iframe>`;
+        url = `https://archive.org/embed/${item}`;
+      } else if (provider.id === "anipub") {
+        // AniPub keys episodes by its own ids — resolve them via its API.
+        // Timebox the resolve so "Loading…" can never persist if the API is
+        // slow or blocked from the viewer's network (→ falls through to the
+        // "couldn't resolve" notice below).
+        url = await Promise.race([
+          JIKAN.anipubUrl(animeData, ep),
+          new Promise((r) => setTimeout(() => r(null), 10000)),
+        ]);
+        if (!url) {
+          frame.innerHTML = `<div class="stream-notice">
+            <div class="not-found-title">Couldn't resolve this episode</div>
+            <p>${JIKAN.esc(provider.name)} didn't return a source for episode ${ep} of this title.</p>
+            <p style="margin-top:8px;"><a href="https://anipub.xyz" target="_blank" rel="noopener noreferrer" style="color:var(--accent)">Open ${JIKAN.esc(provider.name)} directly &nearr;</a></p>
+          </div>`;
+          return;
+        }
       } else {
-        const url = JIKAN.streamingUrl(provider, { mal_id: animeData?.mal_id, ep, title: JIKAN.title(animeData) });
+        url = JIKAN.streamingUrl(provider, { mal_id: animeData?.mal_id, ep, title: JIKAN.title(animeData) });
         if (!url) {
           frame.innerHTML = `<div class="stream-notice">This provider could not build a link for this episode.</div>`;
           return;
         }
-        frame.innerHTML = `<iframe src="${JIKAN.esc(url)}" title="${JIKAN.esc(provider.name)}"
-          referrerpolicy="no-referrer" allow="autoplay; fullscreen; encrypted-media; picture-in-picture"
-          sandbox="allow-scripts allow-same-origin" allowfullscreen></iframe>`;
       }
+
+      // Build the iframe + loading overlay via DOM so each new episode gets a
+      // fresh, clean player and the shimmer is hidden when it actually loads.
+      // replaceChildren clears the initial "Loading…" shimmer first so it can
+      // never linger on top of the player.
+      const loading = document.createElement("div");
+      loading.className = "stream-loading";
+      loading.innerHTML = `<div class="spinner"></div><span>Preparing player…</span>`;
+      const hideLoad = () => loading.classList.add("hide");
+      const iframe = document.createElement("iframe");
+      iframe.src = url;
+      iframe.title = `${JIKAN.esc(provider.name)} — Episode ${ep}`;
+      iframe.referrerPolicy = provider.referrerPolicy || "no-referrer";
+      iframe.allow = "autoplay; fullscreen; encrypted-media; picture-in-picture";
+      // Some players (e.g. AniPub) refuse to run sandboxed — providers can
+      // opt out via `sandbox: false` in config.js.
+      if (provider.sandbox !== false) {
+        iframe.setAttribute("sandbox", "allow-scripts allow-same-origin");
+      }
+      iframe.allowFullscreen = true;
+      iframe.addEventListener("load", hideLoad);
+      frame.replaceChildren(loading, iframe);
+      setTimeout(hideLoad, 12000); // safety net for pages that never fire load
     }
 
     // Find an Archive.org item for a specific episode. Episode-targeted
