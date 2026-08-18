@@ -268,17 +268,23 @@ function pathPrefix() {
   return window.location.pathname.includes("/pages/") ? "../" : "";
 }
 
-// Reliable "back" navigation. history.length is unreliable across browsers,
-// so we go back to the page the visitor actually came from (document.referrer)
-// and fall back to the home page only when there's nowhere to return to.
+// Reliable "back" navigation. Prefer the real previous entry in this tab's
+// session so "Back" returns where the visitor actually came from, then the
+// referring page (document.referrer), and only fall back to the home page
+// when there is nowhere to return to.
 function goBack() {
+  if (window.history && window.history.length > 1) {
+    window.history.back();
+    return;
+  }
   const ref = document.referrer || "";
   if (ref && ref.startsWith(location.origin)) {
     location.href = ref;
     return;
   }
-  // Came from an external site, a new tab, or a direct link — go home.
-  location.href = pathPrefix() || "/";
+  // Use the explicit index file so the fallback works under static servers
+  // (where "/" shows a directory listing) as well as GitHub Pages.
+  location.href = (pathPrefix() || "./") + "index.html";
 }
 
 const NAV_LINKS = [
