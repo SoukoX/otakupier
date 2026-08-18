@@ -232,6 +232,25 @@ async function refreshCurrentProfile() {
     .eq("id", currentUser.id)
     .maybeSingle();
   if (data) currentProfile = data;
+  // Signup stores the display name in the auth user metadata, while the
+  // profiles row can be created empty by the DB trigger. Heal the name so
+  // reviews, chat, forums, etc. never fall back to "User".
+  if (data && !data.name) {
+    const patch = {};
+    const metaName = currentUser?.user_metadata?.full_name
+      || currentUser?.user_metadata?.username
+      || currentUser?.email?.split("@")[0];
+    if (metaName) patch.name = metaName;
+    if (!data.avatar_url && currentUser?.user_metadata?.avatar_url) {
+      patch.avatar_url = currentUser.user_metadata.avatar_url;
+    }
+    if (Object.keys(patch).length) {
+      try {
+        await supabase.from("profiles").update(patch).eq("id", currentUser.id);
+        currentProfile = { ...data, ...patch };
+      } catch (e) {}
+    }
+  }
 }
 
 function isAdmin() {
