@@ -407,17 +407,27 @@
       const providers = getStreamingProviders();
       const epCount = animeData?.episodes || episodeCount || 0;
 
-      // Free/watch-on providers from config (Tubi, Pluto TV, RetroCrush...)
+      // Free/watch-on providers from config (Tubi, Pluto TV, RetroCrush...).
+      // Providers in "embed"/"video" mode stream right on this page; the
+      // rest open a search on the provider's own site in a new tab.
       let streamHtml = "";
       if (providers.length) {
+        const chips = providers.map((p, i) => {
+          const onSite = p.mode === "embed" || p.mode === "video";
+          return `<button class="watch-btn ep-chip provider-chip${i === activeProviderIndex ? " is-active" : ""}"
+                  data-provider="${i}" onclick="onPickProvider(${i})"
+                  title="${JIKAN.esc(p.name)} — ${JIKAN.esc(JIKAN.modeLabel(p))}">
+                  <span class="provider-chip-name">${JIKAN.esc(p.name)}</span>
+                  ${onSite ? `<span class="mode-dot" title="Streams on this site"></span>` : ""}
+                </button>`;
+        }).join("");
         streamHtml = `
           <div class="stream-panel">
-            <div class="watch-search" style="margin:0 0 2px;"><strong>Watch for free</strong></div>
-            <div class="stream-providers">
-              ${providers.map((p, i) =>
-                `<button class="watch-btn ep-chip" data-provider="${i}" onclick="onPickProvider(${i})">${JIKAN.esc(p.name)}</button>`
-              ).join("")}
+            <div class="stream-panel-head">
+              <strong>Watch now</strong>
+              <span class="stream-panel-hint">Pick a source, then an episode</span>
             </div>
+            <div class="stream-providers">${chips}</div>
             ${epCount > 0
               ? `<div class="episodes-row" id="epRow"></div>`
               : `<div class="stream-notice">This title has no episode list yet.</div>`}
@@ -592,7 +602,7 @@
     // that stream on this site (embed mode) are shown; the "Links to Watch"
     // panel below is where external providers open in a new tab.
     function startWatching() {
-      const embed = getStreamingProviders().filter((p) => p.mode === "embed");
+      const embed = getStreamingProviders().filter((p) => p.mode === "embed" || p.mode === "video");
       if (!embed.length) {
         showToast("No on-site streaming is configured for this title.");
         return;
@@ -603,7 +613,7 @@
     }
 
     function showProviderPicker() {
-      const embed = getStreamingProviders().filter((p) => p.mode === "embed");
+      const embed = getStreamingProviders().filter((p) => p.mode === "embed" || p.mode === "video");
       const title = JIKAN.title(animeData) || "Anime";
       closeStreamModal();
       const overlay = document.createElement("div");
@@ -611,7 +621,7 @@
       const rows = embed.map((p, i) => `
         <button class="provider-pick" onclick="pickProvider(${i})">
           <span class="provider-pick-name">${JIKAN.esc(p.name)}</span>
-          <span class="watch-pill">Plays on-site</span>
+          <span class="watch-pill">▶ Streams here</span>
         </button>`).join("");
       overlay.innerHTML = `
         <div class="stream-modal" role="dialog" aria-modal="true" aria-label="Choose a provider">
@@ -630,10 +640,18 @@
     }
 
     function pickProvider(i) {
-      const embed = getStreamingProviders().filter((p) => p.mode === "embed");
-      const p = embed[i];
+      const list = getStreamingProviders().filter((p) => p.mode === "embed" || p.mode === "video");
+      const p = list[i];
       if (!p) return;
       closeStreamModal();
+      // Video providers (e.g. 9anime HLS) stream in the on-site <video> modal
+      // right here; embed providers redirect to the watch theater page.
+      if (p.mode === "video") {
+        activeProviderIndex = getStreamingProviders().findIndex((x) => x.id === p.id);
+        renderEpRow(listOfEpisodes());
+        openStream(1);
+        return;
+      }
       window.location.href = `${pageHref("watch")}?id=${animeData?.mal_id}&provider=${encodeURIComponent(p.id)}`;
     }
 
@@ -645,14 +663,13 @@
         return;
       }
       const provider = providers[activeProviderIndex] || providers[0];
-      let url = JIKAN.streamingUrl(provider, {
-        mal_id: animeData?.mal_id,
-        ep,
-        title: JIKAN.title(animeData),
-      });
-      // On-site embed provider: resolve the Archive.org item for this title
-      // and play it inside the page player (no redirect).
+      let url = null;
+      // On-site embed providers resolve their episode source at runtime:
+      // Archive.org via search, AniPub via its public API.
       if (provider.id === "archive") {
+        url = JIKAN.streamingUrl(provider, {
+          mal_id: animeData?.mal_id, ep, title: JIKAN.title(animeData),
+        });
         showToast("Searching Archive.org…");
         const item = await findArchiveItem(JIKAN.title(animeData), ep);
         if (!item) {
@@ -662,6 +679,39 @@
           return;
         }
         url = `https://archive.org/embed/${item}`;
+      } else if (provider.id === "anipub") {
+        showToast("Resolving AniPub source…");
+        // Timebox so we never hang on AniPub's API from a slow/blocked network.
+        url = await Promise.race([
+          JIKAN.anipubUrl(animeData, ep),
+          new Promise((r) => setTimeout(() => r(null), 10000)),
+        ]);
+        if (!url) {
+          showToast(`Couldn't resolve episode ${ep} on ${provider.name}.`);
+          const slot = document.getElementById("watchSlot");
+          if (slot) slot.scrollIntoView({ behavior: "smooth", block: "center" });
+          return;
+        }
+      } else if (provider.dynamic === "nineanime") {
+        showToast("Resolving 9anime source…");
+        // 9anime streams via the hosted NineAnime API (proxied HLS). Timeboxed
+        // the same way so a slow/offline API never leaves the modal hanging.
+        url = await Promise.race([
+          JIKAN.nineAnimeUrl(animeData, ep),
+          new Promise((r) => setTimeout(() => r(null), 15000)),
+        ]);
+        if (!url) {
+          showToast(`Couldn't resolve episode ${ep} on ${provider.name}.`);
+          const slot = document.getElementById("watchSlot");
+          if (slot) slot.scrollIntoView({ behavior: "smooth", block: "center" });
+          return;
+        }
+      } else {
+        url = JIKAN.streamingUrl(provider, {
+          mal_id: animeData?.mal_id,
+          ep,
+          title: JIKAN.title(animeData),
+        });
       }
       if (!url) {
         showToast("This provider could not build a link for this episode.");
@@ -722,18 +772,36 @@
       const overlay = document.createElement("div");
       overlay.className = "stream-modal-overlay";
 
+      const eps = listOfEpisodes();
+      const hasEps = eps.length > 1;
+      const prevBtn = hasEps && ep > 1
+        ? `<button class="stream-nav" onclick="streamNav(${ep - 1})" title="Previous episode (←)">‹</button>` : "";
+      const nextBtn = hasEps && ep < eps.length
+        ? `<button class="stream-nav" onclick="streamNav(${ep + 1})" title="Next episode (→)">›</button>` : "";
+
       let frame = "";
       let link = "";
       let usesVideo = false;
       if (provider.mode === "embed") {
-        frame = `<div class="stream-frame-wrap"><iframe src="${JIKAN.esc(url)}" title="${JIKAN.esc(title)}"
-             referrerpolicy="no-referrer" allow="autoplay; fullscreen; encrypted-media; picture-in-picture"
-             sandbox="allow-scripts allow-same-origin" loading="lazy" allowfullscreen></iframe></div>`;
+        // Some players (e.g. AniPub) detect the sandbox flag and refuse to
+        // run — providers can opt out via `sandbox: false` in config.js.
+        const sbx = provider.sandbox === false
+          ? ""
+          : ` sandbox="allow-scripts allow-same-origin"`;
+        frame = `<div class="stream-frame-wrap" id="streamFrame">
+            <div class="stream-loading"><div class="spinner"></div><span>Preparing player…</span></div>
+            <iframe src="${JIKAN.esc(url)}" title="${JIKAN.esc(title)}"
+                 referrerpolicy="${JIKAN.esc(provider.referrerPolicy || "no-referrer")}" allow="autoplay; fullscreen; encrypted-media; picture-in-picture"${sbx}
+                 allowfullscreen></iframe>
+          </div>`;
         link = `<a class="btn btn-primary" href="${JIKAN.esc(url)}" target="_blank" rel="noopener noreferrer">▶ Watch on ${JIKAN.esc(provider.name)}</a>`;
       } else if (provider.mode === "video") {
         usesVideo = true;
-        frame = `<div class="stream-frame-wrap"><video id="streamVideo" controls playsinline preload="metadata"
-             style="position:absolute; inset:0; width:100%; height:100%; background:#000;"></video></div>`;
+        frame = `<div class="stream-frame-wrap" id="streamFrame">
+            <video id="streamVideo" controls playsinline preload="metadata"
+                 style="position:absolute; inset:0; width:100%; height:100%; background:#000;"></video>
+            <div class="stream-loading" id="streamBuffer"><div class="spinner"></div><span>Buffering…</span></div>
+          </div>`;
         link = `<a class="btn btn-primary" href="${JIKAN.esc(url)}" target="_blank" rel="noopener noreferrer">Open video file</a>`;
       } else {
         frame = `<div class="stream-notice" style="padding:8px 2px;">This provider opens in a new tab.</div>`;
@@ -743,8 +811,14 @@
       overlay.innerHTML = `
         <div class="stream-modal" role="dialog" aria-modal="true" aria-label="${JIKAN.esc(title)}">
           <div class="stream-modal-head">
-            <div class="stream-modal-title">${JIKAN.esc(title)}</div>
-            <button class="stream-modal-close" onclick="closeStreamModal()" aria-label="Close player">&times;</button>
+            <div class="stream-modal-title">
+              <span class="stream-title-main">${JIKAN.esc(title)}</span>
+              ${ep ? `<span class="stream-title-sub">Episode ${ep} · ${JIKAN.esc(provider.name)}</span>` : ""}
+            </div>
+            <div class="stream-head-actions">
+              ${prevBtn}${nextBtn}
+              <button class="stream-modal-close" onclick="closeStreamModal()" aria-label="Close player">&times;</button>
+            </div>
           </div>
           ${frame}
           <div class="stream-modal-actions">
@@ -756,19 +830,41 @@
       document.addEventListener("keydown", streamEscKey);
       document.body.appendChild(overlay);
 
-      // mode "video": attach the direct MP4/HLS source to the <video>.
       if (usesVideo) {
         const vid = document.getElementById("streamVideo");
         if (vid) loadVideoSource(vid, url);
+      } else {
+        // Hide the loading shimmer once the iframe finishes loading. A
+        // safety timer covers providers whose page never fires a load event.
+        const frameEl = document.getElementById("streamFrame");
+        const iframe = frameEl ? frameEl.querySelector("iframe") : null;
+        const loading = frameEl ? frameEl.querySelector(".stream-loading") : null;
+        const hideLoad = () => { if (loading) loading.classList.add("hide"); };
+        if (iframe) {
+          iframe.addEventListener("load", hideLoad);
+          setTimeout(hideLoad, 12000);
+        }
       }
+    }
+
+    // Jump to the previous/next episode from the modal player controls.
+    function streamNav(ep) {
+      if (!ep) return;
+      openStream(ep);
     }
 
     // Attach an MP4 or HLS (m3u8) source to a <video>. HLS needs hls.js
     // (loaded above); plain MP4/WebM plays natively. Appending a fresh
-    // <source> guarantees a clean reload when switching episodes.
+    // <source> guarantees a clean reload when switching episodes. A
+    // "buffering" shimmer overlays the player until playback is ready.
     function loadVideoSource(video, src) {
       if (!video || !src) return;
       while (video.firstChild) video.removeChild(video.firstChild);
+      const buff = document.getElementById("streamBuffer");
+      const setBuf = (on) => { if (buff) buff.classList.toggle("hide", !on); };
+      setBuf(true);
+      ["playing", "canplay", "error"].forEach((ev) =>
+        video.addEventListener(ev, () => setBuf(false), { once: true }));
       const isHls = /\.m3u8(\?|$)/i.test(src);
       if (isHls && window.Hls && Hls.isSupported()) {
         const hls = new Hls();
@@ -787,7 +883,14 @@
     }
 
     function streamEscKey(e) {
-      if (e.key === "Escape") closeStreamModal();
+      if (e.key === "Escape") { closeStreamModal(); return; }
+      // Arrow keys jump between episodes while the modal player is open.
+      if (e.key === "ArrowLeft") {
+        if (lastStreamEpisode > 1) openStream(lastStreamEpisode - 1);
+      } else if (e.key === "ArrowRight") {
+        const eps = listOfEpisodes();
+        if (lastStreamEpisode < eps.length) openStream(lastStreamEpisode + 1);
+      }
     }
 
     function closeStreamModal() {
