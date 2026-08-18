@@ -269,7 +269,7 @@
             <div class="title">${JIKAN.esc(r.name)}</div>
             <div class="jtitle" style="color:var(--accent-3);">${JIKAN.esc(r.relation)}</div>
           </div>`;
-        el.addEventListener("click", () => (window.location.href = `anime?id=${r.mal_id}`));
+        el.addEventListener("click", () => (window.location.href = `${pageHref("anime")}?id=${r.mal_id}`));
         grid.appendChild(el);
       });
       // Wait for the rest of the page to finish, then enrich the related cards.
@@ -585,7 +585,6 @@
       const rows = embed.map((p, i) => `
         <button class="provider-pick" onclick="pickProvider(${i})">
           <span class="provider-pick-name">${JIKAN.esc(p.name)}</span>
-          <span class="watch-pill">▶ Streams here</span>
         </button>`).join("");
       overlay.innerHTML = `
         <div class="stream-modal" role="dialog" aria-modal="true" aria-label="Choose a provider">
@@ -629,21 +628,8 @@
       const provider = providers[activeProviderIndex] || providers[0];
       let url = null;
       // On-site embed providers resolve their episode source at runtime:
-      // Archive.org via search, AniPub via its public API.
-      if (provider.id === "archive") {
-        url = JIKAN.streamingUrl(provider, {
-          mal_id: animeData?.mal_id, ep, title: JIKAN.title(animeData),
-        });
-        showToast("Searching Archive.org…");
-        const item = await findArchiveItem(JIKAN.title(animeData), ep);
-        if (!item) {
-          showToast(`Episode ${ep} not found on ${provider.name}.`);
-          const slot = document.getElementById("watchSlot");
-          if (slot) slot.scrollIntoView({ behavior: "smooth", block: "center" });
-          return;
-        }
-        url = `https://archive.org/embed/${item}`;
-      } else if (provider.id === "anipub") {
+      // AniPub via its public API, AniKoto via its catalog API.
+      if (provider.id === "anipub") {
         showToast("Resolving AniPub source…");
         // Timebox so we never hang on AniPub's API from a slow/blocked network.
         url = await Promise.race([
@@ -700,39 +686,6 @@
       renderEpRow(listOfEpisodes());
       const title = (animeData?.title_english || animeData?.title || "Anime") + " — Episode " + ep;
       openStreamModal({ provider, url, title, ep });
-    }
-
-    // Find an Archive.org item for a specific episode. Episode-targeted
-    // queries run first (most accurate); if none match, the requested
-    // episode is simply reported as not found.
-    async function findArchiveItem(title, ep) {
-      const base = title.replace(/\s*\([^)]*\)\s*/g, " ").trim();
-      const clean = base.replace(/[^\p{L}\p{N}\s]/gu, " ").replace(/\s+/g, " ").trim();
-      const epPad = String(ep || "").padStart(2, "0");
-      const variants = [];
-      if (ep) {
-        variants.push(`${clean} episode ${ep}`, `${clean} ep ${ep}`, `${clean} ${epPad}`, `${clean} - ${epPad}`);
-      }
-      variants.push(clean, base, title);
-      const seen = new Set();
-      for (const t of variants) {
-        if (!t || seen.has(t)) continue;
-        seen.add(t);
-        const phrase = '"' + t.replace(/"/g, "\\\"") + '"';
-        const queries = [`title:${phrase} AND mediatype:movies`, `${phrase} AND mediatype:movies`];
-        for (const q of queries) {
-          try {
-            const r = await fetch(
-              "https://archive.org/advancedsearch.php?q=" + encodeURIComponent(q) +
-              "&fl[]=identifier&rows=8&sort[]=downloads+desc&output=json", { cache: "force-cache" });
-            if (!r.ok) continue;
-            const j = await r.json();
-            const docs = j?.response?.docs || [];
-            if (docs.length) return docs[0].identifier;
-          } catch (e) {}
-        }
-      }
-      return null;
     }
 
     function listOfEpisodes() {
@@ -1266,6 +1219,7 @@
       try {
         await dbInsert("reviews", {
           user_id: currentUser.id,
+          author_name: getProfile().name,
           anime_mal_id: Number(id),
           anime_title: JIKAN.title(animeData),
           rating: type === "review" ? pickedRating : null,
@@ -1394,6 +1348,7 @@
       try {
         await dbInsert("reviews", {
           user_id: currentUser.id,
+          author_name: getProfile().name,
           anime_mal_id: Number(id),
           anime_title: JIKAN.title(animeData),
           rating: null,
@@ -1421,8 +1376,14 @@
         ]);
         const data = profRes.data;
         if (data) {
-          const nameEl = tag.parentElement.querySelector("a");
-          if (nameEl) nameEl.outerHTML = `<a href="profile.html?id=${userId}" style="color:var(--text); text-decoration:none;">${prestigeNameHTML(data, perks[userId])}</a>`;
+          // Only overwrite the displayed name when the profile actually has
+          // one. Signup stores the name in the auth user metadata and the
+          // profiles row can be created empty by the DB trigger, which would
+          // otherwise clobber the review's own author_name with "User".
+          if (data.name) {
+            const nameEl = tag.parentElement.querySelector("a");
+            if (nameEl) nameEl.outerHTML = `<a href="${pageHref("profile")}?id=${userId}" style="color:var(--text); text-decoration:none;">${prestigeNameHTML(data, perks[userId])}</a>`;
+          }
           tag.innerHTML = rankTag(userId, data);
         } else {
           tag.innerHTML = rankTag(userId, { xp: 0 });
