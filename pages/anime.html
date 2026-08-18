@@ -683,7 +683,7 @@
         showToast("Resolving AniPub source…");
         // Timebox so we never hang on AniPub's API from a slow/blocked network.
         url = await Promise.race([
-          JIKAN.anipubUrl(animeData, ep),
+          JIKAN.anipubUrl(animeData, ep, streamLang),
           new Promise((r) => setTimeout(() => r(null), 10000)),
         ]);
         if (!url) {
@@ -761,6 +761,7 @@
     }
 
     let lastStreamEpisode = 0;
+    let streamLang = "sub"; // "sub" | "dub" (AniPub); other providers ignore it
 
     // Modal with an <iframe> embed (mode "embed"), a direct video file
     // (mode "video"), or an external link (mode "link"). The iframe sandbox
@@ -821,6 +822,11 @@
             </div>
           </div>
           ${frame}
+          ${provider.id === "anipub" ? `<div class="watch-lang-bar stream-lang-bar">
+            <span class="watch-lang-label">Audio</span>
+            <button class="lang-btn${streamLang === "sub" ? " is-active" : ""}" data-lang="sub" onclick="streamSetLang('sub')">Sub</button>
+            <button class="lang-btn${streamLang === "dub" ? " is-active" : ""}" data-lang="dub" onclick="streamSetLang('dub')">Dub</button>
+          </div>` : ""}
           <div class="stream-modal-actions">
             ${link}
             <button class="btn btn-outline btn-small" onclick="closeStreamModal()">Close</button>
@@ -851,6 +857,28 @@
     function streamNav(ep) {
       if (!ep) return;
       openStream(ep);
+    }
+
+    // Swap the AniPub player between subtitled and English-dubbed audio. Dub
+    // availability is pre-checked so a title without an English dub falls
+    // back to sub instead of showing the player's error page.
+    async function streamSetLang(lang) {
+      if (lang === streamLang) return;
+      if (lang === "dub") {
+        try {
+          const info = await JIKAN.anipubEpisodes(animeData);
+          const item = info?.eps?.[Math.min(Math.max(lastStreamEpisode - 1, 0), (info?.eps?.length || 1) - 1)];
+          if (item) {
+            const ok = await JIKAN.anipubDubAvailable(item.id);
+            if (!ok) {
+              showToast("No English dub available for this title.");
+              return;
+            }
+          }
+        } catch (e) {}
+      }
+      streamLang = lang;
+      if (lastStreamEpisode) openStream(lastStreamEpisode);
     }
 
     // Attach an MP4 or HLS (m3u8) source to a <video>. HLS needs hls.js
