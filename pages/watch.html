@@ -8,12 +8,12 @@
   <meta name="robots" content="index, follow">
   <meta name="description" content="Watch anime on OtakuPier with the on-site player — episodes, community reviews and comments.">
   <link rel="canonical" href="https://otakupier.2bd.net/pages/watch.html">
-  <link rel="icon" type="image/svg+xml" href="../favicon.svg">
+  <link rel="icon" type="image/svg+xml" href="../favicon.svg?v=2">
   <link rel="preconnect" href="https://api.jikan.moe">
   <link rel="preconnect" href="https://cdn.jsdelivr.net">
   <link rel="stylesheet" href="../css/style.css">
 </head>
-<body>
+<body class="watch-page">
   <nav class="navbar" id="navbar"></nav>
 
   <main class="container" id="main">
@@ -36,6 +36,7 @@
     let lastStreamEpisode = 0;
     let streamLang = "sub"; // "sub" | "dub" (AniPub); other providers ignore it
     let anipubEpCount = 0;  // playable episodes AniPub actually lists for this title
+    let anikotoEpCount = 0; // playable episodes AniKoto actually lists for this title
 
     async function load() {
       const main = document.getElementById("main");
@@ -77,26 +78,17 @@
     function renderPage() {
       const a = animeData;
       const title = JIKAN.title(a);
-      const img = a.images?.jpg?.image_url || "https://placehold.co/300x450?text=?";
       document.title = `${title} - Watch - OtakuPier`;
       const main = document.getElementById("main");
       main.innerHTML = `
-        <div class="watch-head">
-          <img class="watch-head-img" src="${JIKAN.esc(img)}" alt=""
-               onerror="this.src='https://placehold.co/120x170?text=?'">
-          <div class="watch-head-info">
-            <h1 class="detail-title">${JIKAN.esc(title)}</h1>
+        <div class="watch-top">
+          <div class="watch-top-info">
+            <h1 class="detail-title watch-top-title">${JIKAN.esc(title)}</h1>
             ${a.title_japanese ? `<div class="detail-jtitle">${JIKAN.esc(a.title_japanese)}</div>` : ""}
-            <div class="detail-stats">
-              <span class="stat">Score: <strong>${a.score ? a.score.toFixed(2) : "N/A"}</strong></span>
-              <span class="stat">Episodes: <strong>${a.episodes || "?"}</strong></span>
-              <span class="stat">Status: <strong>${JIKAN.esc(a.status || "N/A")}</strong></span>
-            </div>
-            ${a.synopsis ? `<p class="detail-synopsis">${JIKAN.esc(a.synopsis)}</p>` : ""}
-            <div class="watch-head-actions">
-              <a class="btn btn-outline btn-small" href="${pageHref("anime")}?id=${a.mal_id}">Open in catalog</a>
-              <button class="btn btn-outline btn-small" onclick="goBack()">&larr; Back</button>
-            </div>
+          </div>
+          <div class="watch-top-actions">
+            <a class="btn btn-outline btn-small" href="${pageHref("anime")}?id=${a.mal_id}">Open in catalog</a>
+            <button class="btn btn-outline btn-small" onclick="goBack()">&larr; Back</button>
           </div>
         </div>
         <div id="watchTheater"></div>
@@ -117,7 +109,13 @@
 
     function listOfEpisodes() {
       const base = Math.min(animeData?.episodes || 1, 500);
-      return Array.from({ length: Math.max(base, anipubEpCount) }, (_, i) => i + 1);
+      return Array.from({ length: Math.max(base, anipubEpCount, anikotoEpCount) }, (_, i) => i + 1);
+    }
+
+    // The currently-selected on-site (embed) provider.
+    function activeProvider() {
+      const embed = getStreamingProviders().filter((p) => p.mode === "embed");
+      return embed[activeEmbedIndex] || embed[0] || null;
     }
 
     // ---------- On-site theater ----------
@@ -132,6 +130,8 @@
            <span class="mode-dot" title="Streams on this site"></span>
          </button>`
       ).join("");
+      const a = animeData || {};
+      const miniImg = a.images?.jpg?.image_url || "https://placehold.co/120x170?text=?";
       theater.innerHTML = `
         <div class="watch-theater">
           <div class="watch-player">
@@ -154,6 +154,20 @@
             <div class="watch-player-sub" id="watchPlayerSub">Pick an episode to start watching</div>
           </div>
           <div class="watch-side">
+            <div class="watch-mini-info">
+              <img class="watch-mini-img" src="${JIKAN.esc(miniImg)}" alt=""
+                   onerror="this.src='https://placehold.co/120x170?text=?'">
+              <div class="watch-mini-body">
+                <div class="watch-mini-title">${JIKAN.esc(JIKAN.title(a))}</div>
+                ${a.title_japanese ? `<div class="watch-mini-jp">${JIKAN.esc(a.title_japanese)}</div>` : ""}
+                <div class="watch-mini-stats">
+                  <span class="stat">Score: <strong>${a.score ? a.score.toFixed(2) : "N/A"}</strong></span>
+                  <span class="stat">Episodes: <strong>${a.episodes || "?"}</strong></span>
+                  <span class="stat">Status: <strong>${JIKAN.esc(a.status || "N/A")}</strong></span>
+                </div>
+                <a class="btn btn-outline btn-small" href="${pageHref("anime")}?id=${a.mal_id}">Details</a>
+              </div>
+            </div>
             ${embed.length ? `<div class="watch-side-title">Provider</div>
               <div class="watch-providers">${provChips}</div>` : ""}
             <div class="watch-side-title">Episodes</div>
@@ -198,7 +212,7 @@
         showToast("No on-site player is configured for this title.");
         return;
       }
-      const provider = embed[activeEmbedIndex] || embed[0];
+      const provider = activeProvider() || embed[0];
       const frame = document.getElementById("watchFrame");
       const titleEl = document.getElementById("watchPlayerTitle");
       const subEl = document.getElementById("watchPlayerSub");
@@ -221,7 +235,7 @@
       if (subEl) subEl.textContent = `${JIKAN.esc(provider.name)} · streaming on this site`;
       const langBar = document.getElementById("watchLangBar");
       if (langBar) {
-        const showLang = provider.id === "anipub";
+        const showLang = provider.id === "anipub" || provider.id === "anikoto";
         langBar.style.display = showLang ? "" : "none";
         langBar.querySelectorAll(".lang-btn").forEach((b) =>
           b.classList.toggle("is-active", b.dataset.lang === streamLang));
@@ -253,7 +267,7 @@
           frame.innerHTML = `<div class="stream-notice">
             <div class="not-found-title">Couldn't resolve this episode</div>
             <p>${JIKAN.esc(provider.name)} didn't return a source for episode ${ep} of this title.</p>
-            <p style="margin-top:8px;"><a href="https://anipub.xyz" target="_blank" rel="noopener noreferrer" style="color:var(--accent)">Open ${JIKAN.esc(provider.name)} directly &nearr;</a></p>
+            <p style="margin-top:8px;">This title isn't available on ${JIKAN.esc(provider.name)}. Try switching to another provider above, or open the anime in the catalog for more options.</p>
           </div>`;
           return;
         }
@@ -263,6 +277,32 @@
           const info = await JIKAN.anipubEpisodes(animeData);
           if (info?.eps?.length > anipubEpCount) {
             anipubEpCount = info.eps.length;
+            renderTheaterEps();
+            const nextBtn = document.getElementById("nextEpBtn");
+            if (nextBtn) nextBtn.disabled = ep >= listOfEpisodes().length;
+          }
+        } catch (e) {}
+      } else if (provider.id === "anikoto") {
+        // AniKoto resolves each episode to a megaplay embed URL via its
+        // public catalog API (search → episodes → servers → stream). Timeboxed
+        // the same way as AniPub so "Loading…" never persists.
+        url = await Promise.race([
+          JIKAN.anikotoUrl(animeData, ep, streamLang),
+          new Promise((r) => setTimeout(() => r(null), 12000)),
+        ]);
+        if (!url) {
+          frame.innerHTML = `<div class="stream-notice">
+            <div class="not-found-title">Couldn't resolve this episode</div>
+            <p>${JIKAN.esc(provider.name)} didn't return a source for episode ${ep} of this title.</p>
+            <p style="margin-top:8px;">This title isn't available on ${JIKAN.esc(provider.name)}. Try switching to another provider above, or open the anime in the catalog for more options.</p>
+          </div>`;
+          return;
+        }
+        // Extend the episode grid to whatever AniKoto actually lists.
+        try {
+          const info = await JIKAN.anikotoEpisodes(animeData);
+          if (info?.eps?.length > anikotoEpCount) {
+            anikotoEpCount = info.eps.length;
             renderTheaterEps();
             const nextBtn = document.getElementById("nextEpBtn");
             if (nextBtn) nextBtn.disabled = ep >= listOfEpisodes().length;
@@ -306,16 +346,25 @@
     async function setLang(lang) {
       if (lang === streamLang) return;
       if (lang === "dub") {
-        const eps = listOfEpisodes();
-        const idx = Math.min(Math.max(lastStreamEpisode - 1, 0), eps.length - 1);
+        const prov = activeProvider();
         try {
-          const info = await JIKAN.anipubEpisodes(animeData);
-          const item = info?.eps?.[idx];
-          if (item) {
-            const ok = await JIKAN.anipubDubAvailable(item.id);
+          if (prov?.id === "anikoto") {
+            const ok = await JIKAN.anikotoDubAvailable(animeData);
             if (!ok) {
-              showToast("No English dub available for this title.");
+              showToast("No English dub for this title on AniKoto — try switching provider.");
               return;
+            }
+          } else {
+            const eps = listOfEpisodes();
+            const idx = Math.min(Math.max(lastStreamEpisode - 1, 0), eps.length - 1);
+            const info = await JIKAN.anipubEpisodes(animeData);
+            const item = info?.eps?.[idx];
+            if (item) {
+              const ok = await JIKAN.anipubDubAvailable(item.id);
+              if (!ok) {
+                showToast("No English dub for this title on AniPub — try switching provider.");
+                return;
+              }
             }
           }
         } catch (e) {}
