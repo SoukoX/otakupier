@@ -3497,6 +3497,35 @@ footer .footer-links {
 }
 
 /* ---------- Reward Points economy ---------- */
+.invite-card {
+  padding: 16px;
+  border-radius: 12px;
+  border: 1px dashed rgba(120, 140, 255, 0.35);
+  background: rgba(120, 140, 255, 0.06);
+  margin-bottom: 24px;
+}
+.invite-note {
+  padding: 10px 12px;
+  margin-bottom: 12px;
+  border-radius: 8px;
+  border: 1px solid rgba(120, 140, 255, 0.35);
+  background: rgba(120, 140, 255, 0.08);
+  color: var(--text);
+  font-size: .85rem;
+}
+.streak-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 9px;
+  border-radius: 999px;
+  background: rgba(255, 107, 107, 0.12);
+  border: 1px solid rgba(255, 107, 107, 0.4);
+  color: #ff6b6b;
+  font-size: 0.75rem;
+  font-weight: 700;
+  line-height: 1.2;
+}
 .rp-badge {
   display: inline-flex;
   align-items: center;
