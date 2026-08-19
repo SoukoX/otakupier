@@ -3372,6 +3372,60 @@ footer .footer-links {
   object-fit: cover;
 }
 
+/* ---------- Edit profile (name, bio, preset avatars) ---------- */
+.edit-profile-card {
+  padding: 18px;
+  margin-bottom: 24px;
+  border-radius: 12px;
+  border: 1px solid var(--border);
+  background: var(--bg-alt, rgba(255, 255, 255, 0.04));
+}
+.avatar-preview {
+  width: 72px;
+  height: 72px;
+  border-radius: 50%;
+  overflow: hidden;
+  background: var(--accent-grad);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.avatar-preview img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.avatar-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(56px, 1fr));
+  gap: 8px;
+  max-width: 480px;
+}
+.avatar-choice {
+  padding: 0;
+  border-radius: 12px;
+  border: 2px solid transparent;
+  background: none;
+  cursor: pointer;
+  overflow: hidden;
+  aspect-ratio: 1;
+  transition: border-color 0.15s ease, transform 0.15s ease;
+}
+.avatar-choice img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+.avatar-choice:hover {
+  transform: scale(1.06);
+  border-color: var(--accent-2);
+}
+.avatar-choice.avatar-selected {
+  border-color: var(--accent-2);
+  box-shadow: 0 0 0 2px var(--accent-2);
+}
+
 .stat-strip {
   display: flex;
   gap: 24px;
