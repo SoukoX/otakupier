@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="referrer" content="strict-origin-when-cross-origin">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Leaderboards - OtakuPier</title>
+  <meta name="robots" content="index, follow">
+  <meta name="description" content="OtakuPier leaderboards — top reviewers, top contributors and top earners ranked by the community.">
+  <link rel="canonical" href="https://otakupier.2bd.net/pages/leaderboard.html">
+  <link rel="icon" type="image/svg+xml" href="../favicon.svg?v=2">
+  <link rel="preconnect" href="https://api.jikan.moe">
+  <link rel="preconnect" href="https://cdn.jsdelivr.net">
+  <link rel="stylesheet" href="../css/style.css">
+</head>
+<body>
+  <nav class="navbar" id="navbar"></nav>
+
+  <main class="container">
+    <div class="section-head">
+      <h2>Leaderboards</h2>
+      <span style="color:var(--text-dim); font-size:0.9rem;">Top fans, ranked by the community</span>
+      <button class="btn btn-outline btn-small" onclick="copyBoardLink()" style="margin-left:auto;">Share board</button>
+    </div>
+    <div class="lb-tabs" style="display:flex; gap:8px; margin-bottom:18px; flex-wrap:wrap;">
+      <button class="btn btn-primary btn-small lb-tab" data-lb="reviewers">⭐ Top reviewers</button>
+      <button class="btn btn-outline btn-small lb-tab" data-lb="contributors">🏅 Top contributors</button>
+      <button class="btn btn-outline btn-small lb-tab" data-lb="earners">⛁ Top earners</button>
+    </div>
+    <div id="lbBody">
+      <div class="empty-state">Leaderboards need Supabase setup. See the README.</div>
+    </div>
+  </main>
+
+  <footer id="siteFooter"></footer>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="../js/config.js"></script>
+  <script src="../js/api.js"></script>
+  <script src="../js/app.js"></script>
+  <script>
+    // Deep-linkable tabs: leaderboard.html#earners etc. — URLs are shareable
+    // and indexed per category.
+    let lbKind = (window.location.hash || "#reviewers").replace("#", "");
+    if (!["reviewers", "contributors", "earners"].includes(lbKind)) lbKind = "reviewers";
+
+    document.querySelectorAll(".lb-tab").forEach((b) => {
+      b.addEventListener("click", () => {
+        lbKind = b.dataset.lb;
+        history.replaceState(null, "", "#" + lbKind);
+        document.querySelectorAll(".lb-tab").forEach((x) =>
+          x.className = `btn btn-small lb-tab ${x === b ? "btn-primary" : "btn-outline"}`);
+        loadBoard();
+      });
+    });
+    // Sync active tab styling on load
+    (function initTab() {
+      document.querySelectorAll(".lb-tab").forEach((x) =>
+        x.className = `btn btn-small lb-tab ${x.dataset.lb === lbKind ? "btn-primary" : "btn-outline"}`);
+    })();
+
+    async function loadBoard() {
+      const body = document.getElementById("lbBody");
+      if (!SUPABASE_READY || !supabase) {
+        body.innerHTML = `<div class="empty-state">Leaderboards need Supabase setup. See the README.</div>`;
+        return;
+      }
+      body.innerHTML = `<div class="empty-state">Loading…</div>`;
+      try {
+        let rows;
+        if (lbKind === "contributors") {
+          const { data } = await supabase.from("profiles")
+            .select("id, name, avatar_url, xp, is_admin, created_at")
+            .order("xp", { ascending: false })
+            .limit(50);
+          rows = (data || []).map((p, i) => ({ rank: i + 1, p, score: p.xp || 0, scoreLabel: "XP" }));
+        } else if (lbKind === "earners") {
+          const { data } = await supabase.from("profiles")
+            .select("id, name, avatar_url, rp_earned, is_admin, created_at")
+            .order("rp_earned", { ascending: false })
+            .limit(50);
+          rows = (data || []).map((p, i) => ({ rank: i + 1, p, score: p.rp_earned || 0, scoreLabel: "RP earned" }));
+        } else {
+          // Top reviewers: count real reviews (not comments) per user.
+          const { data } = await supabase.from("reviews")
+            .select("user_id, is_comment")
+            .limit(2000);
+          const counts = {};
+          (data || []).forEach((r) => { if (!r.is_comment) counts[r.user_id] = (counts[r.user_id] || 0) + 1; });
+          const ids = Object.keys(counts);
+          if (!ids.length) {
+            body.innerHTML = `<div class="empty-state">No reviews yet — be the first to review an anime!</div>`;
+            return;
+          }
+          const { data: profs } = await supabase.from("profiles")
+            .select("id, name, avatar_url, is_admin, created_at")
+            .in("id", ids);
+          rows = (profs || []).map((p) => ({ p, score: counts[p.id] || 0 }))
+            .filter((r) => r.score > 0)
+            .sort((a, b) => b.score - a.score)
+            .slice(0, 50)
+            .map((r, i) => ({ rank: i + 1, p: r.p, score: r.score, scoreLabel: "reviews" }));
+        }
+
+        if (!rows.length) {
+          body.innerHTML = `<div class="empty-state">Nothing here yet — start participating to climb the board!</div>`;
+          return;
+        }
+
+        const mine = currentUser ? currentUser.id : null;
+        body.innerHTML = `<div class="lb-list"></div>`;
+        const list = body.querySelector(".lb-list");
+        rows.forEach((r) => {
+          const isMe = mine && mine === r.p.id;
+          const medal = r.rank === 1 ? "🥇" : r.rank === 2 ? "🥈" : r.rank === 3 ? "🥉" : r.rank;
+          const el = document.createElement("div");
+          el.className = "lb-item" + (isMe ? " lb-me" : "");
+          el.style.cssText = "display:flex; align-items:center; gap:14px; padding:12px 14px; border-radius:10px; margin-bottom:8px; background:var(--bg-card,rgba(255,255,255,.04));" + (isMe ? "outline:1px solid var(--accent);" : "");
+          el.innerHTML = `
+            <div style="width:34px; text-align:center; font-weight:800; color:${r.rank <= 3 ? "var(--accent-2)" : "var(--text-dim)"};">${medal}</div>
+            <div class="avatar-sm" style="width:40px;height:40px;border-radius:50%;overflow:hidden;background:var(--bg);display:flex;align-items:center;justify-content:center;">
+              ${r.p.avatar_url ? `<img src="${JIKAN.safeImg(r.p.avatar_url)}" style="width:100%;height:100%;object-fit:cover;" alt="">`
+              : `<span style="font-weight:800;">${(r.p.name || "U").charAt(0).toUpperCase()}</span>`}
+            </div>
+            <div style="flex:1; min-width:0;">
+              <a href="profile.html?id=${r.p.id}" style="color:var(--text); text-decoration:none; font-weight:600;">${adminNameHTML(r.p)}${isMe ? ' <span style="color:var(--accent); font-size:.75rem;">(you)</span>' : ""}</a>
+              <div style="font-size:.75rem; color:var(--text-dim);">${rankTag(r.p.id, r.p)} · ${r.score} ${r.scoreLabel}</div>
+            </div>
+            <div style="font-weight:700; color:var(--accent-2);">${r.score}</div>`;
+          list.appendChild(el);
+        });
+      } catch (err) {
+        body.innerHTML = `<div class="empty-state">Could not load leaderboard.</div>`;
+      }
+    }
+
+    document.addEventListener("DOMContentLoaded", loadBoard);
+
+    function copyBoardLink() {
+      const url = `${window.location.origin}${window.location.pathname}#${lbKind}`;
+      try { navigator.clipboard.writeText(url); } catch (e) {}
+      showToast("Leaderboard link copied!");
+    }
+  </script>
+</body>
+</html>
