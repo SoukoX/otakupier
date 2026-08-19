@@ -71,6 +71,7 @@
     function goPage(delta) {
       state.page = Math.max(1, state.page + delta);
       loadCatalog();
+      window.scrollTo({ top: 0, behavior: "smooth" });
     }
 
     function clearFilters() {
