@@ -110,6 +110,7 @@
 
       if (isSelf) {
         main.insertAdjacentHTML("afterbegin", `<div style="margin-bottom:16px;"><a class="btn btn-outline" href="mylist.html">My List</a> <a class="btn btn-outline" href="friends.html">Friends</a></div>`);
+        renderInvitePanel();
         renderRewardShop();
       }
       if (!isSelf) loadFriendButton();
@@ -215,6 +216,66 @@
       } catch (err) {
         slot.innerHTML = `<div class="empty-state">Could not load reviews.</div>`;
       }
+    }
+
+    // ---------- Invite / Referral ----------
+    async function renderInvitePanel() {
+      let slot = document.getElementById("invitePanel");
+      if (!slot) {
+        slot = document.createElement("div");
+        slot.id = "invitePanel";
+        document.getElementById("main").insertAdjacentElement("beforeend", slot);
+      }
+      let code = "";
+      try {
+        const { data } = await supabase.from("invites")
+          .select("code, used_by, created_at")
+          .eq("inviter_id", currentUser.id)
+          .order("created_at", { ascending: false })
+          .limit(10);
+        const active = (data || []).filter((i) => !i.used_by);
+        const used = (data || []).filter((i) => i.used_by);
+        code = active[0]?.code || "";
+        if (!code) {
+          const { data: made } = await supabase.rpc("create_invite");
+          if (made) code = made;
+        }
+        const base = `${window.location.origin}${window.location.pathname.replace(/profile\.html.*$/, "signup.html")}`;
+        const link = `${base}?invite=${code}`;
+        slot.innerHTML = `
+          <h3 class="sub-head">Invite friends</h3>
+          <div class="invite-card">
+            <p style="margin:0 0 8px; color:var(--text-dim); font-size:.9rem;">
+              Give your friends this link — when they sign up you both get <b>Reward Points</b> (you +100, them +50).
+            </p>
+            ${code ? `
+              <div style="display:flex; gap:8px; flex-wrap:wrap; align-items:center;">
+                <input id="inviteLink" type="text" readonly value="${JIKAN.esc(link)}" style="flex:1; min-width:200px; padding:9px 12px; border-radius:8px; border:1px solid var(--border); background:var(--bg); color:var(--text);">
+                <button class="btn btn-primary" onclick="copyInviteLink()">Copy link</button>
+                <button class="btn btn-outline" onclick="genInvite()">New code</button>
+              </div>
+              <div style="margin-top:8px; font-size:.8rem; color:var(--text-dim);">
+                ${active.length} active invite${active.length === 1 ? "" : "s"} · ${used.length} used · earn up to 10 bonuses/day
+              </div>`
+            : `<p style="color:var(--text-dim);">Couldn't create an invite right now — try again in a moment.</p>`}
+          </div>`;
+      } catch (e) {
+        slot.innerHTML = `<h3 class="sub-head">Invite friends</h3><div class="invite-card"><p style="color:var(--text-dim);">Invites are unavailable right now.</p></div>`;
+      }
+    }
+
+    async function genInvite() {
+      const { data } = await supabase.rpc("create_invite");
+      if (data) renderInvitePanel();
+      else showToast("You already have 10 active invites — use one first.");
+    }
+
+    function copyInviteLink() {
+      const input = document.getElementById("inviteLink");
+      if (!input) return;
+      input.select();
+      try { navigator.clipboard.writeText(input.value); } catch (e) {}
+      showToast("Invite link copied!");
     }
 
     // ---------- Reward Shop ----------
