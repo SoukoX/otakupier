@@ -8,6 +8,10 @@ const CONFIG = {
   // Jikan (MyAnimeList) API - free, no key needed
   JIKAN_BASE: "https://api.jikan.moe/v4",
 
+  // AniList API - free GraphQL fallback when Jikan's /anime endpoint is down
+  // (MAL upstream issues). Same MAL ids (idMal), CORS-open, huge coverage.
+  ANILIST_BASE: "https://graphql.anilist.co",
+
   // 9anime API (NineAnimeClient demo server, https://github.com/.../NineAnime).
   // Node-only, so it CANNOT run on static GitHub Pages — it must be hosted
   // separately (Railway/Render/Vercel). Set this to your deployed base URL to
