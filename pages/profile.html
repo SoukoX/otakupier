@@ -109,7 +109,7 @@
         <div id="reviews"></div>`;
 
       if (isSelf) {
-        main.insertAdjacentHTML("afterbegin", `<div style="margin-bottom:16px;"><a class="btn btn-outline" href="mylist.html">My List</a> <a class="btn btn-outline" href="friends.html">Friends</a></div>`);
+        main.insertAdjacentHTML("afterbegin", `<div style="margin-bottom:16px;"><a class="btn btn-outline" href="mylist.html">My List</a> <a class="btn btn-outline" href="friends.html">Friends</a> <button class="btn btn-outline" onclick="toggleEditProfile()">✏️ Edit profile</button></div>`);
         renderInvitePanel();
         renderRewardShop();
       }
@@ -416,6 +416,114 @@
         showToast("User ID copied!");
       } catch (e) {
         showToast("Could not copy");
+      }
+    }
+
+    // ---------- Edit profile (name, bio, preset avatar) ----------
+    // Preset avatars are DiceBear illustrations (same style as the seeded
+    // community) — no upload storage needed. Swap in your own style URL.
+    const PRESET_STYLES = [
+      "adventurer", "adventurer-neutral", "avataaars", "big-smile",
+      "bottts-neutral", "croodles", "fun-emoji", "lorelei",
+    ];
+    const PRESET_BG = ["b6e3f4", "c0aede", "ffd5dc", "ffdfbf", "d1f4d9", "f5d5ff"];
+
+    function presetAvatar(style, seed) {
+      return `https://api.dicebear.com/9.x/${style}/svg?seed=${encodeURIComponent(seed)}&backgroundColor=${PRESET_BG[(seed.charCodeAt(0) || 0) % PRESET_BG.length]}`;
+    }
+
+    function presetGrid() {
+      const styles = ["adventurer", "avataaars", "lorelei", "big-smile", "bottts-neutral", "fun-emoji"];
+      const seeds = ["Sora", "Kaito", "Yuki", "Akira", "Mirai", "Hana", "Ryo", "Tenshi", "Ren", "Nao", "Iro", "Momo"];
+      const out = [];
+      for (let s = 0; s < styles.length; s++) {
+        for (let i = 0; i < 4; i++) {
+          const seed = seeds[(s * 4 + i) % seeds.length];
+          out.push(seed + "|" + styles[s]);
+        }
+      }
+      return out;
+    }
+
+    async function toggleEditProfile() {
+      let slot = document.getElementById("editProfile");
+      if (slot) { slot.remove(); return; }
+      if (!isLoggedIn()) return;
+      slot = document.createElement("div");
+      slot.id = "editProfile";
+      document.getElementById("main").insertAdjacentElement("afterbegin", slot);
+
+      const { data: prof } = await supabase.from("profiles")
+        .select("name, bio, avatar_url").eq("id", currentUser.id).maybeSingle();
+      const curName = (prof && prof.name) || getProfile().name || "";
+      const curBio = (prof && prof.bio) || "";
+
+      slot.innerHTML = `
+        <div class="edit-profile-card">
+          <h3 class="sub-head">Edit profile</h3>
+          <div class="form-group">
+            <label for="editName">Display name</label>
+            <input type="text" id="editName" maxlength="24" value="${JIKAN.esc(curName)}" style="width:100%; padding:10px 12px; border-radius:8px; border:1px solid var(--border); background:var(--bg); color:var(--text);">
+          </div>
+          <div class="form-group">
+            <label for="editBio">Bio</label>
+            <textarea id="editBio" maxlength="240" rows="3" style="width:100%; padding:10px 12px; border-radius:8px; border:1px solid var(--border); background:var(--bg); color:var(--text); resize:vertical;">${JIKAN.esc(curBio)}</textarea>
+          </div>
+          <div class="form-group">
+            <label>Profile picture</label>
+            <div style="display:flex; gap:10px; align-items:center; margin-bottom:10px;">
+              <div class="avatar-lg avatar-preview">${curName ? `<img src="${JIKAN.safeImg((prof && prof.avatar_url) || presetAvatar("adventurer", curName))}" alt="">` : ""}</div>
+              <div style="color:var(--text-dim); font-size:.8rem;">Pick a preset avatar below, or use your current one.</div>
+            </div>
+            <div class="avatar-grid" id="avatarGrid">
+              ${presetGrid().map((key, i) => {
+                const [seed, style] = key.split("|");
+                const url = presetAvatar(style, seed);
+                return `<button type="button" class="avatar-choice" data-url="${JIKAN.esc(url)}" onclick="pickAvatar(this)" title="${style}">
+                  <img src="${url}" alt="" loading="lazy" onerror="this.closest('.avatar-choice').style.display='none'">
+                </button>`;
+              }).join("")}
+            </div>
+          </div>
+          <div style="display:flex; gap:10px; flex-wrap:wrap;">
+            <button class="btn btn-primary" onclick="saveEditProfile()">Save changes</button>
+            <button class="btn btn-outline" onclick="toggleEditProfile()">Cancel</button>
+          </div>
+          <div style="margin-top:10px; color:var(--text-dim); font-size:.8rem;">Need something custom? Ask an admin to set your avatar URL.</div>
+        </div>`;
+
+      // Highlight whichever preset is currently in use
+      const cur = (prof && prof.avatar_url) || "";
+      slot.querySelectorAll(".avatar-choice").forEach((b) => {
+        if (b.dataset.url === cur) b.classList.add("avatar-selected");
+      });
+    }
+
+    function pickAvatar(btn) {
+      document.querySelectorAll(".avatar-choice").forEach((b) => b.classList.remove("avatar-selected"));
+      btn.classList.add("avatar-selected");
+      const img = document.querySelector(".avatar-preview img");
+      if (img) img.src = btn.dataset.url;
+      window._pickedAvatar = btn.dataset.url;
+    }
+
+    async function saveEditProfile() {
+      const name = document.getElementById("editName")?.value.trim();
+      const bio = document.getElementById("editBio")?.value.trim();
+      if (!name) { showToast("Display name can't be empty"); return; }
+      const patch = { name, bio: bio || "" };
+      if (window._pickedAvatar) patch.avatar_url = window._pickedAvatar;
+      try {
+        const { error } = await supabase.from("profiles").update(patch).eq("id", currentUser.id);
+        if (error) throw error;
+        // Keep the display name in sync with auth metadata (used elsewhere)
+        await supabase.auth.updateUser({ data: { full_name: name } }).catch(() => {});
+        currentProfile = { ...(currentProfile || {}), name, bio: bio || "", avatar_url: patch.avatar_url || currentProfile?.avatar_url };
+        showToast("Profile updated!");
+        toggleEditProfile();
+        load();
+      } catch (e) {
+        showToast("Could not save: " + e.message);
       }
     }
 
