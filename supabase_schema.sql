@@ -17,6 +17,10 @@ create table if not exists public.profiles (
 -- Idempotent upgrade for databases created before the admin feature
 alter table public.profiles add column if not exists is_admin boolean default false;
 
+-- Idempotent upgrade: daily-login streak counter (set/read only via
+-- claim_daily_xp; clients never write it directly).
+alter table public.profiles add column if not exists daily_streak integer default 0;
+
 -- 2. Reviews
 create table if not exists public.reviews (
   id bigint generated always as identity primary key,
@@ -329,9 +333,9 @@ $$;
 revoke execute on function public.award_xp_to(uuid, integer) from public;
 grant execute on function public.award_xp_to(uuid, integer) to authenticated;
 
--- 11. Mark daily-login bonus only once per day
--- SECURITY DEFINER: owner writes xp even though direct column updates are
--- revoked for anon/authenticated.
+-- 11. Daily-login bonus with streak (only once per day)
+-- SECURITY DEFINER: owner writes xp/last_daily_xp/daily_streak even though
+-- direct column updates are revoked for anon/authenticated.
 create or replace function public.claim_daily_xp()
 returns integer
 language plpgsql
@@ -339,17 +343,37 @@ security definer set search_path = public
 as $$
 declare
   today date := current_date;
+  yesterday date := today - 1;
   cur_xp integer;
   cur_daily date;
-  bonus integer := 5;
+  cur_streak integer;
+  bonus integer;
 begin
-  select xp, last_daily_xp into cur_xp, cur_daily from public.profiles where id = auth.uid();
+  select xp, last_daily_xp, daily_streak
+    into cur_xp, cur_daily, cur_streak
+    from public.profiles where id = auth.uid();
   if cur_xp is null then return 0; end if;
-  if cur_daily is distinct from today then
-    update public.profiles set xp = xp + bonus, last_daily_xp = today where id = auth.uid();
-    return bonus;
+
+  if cur_daily is not distinct from today then
+    -- Already claimed today.
+    return 0;
   end if;
-  return 0;
+
+  -- Streak continues if the last login was yesterday, otherwise resets to 1.
+  if cur_daily is not distinct from yesterday then
+    cur_streak := coalesce(cur_streak, 0) + 1;
+  else
+    cur_streak := 1;
+  end if;
+
+  -- Base 5 XP + 2 XP per consecutive day, capped at 21 XP on day 8+.
+  bonus := least(5 + (cur_streak - 1) * 2, 21);
+
+  update public.profiles
+     set xp = xp + bonus, last_daily_xp = today, daily_streak = cur_streak
+   where id = auth.uid();
+
+  return bonus;
 end;
 $$;
 
@@ -389,11 +413,12 @@ create policy "Admins can update any profile"
   on public.profiles for update
   using (exists (select 1 from public.profiles p where p.id = auth.uid() and p.is_admin));
 
--- Users may edit their own display fields, but NOT xp/last_daily_xp directly.
--- XP only changes through the clamped SECURITY DEFINER functions (add_xp,
--- award_xp_to, claim_daily_xp), which run as the owner and bypass these
--- column restrictions safely.
-revoke update (xp, last_daily_xp) on public.profiles from anon, authenticated;
+-- Users may edit their own display fields, but NOT xp/last_daily_xp/
+-- daily_streak directly.
+-- XP and streaks only change through the clamped SECURITY DEFINER functions
+-- (add_xp, award_xp_to, claim_daily_xp), which run as the owner and bypass
+-- these column restrictions safely.
+revoke update (xp, last_daily_xp, daily_streak) on public.profiles from anon, authenticated;
 
 -- Reviews
 drop policy if exists "Reviews are viewable by everyone" on public.reviews;
@@ -1078,3 +1103,121 @@ revoke update (rp, rp_earned) on public.profiles from anon, authenticated;
 -- Indexes for reward queries.
 create index if not exists idx_rp_tx_user on public.reward_transactions (user_id, created_at desc);
 create index if not exists idx_spendings_user on public.spendings (user_id);
+
+-- 17. Invite / referral system
+-- A user generates a short code, shares signup.html?invite=CODE, and when a
+-- new account is created with that code both the inviter and the invitee get
+-- an RP bonus. Everything is handled server-side (see handle_new_user), so it
+-- works even when email confirmation means the invitee isn't signed in yet.
+create table if not exists public.invites (
+  id bigint generated always as identity primary key,
+  inviter_id uuid references auth.users on delete cascade not null,
+  code text not null unique,
+  used_by uuid references auth.users on delete set null,
+  created_at timestamptz default now()
+);
+
+-- Generate (and insert) a fresh invite code for the caller. Codes are short,
+-- unambiguous (no 0/O/1/I/L), and capped so one account can't flood invites.
+create or replace function public.create_invite()
+returns text
+language plpgsql
+security definer set search_path = public
+as $$
+declare
+  code text;
+  n int;
+  active_count int;
+begin
+  if auth.uid() is null then return ''; end if;
+  select count(*) into active_count from public.invites
+    where inviter_id = auth.uid() and used_by is null;
+  if active_count >= 10 then return ''; end if;
+
+  for n in 1..20 loop
+    code := upper(substr(md5(random()::text), 1, 6));
+    code := translate(code, '0O1IL', 'ABCDEF');
+    begin
+      insert into public.invites (inviter_id, code) values (auth.uid(), code);
+      return code;
+    exception when unique_violation then
+      continue;
+    end;
+  end loop;
+  return '';
+end;
+$$;
+revoke execute on function public.create_invite() from public;
+grant execute on function public.create_invite() to authenticated;
+
+-- Redeem is embedded in handle_new_user (below) so it needs no extra RPC.
+
+-- Idempotent upgrade: redeem an invite on signup. The invite code travels in
+-- auth user_metadata (signup.html passes ?invite=CODE), and the existing
+-- trigger awards RP to both parties. Rewritten here to add referral handling.
+create or replace function public.handle_new_user()
+returns trigger
+language plpgsql
+security definer set search_path = public
+as $$
+declare
+  inv_code text := coalesce(new.raw_user_meta_data->>'invite_code', '');
+  inv public.invites%rowtype;
+  daily_used int;
+begin
+  insert into public.profiles (id, name)
+  values (new.id, coalesce(new.raw_user_meta_data->>'full_name', split_part(new.email, '@', 1)));
+
+  if inv_code <> '' then
+    select * into inv from public.invites
+      where code = inv_code and used_by is null
+      for update;
+    if found then
+      update public.invites set used_by = new.id where id = inv.id;
+
+      -- Invitee bonus.
+      update public.profiles
+         set rp = rp + 50, rp_earned = rp_earned + 50
+       where id = new.id;
+      insert into public.reward_transactions (user_id, amount, reason)
+        values (new.id, 50, 'invite');
+
+      -- Inviter bonus, capped at 10 referrals/day (anti-farming).
+      select count(*) into daily_used from public.reward_transactions
+        where user_id = inv.inviter_id and reason = 'invite'
+          and created_at > date_trunc('day', now());
+      if daily_used < 10 then
+        update public.profiles
+           set rp = rp + 100, rp_earned = rp_earned + 100
+         where id = inv.inviter_id;
+        insert into public.reward_transactions (user_id, amount, reason)
+          values (inv.inviter_id, 100, 'invite');
+      end if;
+    end if;
+  end if;
+  return new;
+end;
+$$;
+
+drop trigger if exists on_auth_user_created on auth.users;
+create trigger on_auth_user_created
+  after insert on auth.users
+  for each row execute procedure public.handle_new_user();
+
+-- handle_new_user is trigger-only: nobody may call it via the API
+revoke execute on function public.handle_new_user() from public;
+
+-- 17b. RLS for invites: invitees/inviters can read, only functions write.
+alter table public.invites enable row level security;
+
+drop policy if exists "Users see invites they issued or redeemed" on public.invites;
+create policy "Users see invites they issued or redeemed"
+  on public.invites for select
+  using (auth.uid() = inviter_id or auth.uid() = used_by);
+
+drop policy if exists "Admins see all invites" on public.invites;
+create policy "Admins see all invites"
+  on public.invites for select
+  using (exists (select 1 from public.profiles p where p.id = auth.uid() and p.is_admin));
+
+revoke insert, update, delete on public.invites from anon, authenticated;
