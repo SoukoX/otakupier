@@ -211,7 +211,11 @@
         });
 
         if (!count) {
-          grid.innerHTML = `<div class="empty-state">No anime found. Try a different search.</div>`;
+          // Distinguish a genuine no-match from an upstream (Jikan/MAL)
+          // failure so the grid never just says "no anime found" misleadingly.
+          grid.innerHTML = results.length
+            ? `<div class="empty-state">No anime found for this search. Try a different title or genre.</div>`
+            : `<div class="empty-state">Couldn't reach the anime database right now (Jikan/MAL may be down). Try again in a moment.</div>`;
         }
 
         // Use the first successful response for pagination metadata
