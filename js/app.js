@@ -77,8 +77,8 @@ function initSupabase() {
       renderNav();
       onAuthChange();
       if (currentUser) {
-        claimDailyXp().then((bonus) => {
-          if (bonus > 0) showToast(`Daily bonus: +${bonus} XP!`);
+        claimDailyXp().then((r) => {
+          if (r.bonus > 0) showToast(`Daily bonus: +${r.bonus} XP 🔥 ${r.streak}-day streak!`);
         });
         refreshUnreadDms();
         subscribeDmAlerts();
@@ -92,8 +92,8 @@ function initSupabase() {
       renderNav();
       onAuthChange();
       if (currentUser && _event === "SIGNED_IN") {
-        claimDailyXp().then((bonus) => {
-          if (bonus > 0) showToast(`Daily bonus: +${bonus} XP!`);
+        claimDailyXp().then((r) => {
+          if (r.bonus > 0) showToast(`Daily bonus: +${r.bonus} XP 🔥 ${r.streak}-day streak!`);
         });
         refreshUnreadDms();
         subscribeDmAlerts();
@@ -228,7 +228,7 @@ async function refreshCurrentProfile() {
   if (!supabase || !currentUser) return;
   const { data } = await supabase
     .from("profiles")
-    .select("id, name, avatar_url, bio, xp, rp, rp_earned, is_admin, created_at")
+    .select("id, name, avatar_url, bio, xp, rp, rp_earned, is_admin, daily_streak, created_at")
     .eq("id", currentUser.id)
     .maybeSingle();
   if (data) currentProfile = data;
@@ -312,6 +312,7 @@ const NAV_LINKS = [
   { label: "Forums", href: "pages/forums.html", file: "forums.html", inPages: true },
   { label: "Clubs", href: "pages/clubs.html", file: "clubs.html", inPages: true },
   { label: "Rankings", href: "pages/rankings.html", file: "rankings.html", inPages: true },
+  { label: "Leaderboard", href: "pages/leaderboard.html", file: "leaderboard.html", inPages: true },
   { label: "Chat", href: "pages/chat.html", file: "chat.html", inPages: true },
 ];
 
@@ -351,6 +352,9 @@ function renderNav() {
   const authArea = isLoggedIn()
     ? `<div class="user-menu">
          <span class="rp-badge" title="Reward Points — spend these in the Reward Shop">⛁ ${currentProfile?.rp || 0}</span>
+         ${(currentProfile?.daily_streak || 0) > 1
+           ? `<span class="streak-badge" title="Daily login streak">🔥 ${currentProfile.daily_streak}</span>`
+           : ""}
          ${isAdmin()
            ? `<a href="${pageHref("admin")}" class="btn btn-outline btn-small admin-btn" title="Admin panel">⚙ Admin</a>`
            : ""}
@@ -440,6 +444,7 @@ function renderFooter() {
       <a href="${pageHref("forums")}">Forums</a>
       <a href="${pageHref("clubs")}">Clubs</a>
       <a href="${pageHref("rankings")}">Rankings</a>
+      <a href="${pageHref("leaderboard")}">Leaderboard</a>
       <a href="${pageHref("chat")}">Chat</a>
       ${isLoggedIn() ? `<a href="${pageHref("mylist")}">My List</a>
       <a href="${pageHref("friends")}">Friends</a>
@@ -555,6 +560,19 @@ function setupAuthForm(formId, mode) {
   const form = document.getElementById(formId);
   if (!form) return;
 
+  // Referral support: ?invite=CODE is carried into auth user metadata so the
+  // handle_new_user trigger can award both sides on signup.
+  const inviteCode = (new URLSearchParams(window.location.search).get("invite") || "")
+    .trim().toUpperCase().slice(0, 6);
+  const inviteNote = inviteCode
+    ? `<div class="invite-note">You were invited by a friend 🎉 Use this referral and you both earn Reward Points!</div>`
+    : "";
+  if (inviteNote) {
+    const note = document.createElement("div");
+    note.innerHTML = inviteNote;
+    form.insertBefore(note, form.querySelector("button[type=submit]") || form.lastChild);
+  }
+
   // Render the CAPTCHA widget (if a valid site key is configured)
   const captchaSlot = document.createElement("div");
   captchaSlot.id = "captchaSlot";
@@ -603,10 +621,12 @@ function setupAuthForm(formId, mode) {
       let res;
       if (mode === "signup") {
         const name = document.getElementById("name").value.trim();
+        const meta = { full_name: name };
+        if (inviteCode) meta.invite_code = inviteCode;
         res = await supabase.auth.signUp({
           email,
           password,
-          options: { data: { full_name: name }, captchaToken },
+          options: { data: meta, captchaToken },
         });
       } else {
         res = await supabase.auth.signInWithPassword({ email, password, options: { captchaToken } });
@@ -865,14 +885,23 @@ function skeletonGrid(n) {
   return cards;
 }
 
-// Claim daily login bonus (returns 0 if already claimed today)
+// Claim daily login bonus. Returns { bonus, streak } — bonus is 0 if already
+// claimed today, streak is the running consecutive-day count. The RPC only
+// returns the bonus, so the streak is re-read from the profile row.
 async function claimDailyXp() {
-  if (!supabase || !isLoggedIn()) return 0;
+  if (!supabase || !isLoggedIn()) return { bonus: 0, streak: currentProfile?.daily_streak || 0 };
   try {
     const { data, error } = await supabase.rpc("claim_daily_xp");
-    if (error) return 0;
-    return data || 0;
-  } catch (e) { return 0; }
+    if (error) return { bonus: 0, streak: currentProfile?.daily_streak || 0 };
+    let streak = currentProfile?.daily_streak || 0;
+    if (data > 0) {
+      const { data: prof } = await supabase.from("profiles")
+        .select("daily_streak").eq("id", currentUser.id).maybeSingle();
+      if (prof && prof.daily_streak) streak = prof.daily_streak;
+      currentProfile = { ...(currentProfile || {}), daily_streak: streak };
+    }
+    return { bonus: data || 0, streak };
+  } catch (e) { return { bonus: 0, streak: currentProfile?.daily_streak || 0 }; }
 }
 
 // Badges based on profile + activity counts
