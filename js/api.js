@@ -295,12 +295,34 @@ const JIKAN = {
       this._searchCache.set(cacheKey, { at: Date.now(), merged });
     }
     const PER = 24;
+    const poolPages = Math.max(1, Math.ceil(merged.length / PER));
+
+    // Deep pages: the merged pool (near/partial title matches) only covers a
+    // handful of pages. Beyond it, page the wide source API directly (AniList
+    // browse/search/genre all go hundreds of pages deep) so search results
+    // aren't limited to a ~150-title pool. Never mix unrelated anime into a
+    // text search — if the deep source runs out, the page is just empty.
+    if (page > poolPages) {
+      if (qn && !genreId) {
+        const deep = await this.aniSearch(query, page).catch(() => null);
+        if (deep && deep.data && deep.data.length) return deep;
+        return { data: [], pagination: { last_visible_page: page - 1, items: { total: page - 1, per_page: PER, count: 0 } } };
+      }
+      if (genreId) {
+        const deep = await this.aniByGenre(genreId, page).catch(() => null);
+        if (deep && deep.data && deep.data.length) return deep;
+        return { data: [], pagination: { last_visible_page: page - 1, items: { total: page - 1, per_page: PER, count: 0 } } };
+      }
+      const deep = await this.catalog(page).catch(() => null);
+      if (deep && deep.data && deep.data.length) return deep;
+    }
+
     const start = (page - 1) * PER;
     const data = merged.slice(start, start + PER);
     return {
       data,
       pagination: {
-        last_visible_page: Math.max(1, Math.ceil(merged.length / PER)),
+        last_visible_page: poolPages,
         items: { total: merged.length, per_page: PER, count: data.length },
       },
     };
@@ -315,6 +337,8 @@ const JIKAN = {
       // regardless of Jikan's health; merges + dedupes by mal_id below.
       pool.push(this.aniSearch(query, 1).catch(() => null));
       pool.push(this.aniSearch(query, 2).catch(() => null));
+      pool.push(this.aniSearch(query, 3).catch(() => null));
+      pool.push(this.aniSearch(query, 4).catch(() => null));
     }
     let genre = null;
     if (genreId) {
@@ -330,8 +354,9 @@ const JIKAN = {
       genreStart = pool.length;
       pool.push(this.get(`/anime?genres=${genre.id}&order_by=popularity&sfw=true&page=1`, 2));
       pool.push(this.get(`/anime?genres=${genre.id}&order_by=popularity&sfw=true&page=2`, 2));
-      pool.push(this.aniByGenre(genre.id, 1).catch(() => null));
-      pool.push(this.aniByGenre(genre.id, 2).catch(() => null));
+      // Wide genre source: AniList pages deep (200 pages / 5000 titles per
+      // genre), so a genre query isn't limited to the first ~50 matches.
+      for (let p = 1; p <= 8; p++) pool.push(this.aniByGenre(genre.id, p).catch(() => null));
       genreEnd = pool.length;
     }
     // Top list = a wider fuzzy-matching pool for near/partial titles Jikan's
@@ -339,6 +364,11 @@ const JIKAN = {
     pool.push(this.topPage(1));
     pool.push(this.topPage(2));
     pool.push(this.topPage(3));
+    // Deep AniList browse pool (sorted by popularity) so text queries that
+    // aren't a genre still match against far more than the top-list pages —
+    // popular titles surface for popular queries even before the search
+    // endpoints do. Pages run in parallel (~0.6s), deduped by mal_id below.
+    for (let p = 1; p <= 8; p++) pool.push(this.catalog(p).catch(() => null));
 
     const settled = await Promise.allSettled(pool);
     const map = new Map(); // mal_id -> { anime, score }
@@ -373,7 +403,7 @@ const JIKAN = {
         (a.anime.rank || 99999) - (b.anime.rank || 99999) ||
         (a.anime.title || "").localeCompare(b.anime.title || ""))
       .map((e) => e.anime);
-    return list.slice(0, 150);
+    return list.slice(0, 500);
   },
 
   // Lightweight top suggestions for the typeahead dropdown (uses the same
@@ -432,28 +462,50 @@ const JIKAN = {
 
   // Jikan genre id → AniList filter. AniList's fixed genre list only has 19
   // names; the rest are tags (verified against GenreCollection/MediaTagCollection).
+  // `adult: true` genres (Hentai/Erotica) query AniList with isAdult:true —
+  // the non-adult filter would otherwise return 0 results for them.
   _ANI_GENRE_MAP: {
     1: { type: "genre", name: "Action" }, 2: { type: "genre", name: "Adventure" },
-    4: { type: "genre", name: "Comedy" }, 5: { type: "genre", name: "Action" },
-    7: { type: "genre", name: "Mystery" }, 8: { type: "genre", name: "Drama" },
-    9: { type: "genre", name: "Ecchi" }, 10: { type: "genre", name: "Fantasy" },
-    12: { type: "genre", name: "Hentai" }, 13: { type: "tag", name: "Historical" },
+    3: { type: "tag", name: "Cars" }, 4: { type: "genre", name: "Comedy" },
+    6: { type: "tag", name: "Mythology" }, 7: { type: "genre", name: "Mystery" },
+    8: { type: "genre", name: "Drama" }, 9: { type: "genre", name: "Ecchi" },
+    10: { type: "genre", name: "Fantasy" }, 11: { type: "tag", name: "Board Game" },
+    12: { type: "genre", name: "Hentai", adult: true }, 13: { type: "tag", name: "Historical" },
     14: { type: "genre", name: "Horror" }, 15: { type: "tag", name: "Kids" },
     16: { type: "tag", name: "Magic" }, 17: { type: "tag", name: "Martial Arts" },
     18: { type: "genre", name: "Mecha" }, 19: { type: "genre", name: "Music" },
-    20: { type: "tag", name: "Parody" }, 22: { type: "genre", name: "Romance" },
-    23: { type: "tag", name: "School" }, 24: { type: "genre", name: "Sci-Fi" },
-    25: { type: "tag", name: "Shoujo" }, 26: { type: "tag", name: "Yuri" },
-    27: { type: "tag", name: "Shounen" }, 28: { type: "tag", name: "Boys' Love" },
-    29: { type: "tag", name: "Space" }, 30: { type: "genre", name: "Sports" },
-    31: { type: "tag", name: "Super Power" }, 32: { type: "tag", name: "Vampire" },
+    20: { type: "tag", name: "Parody" }, 21: { type: "tag", name: "Samurai" },
+    22: { type: "genre", name: "Romance" }, 23: { type: "tag", name: "School" },
+    24: { type: "genre", name: "Sci-Fi" }, 25: { type: "tag", name: "Shoujo" },
+    26: { type: "tag", name: "Yuri" }, 27: { type: "tag", name: "Shounen" },
+    28: { type: "tag", name: "Boys' Love" }, 29: { type: "tag", name: "Space" },
+    30: { type: "genre", name: "Sports" }, 31: { type: "tag", name: "Super Power" },
+    32: { type: "tag", name: "Vampire" }, 35: { type: "tag", name: "Male Harem" },
     36: { type: "genre", name: "Slice of Life" }, 37: { type: "genre", name: "Supernatural" },
-    38: { type: "tag", name: "Military" }, 40: { type: "genre", name: "Psychological" },
-    41: { type: "genre", name: "Thriller" }, 42: { type: "tag", name: "Seinen" },
-    43: { type: "tag", name: "Josei" }, 73: { type: "tag", name: "Yuri" },
-    74: { type: "tag", name: "Boys' Love" },
-    // 5 (Avant Garde), 46 (Award Winning), 47 (Gourmet): no AniList equivalent →
-    // byGenre falls through to the top-tag client filter for those.
+    38: { type: "tag", name: "Military" }, 39: { type: "tag", name: "Detective" },
+    40: { type: "genre", name: "Psychological" }, 41: { type: "genre", name: "Thriller" },
+    42: { type: "tag", name: "Seinen" }, 43: { type: "tag", name: "Josei" },
+    47: { type: "tag", name: "Food" }, 48: { type: "tag", name: "Work" },
+    49: { type: "genre", name: "Hentai", adult: true },
+    50: { type: "tag", name: "Primarily Adult Cast" }, 51: { type: "tag", name: "Anthropomorphism" },
+    52: { type: "tag", name: "Cute Girls Doing Cute Things" }, 53: { type: "tag", name: "Parenthood" },
+    54: { type: "tag", name: "Martial Arts" }, 55: { type: "tag", name: "Delinquents" },
+    56: { type: "tag", name: "Educational" }, 57: { type: "tag", name: "Slapstick" },
+    58: { type: "tag", name: "Gore" }, 59: { type: "tag", name: "Death Game" },
+    60: { type: "tag", name: "Idol" }, 61: { type: "tag", name: "Idol" },
+    62: { type: "tag", name: "Isekai" }, 63: { type: "tag", name: "Iyashikei" },
+    64: { type: "tag", name: "Love Triangle" }, 65: { type: "tag", name: "Gender Bending" },
+    66: { type: "genre", name: "Mahou Shoujo" }, 67: { type: "tag", name: "Medicine" },
+    68: { type: "tag", name: "Criminal Organization" }, 69: { type: "tag", name: "Otaku Culture" },
+    70: { type: "tag", name: "Acting" }, 71: { type: "tag", name: "Animals" },
+    72: { type: "tag", name: "Reincarnation" }, 73: { type: "tag", name: "Female Harem" },
+    75: { type: "tag", name: "Acting" }, 76: { type: "tag", name: "Survival" },
+    77: { type: "genre", name: "Sports" }, 78: { type: "tag", name: "Time Manipulation" },
+    79: { type: "tag", name: "Video Games" }, 80: { type: "tag", name: "Drawing" },
+    81: { type: "tag", name: "Crossdressing" }, 82: { type: "tag", name: "Urban Fantasy" },
+    83: { type: "tag", name: "Villainess" },
+    // 5 (Avant Garde), 46 (Award Winning), 74 (Love Status Quo): no AniList
+    // equivalent → byGenre falls through to the top-tag client filter for those.
   },
 
   _aniCache: new Map(),   // query+variables key -> { at, val }
@@ -506,12 +558,20 @@ const JIKAN = {
       }`,
 
   // Wide genre browse via AniList (genre or tag filter). Returns Jikan shape.
+  // Adult genres (Hentai/Erotica) query with isAdult:true — the safe filter
+  // would return 0 for them, hiding the genre entirely.
   async aniByGenre(genreId, page = 1) {
     const map = this._ANI_GENRE_MAP[Number(genreId)];
     if (!map) return { data: [], pagination: { last_visible_page: 1, items: { total: 0, per_page: 25, count: 0 } } };
+    const adult = map.adult ? "isAdult: true" : "isAdult: false";
+    const filter = map.type === "genre" ? `genre_in: $g, ${adult}` : `tag_in: $t, ${adult}`;
+    const fields = this._ANI_PAGE_FIELDS.replace(
+      "media(type: ANIME, isAdult: false, idMal_not: null, sort: [POPULARITY_DESC])",
+      `media(type: ANIME, ${filter}, idMal_not: null, sort: [POPULARITY_DESC])`
+    );
     const q = map.type === "genre"
-      ? `query($g: [String], $p: Int, $per: Int) { Page(page: $p, perPage: $per) { ${this._ANI_PAGE_FIELDS.replace("media(type: ANIME, isAdult: false, idMal_not: null, sort: [POPULARITY_DESC])", `media(type: ANIME, genre_in: $g, isAdult: false, idMal_not: null, sort: [POPULARITY_DESC])`)} } }`
-      : `query($t: [String], $p: Int, $per: Int) { Page(page: $p, perPage: $per) { ${this._ANI_PAGE_FIELDS.replace("media(type: ANIME, isAdult: false, idMal_not: null, sort: [POPULARITY_DESC])", `media(type: ANIME, tag_in: $t, isAdult: false, idMal_not: null, sort: [POPULARITY_DESC])`)} } }`;
+      ? `query($g: [String], $p: Int, $per: Int) { Page(page: $p, perPage: $per) { ${fields} } }`
+      : `query($t: [String], $p: Int, $per: Int) { Page(page: $p, perPage: $per) { ${fields} } }`;
     const vars = map.type === "genre" ? { g: [map.name] } : { t: [map.name] };
     const data = await this._aniQuery(q, { ...vars, p: page, per: 25 });
     const nodes = data?.Page?.media || [];
@@ -538,6 +598,80 @@ const JIKAN = {
         items: { total, per_page: 25, count: nodes.length },
       },
     };
+  },
+
+  _ANI_REL_QUERY: `query($id_in: [Int]) { Page(page: 1, perPage: 50) {
+    media(id_in: $id_in, type: ANIME) {
+      id idMal title { romaji english } format startDate { year }
+      coverImage { extraLarge large }
+      relations { edges { relationType node { id idMal type title { romaji english } format } } }
+    }
+  } }`,
+
+  // All seasons/entries of an anime's franchise, discovered by walking the
+  // AniList SEQUEL/PREQUEL relation graph in both directions. A single
+  // relation query only exposes direct neighbours, so we fan out with batched
+  // id_in queries (each round = one ~0.6s request) until the whole chain is
+  // collected — e.g. "Attack on Titan Season 3" finds S1, S2, S3 Part 2 and
+  // the Final Season even when Jikan relations are incomplete and Jikan
+  // search is down. Returns Jikan-shaped relation entries.
+  async aniFranchise(malId) {
+    const seedQ = `query($idMal: Int) { Media(idMal: $idMal, type: ANIME) {
+      id idMal title { romaji english } format startDate { year }
+      coverImage { extraLarge large }
+      relations { edges { relationType node { id idMal type title { romaji english } format } } }
+    } }`;
+    const seed = (await this._aniQuery(seedQ, { idMal: malId }))?.Media;
+    if (!seed || !seed.id) return [];
+    const seen = new Map([[seed.id, seed]]);
+    // Seed the frontier from the source anime's own relations, then walk.
+    let frontier = [];
+    for (const e of (seed.relations?.edges || [])) {
+      const n = e.node;
+      if (n.type === "ANIME" && !seen.has(n.id)) frontier.push(n.id);
+    }
+    let guard = 0;
+    while (frontier.length && guard < 5) {
+      guard++;
+      let data;
+      try {
+        data = await this._aniQuery(this._ANI_REL_QUERY, { id_in: frontier });
+      } catch (e) { break; }
+      const batch = data?.Page?.media || [];
+      const next = [];
+      for (const m of batch) {
+        if (seen.has(m.id)) continue;
+        seen.set(m.id, m);
+        for (const e of (m.relations?.edges || [])) {
+          const n = e.node;
+          if (n.type === "ANIME" && !seen.has(n.id)) next.push(n.id);
+        }
+      }
+      frontier = [...new Set(next)];
+    }
+    const rank = {
+      SEQUEL: 0, PREQUEL: 1, ALTERNATIVE: 2, SIDE_STORY: 3,
+      SPIN_OFF: 4, SUMMARY: 5, CHARACTER: 6, PARENT: 7, OTHER: 8,
+    };
+    const out = [];
+    seen.forEach((m, aniId) => {
+      if (!m.idMal || aniId === seed.id) return;
+      let relation = "Related";
+      let sort = 9;
+      for (const e of (seed.relations?.edges || [])) {
+        if (e.node?.id === aniId) { relation = e.relationType; sort = rank[relation] ?? 9; break; }
+      }
+      if (sort === 9 && /sequel|prequel/i.test(relation)) sort = 0;
+      out.push({
+        mal_id: m.idMal,
+        name: m.title?.english || m.title?.romaji || "",
+        relation,
+        sort,
+        year: m.startDate?.year || 0,
+        image: m.coverImage?.extraLarge || m.coverImage?.large || "",
+      });
+    });
+    return out.sort((a, b) => a.sort - b.sort || a.year - b.year);
   },
 
   // All anime for catalog browsing. Rotates the sort daily so the "Latest
@@ -567,13 +701,107 @@ const JIKAN = {
   // Full details for one anime (cached — the same anime is looked up from
   // cards, related sections, and profiles repeatedly). The heavy /full
   // endpoint is the most flaky when MAL is under load, so fall back to the
-  // lighter /anime/:id which has everything the page needs.
+  // lighter /anime/:id, then to AniList (which shares MAL ids and serves the
+  // whole detail page) so an anime like Uzumaki still loads when Jikan's
+  // upstream is down.
   async getAnime(id) {
     try {
       return await this.cachedGet(`/anime/${id}/full`);
     } catch (err) {
-      return this.cachedGet(`/anime/${id}`);
+      try {
+        return await this.cachedGet(`/anime/${id}`);
+      } catch (err2) {
+        return this.aniDetail(id);
+      }
     }
+  },
+
+  // Full detail for one anime from AniList (idMal == MAL id), converted to a
+  // Jikan-shaped object so the whole detail page renders unchanged. Covers
+  // synopsis, studios, episodes, status, trailer, relations (for the seasons
+  // section) — the fields anime.html reads.
+  async aniDetail(malId) {
+    const q = `query($id: Int) {
+      Media(idMal: $id, type: ANIME) {
+        id idMal
+        title { romaji english native }
+        description
+        coverImage { extraLarge large }
+        bannerImage
+        averageScore episodes duration status format
+        genres synonyms seasonYear
+        studios { nodes { name } }
+        startDate { year month day }
+        endDate { year month day }
+        source trailer { id site }
+        relations { edges { relationType node { id idMal type title { romaji english } format } } }
+      }
+    }`;
+    const data = await this._aniQuery(q, { id: malId });
+    const m = data?.Media;
+    if (!m || !m.idMal) throw new Error("AniList detail not found");
+    const stripHtml = (s) => String(s || "").replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim();
+    const fmt = (m.format || "TV").replace(/_/g, " ");
+    const st = {
+      FINISHED: "Finished Airing", RELEASING: "Currently Airing",
+      NOT_YET_RELEASED: "Not yet aired", CANCELLED: "Cancelled",
+    }[m.status] || m.status || "Unknown";
+    const aird = [m.startDate?.year, m.startDate?.month, m.startDate?.day].filter(Boolean).join("-");
+    const relations = (m.relations?.edges || []).map((e) => ({
+      relation: {
+        SEQUEL: "Sequel", PREQUEL: "Prequel", ALTERNATIVE: "Alternative version",
+        SIDE_STORY: "Side story", SPIN_OFF: "Spin-off", SUMMARY: "Summary",
+        PARENT: "Parent story", OTHER: "Other",
+      }[e.relationType] || e.relationType,
+      entry: [{
+        mal_id: e.node?.idMal,
+        name: e.node?.title?.english || e.node?.title?.romaji || "",
+        type: (e.node?.type || "").toLowerCase(),
+        url: e.node?.idMal ? `https://myanimelist.net/${(e.node?.type || "anime").toLowerCase()}/${e.node.idMal}` : "",
+      }],
+    })).filter((r) => r.entry[0].mal_id);
+    const src = m.source || "";
+    const sourceMap = {
+      MANGA: "Manga", LIGHT_NOVEL: "Light novel", VISUAL_NOVEL: "Visual novel",
+      ORIGINAL: "Original", NOVEL: "Novel", WEB_MANGA: "Web manga",
+      "4_KOMA_MANGA": "4-koma manga", GAME: "Game", MUSIC: "Music",
+      OTHER: "Other", WRITTEN_WORK: "Written work",
+    };
+    return {
+      data: {
+        mal_id: m.idMal,
+        title: m.title?.english || m.title?.romaji || "",
+        title_english: m.title?.english || "",
+        title_japanese: m.title?.native || "",
+        title_synonyms: m.synonyms || [],
+        synopsis: stripHtml(m.description),
+        score: m.averageScore != null ? m.averageScore / 10 : null,
+        rank: null,
+        episodes: m.episodes,
+        type: fmt,
+        status: st,
+        source: sourceMap[src] || src || "N/A",
+        rating: m.isAdult ? "R+" : "N/A",
+        duration: m.duration ? `${m.duration} min per ep` : "N/A",
+        season: m.season,
+        year: m.seasonYear,
+        aired: { string: aird || "Unknown" },
+        studios: (m.studios?.nodes || []).map((s) => ({ name: s.name })),
+        licensors: [],
+        genres: (m.genres || []).map((name) => ({ name })),
+        images: {
+          jpg: {
+            image_url: m.coverImage?.extraLarge || m.coverImage?.large || "",
+            large_image_url: m.coverImage?.extraLarge || m.coverImage?.large || "",
+          },
+        },
+        trailer: m.trailer?.site === "youtube" && m.trailer.id
+          ? { youtube_id: m.trailer.id }
+          : null,
+        url: `https://myanimelist.net/anime/${m.idMal}`,
+        relations,
+      },
+    };
   },
 
   // Characters for an anime
