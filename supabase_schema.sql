@@ -33,6 +33,10 @@ create table if not exists public.reviews (
 -- Idempotent upgrade: add reply column to existing databases (replies to reviews)
 alter table public.reviews add column if not exists parent_id bigint references public.reviews on delete cascade;
 
+-- Idempotent upgrade: display name snapshot (denormalized at insert time so a
+-- review shows the author's name even when the profiles row is empty).
+alter table public.reviews add column if not exists author_name text default '';
+
 -- 3. Rankings (one entry per user per anime; admins may vote multiple times)
 create table if not exists public.rankings (
   id bigint generated always as identity primary key,
