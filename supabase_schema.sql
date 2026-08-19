@@ -1177,10 +1177,10 @@ begin
 
       -- Invitee bonus.
       update public.profiles
-         set rp = rp + 50, rp_earned = rp_earned + 50
+         set rp = rp + 20000, rp_earned = rp_earned + 20000
        where id = new.id;
       insert into public.reward_transactions (user_id, amount, reason)
-        values (new.id, 50, 'invite');
+        values (new.id, 20000, 'invite');
 
       -- Inviter bonus, capped at 10 referrals/day (anti-farming).
       select count(*) into daily_used from public.reward_transactions
@@ -1188,10 +1188,10 @@ begin
           and created_at > date_trunc('day', now());
       if daily_used < 10 then
         update public.profiles
-           set rp = rp + 100, rp_earned = rp_earned + 100
+           set rp = rp + 20000, rp_earned = rp_earned + 20000
          where id = inv.inviter_id;
         insert into public.reward_transactions (user_id, amount, reason)
-          values (inv.inviter_id, 100, 'invite');
+          values (inv.inviter_id, 20000, 'invite');
       end if;
     end if;
   end if;
