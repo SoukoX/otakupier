@@ -250,6 +250,27 @@
           }
         });
       }
+
+      // Wide franchise discovery via AniList: walks the SEQUEL/PREQUEL chain
+      // so EVERY season of the anime appears (S1, S2, movies, OVAs, Final
+      // Seasons) even when Jikan's relations are incomplete or Jikan search
+      // is down. Runs in parallel with rendering; images arrive with the
+      // entry itself so cards don't need a second lookup.
+      const have = new Set(related.map((r) => r.mal_id));
+      JIKAN.aniFranchise(animeData.mal_id).then((entries) => {
+        (entries || []).forEach((r) => {
+          if (have.has(r.mal_id)) return;
+          have.add(r.mal_id);
+          related.push(r);
+        });
+        renderRelated(related);
+      }).catch(() => {});
+      renderRelated(related);
+    }
+
+    function renderRelated(related) {
+      const slot = document.getElementById("relatedSlot");
+      if (!slot) return;
       if (!related.length) return;
       slot.innerHTML = `<h3 class="sub-head">Seasons &amp; Related</h3>
         <div class="grid" id="relatedGrid" style="grid-template-columns:repeat(auto-fill,minmax(150px,1fr));"></div>`;
@@ -257,12 +278,13 @@
       // Render cards immediately, but fetch each card's image/score in the
       // background *after* the main page content (characters, episodes) has
       // loaded, so those never wait behind this section.
-      related.slice(0, 8).forEach((r) => {
+      related.slice(0, 12).forEach((r) => {
         const el = document.createElement("div");
         el.className = "anime-card";
         el.dataset.malId = r.mal_id;
+        const img = r.image || "https://placehold.co/300x400?text=Loading";
         el.innerHTML = `<div class="poster">
-            <img src="https://placehold.co/300x400?text=Loading" alt="${JIKAN.esc(r.name)}"
+            <img src="${img}" alt="${JIKAN.esc(r.name)}"
                  loading="lazy" onerror="this.src='https://placehold.co/300x400?text=?'">
           </div>
           <div class="info">
