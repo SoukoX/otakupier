@@ -197,11 +197,40 @@ const JIKAN = {
   },
 
   _genreCache: null,
+
+  // Static fallback genre map (id -> name) mirroring Jikan's official genres.
+  // Lets genre-name queries ("romance", "action", …) resolve even when Jikan's
+  // /genres endpoint is unreachable, so search never silently drops to nothing.
+  _STATIC_GENRES: {
+    Action: 1, Adventure: 2, "Avant Garde": 5, "Award Winning": 46,
+    "Boys Love": 28, Comedy: 4, Drama: 8, Ecchi: 9, Fantasy: 10,
+    "Girls Love": 26, Gourmet: 47, Hentai: 12, Historical: 13, Horror: 14,
+    Josei: 43, Kids: 15, Magic: 16, "Martial Arts": 17, Mecha: 18,
+    Military: 38, Music: 19, Mystery: 7, Parody: 20, Psychological: 40,
+    Romance: 22, School: 23, "Sci-Fi": 24, Seinen: 42, Shoujo: 25,
+    "Shoujo Ai": 73, Shounen: 27, "Shounen Ai": 74, "Slice of Life": 36,
+    Space: 29, Sports: 30, "Super Power": 31, Supernatural: 37,
+    Thriller: 41, Vampire: 32,
+  },
+
+  // Genre list = API result merged with the static map, so a failed API call
+  // can never permanently disable genre matching (an empty result is NOT
+  // cached — the next search retries).
   async _genresCached() {
     if (this._genreCache) return this._genreCache;
     const res = await this.genres().catch(() => null);
-    this._genreCache = (res || []).map((g) => ({ id: g.mal_id, name: this._norm(g.name) }));
-    return this._genreCache || [];
+    const fromApi = (res || []).map((g) => ({ id: g.mal_id, name: this._norm(g.name) }));
+    const fromStatic = Object.keys(this._STATIC_GENRES)
+      .map((n) => ({ id: this._STATIC_GENRES[n], name: this._norm(n) }));
+    const merged = [];
+    const seen = new Set();
+    for (const g of fromApi.concat(fromStatic)) {
+      if (seen.has(g.id)) continue;
+      seen.add(g.id);
+      merged.push(g);
+    }
+    if (merged.length) this._genreCache = merged;
+    return merged;
   },
 
   // If the query is basically a genre name, return it (exact, prefix, fuzzy).
@@ -253,10 +282,14 @@ const JIKAN = {
       genre = await this._matchGenre(qn);
     }
     let genrePool = false;
+    let genreStart = -1;
+    let genreEnd = -1;
     if (genre && genre.id) {
       genrePool = true;
+      genreStart = pool.length;
       pool.push(this.get(`/anime?genres=${genre.id}&order_by=popularity&sfw=true&page=1`));
       pool.push(this.get(`/anime?genres=${genre.id}&order_by=popularity&sfw=true&page=2`));
+      genreEnd = pool.length;
     }
     // Top list = a wider fuzzy-matching pool for near/partial titles Jikan's
     // search endpoint misses (and a client-side fallback when it's down).
@@ -274,17 +307,19 @@ const JIKAN = {
 
     settled.forEach((s, i) => {
       if (s.status !== "fulfilled" || !s.value?.data) return;
-      const fromGenrePool = genrePool && i >= 2 && i < 4;
+      const fromGenrePool = genrePool && i >= genreStart && i < genreEnd;
       for (const a of s.value.data) {
         let score = this._bestScore(qn, a);
         // Genre-pool titles are valid answers for a genre query even when the
         // title itself doesn't contain the genre word.
-        if (fromGenrePool && qn) score = Math.max(score, 0.55);
+        if (fromGenrePool && genre && genre.id) score = Math.max(score, 0.55);
         add(a, score);
       }
     });
 
-    const minScore = qn ? 0.5 : 0.6;
+    // Floor: a plain query needs ≥0.5, genre-only browsing (no query) passes
+    // the genre-pool floor (0.55), and an empty unfiltered pool needs 0.6.
+    const minScore = !qn && genre && genre.id ? 0.55 : (qn ? 0.5 : 0.6);
     const list = Array.from(map.values())
       .filter((e) => e.score >= minScore)
       .sort((a, b) =>
