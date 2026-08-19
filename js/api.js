@@ -311,6 +311,10 @@ const JIKAN = {
     if (query && !genreId) {
       pool.push(this.get(`/anime?type=anime&sfw=true&page=1&q=${encodeURIComponent(query)}`, 2));
       pool.push(this.get(`/anime?type=anime&sfw=true&page=2&q=${encodeURIComponent(query)}`, 2));
+      // AniList search = wide-spectrum direct search (thousands of results)
+      // regardless of Jikan's health; merges + dedupes by mal_id below.
+      pool.push(this.aniSearch(query, 1).catch(() => null));
+      pool.push(this.aniSearch(query, 2).catch(() => null));
     }
     let genre = null;
     if (genreId) {
@@ -326,6 +330,8 @@ const JIKAN = {
       genreStart = pool.length;
       pool.push(this.get(`/anime?genres=${genre.id}&order_by=popularity&sfw=true&page=1`, 2));
       pool.push(this.get(`/anime?genres=${genre.id}&order_by=popularity&sfw=true&page=2`, 2));
+      pool.push(this.aniByGenre(genre.id, 1).catch(() => null));
+      pool.push(this.aniByGenre(genre.id, 2).catch(() => null));
       genreEnd = pool.length;
     }
     // Top list = a wider fuzzy-matching pool for near/partial titles Jikan's
@@ -379,11 +385,19 @@ const JIKAN = {
 
   // Anime list filtered by genre
   async byGenre(genreId, page = 1) {
+    // Chain: Jikan (fast when healthy) → AniList (wide, same MAL ids) →
+    // top-tag client filter (last resort). The genre select + genre browsing
+    // hit this, so it must never show an empty grid just because Jikan's
+    // /anime endpoint is flaky.
     try {
-      // Fewer retries — the client-side fallback below is near-instant, so a
-      // slow retry loop on the dead endpoint would only delay showing results.
+      // Fewer retries — the fallbacks below are near-instant, so a slow retry
+      // loop on the dead endpoint would only delay showing results.
       return await this.get(`/anime?genres=${genreId}&order_by=popularity&page=${page}`, 2);
     } catch (err) {
+      try {
+        const ani = await this.aniByGenre(genreId, page);
+        if (ani && ani.data && ani.data.length) return ani;
+      } catch (e) { /* fall through */ }
       // /anime 504s when Jikan's upstream (MAL) is down, but /top/anime keeps
       // working and its items carry genre tags — so filter the top list
       // client-side as a same-shaped fallback instead of showing an empty grid.
@@ -411,10 +425,142 @@ const JIKAN = {
     }
   },
 
-  // All anime for catalog browsing (paged) — served from the cached+deduped
-  // top-list fetcher so the homepage/catalog and search pool share one set of
-  // top-page requests instead of each firing their own.
+  // ---------- AniList fallback (wide-spectrum catalog/search) ----------
+  // AniList is a free, CORS-open GraphQL API sharing MAL's ids (idMal). When
+  // Jikan's /anime endpoint 504s (MAL upstream issues), it keeps genre browse
+  // and search wide instead of collapsing to a ~50-title top pool.
+
+  // Jikan genre id → AniList filter. AniList's fixed genre list only has 19
+  // names; the rest are tags (verified against GenreCollection/MediaTagCollection).
+  _ANI_GENRE_MAP: {
+    1: { type: "genre", name: "Action" }, 2: { type: "genre", name: "Adventure" },
+    4: { type: "genre", name: "Comedy" }, 5: { type: "genre", name: "Action" },
+    7: { type: "genre", name: "Mystery" }, 8: { type: "genre", name: "Drama" },
+    9: { type: "genre", name: "Ecchi" }, 10: { type: "genre", name: "Fantasy" },
+    12: { type: "genre", name: "Hentai" }, 13: { type: "tag", name: "Historical" },
+    14: { type: "genre", name: "Horror" }, 15: { type: "tag", name: "Kids" },
+    16: { type: "tag", name: "Magic" }, 17: { type: "tag", name: "Martial Arts" },
+    18: { type: "genre", name: "Mecha" }, 19: { type: "genre", name: "Music" },
+    20: { type: "tag", name: "Parody" }, 22: { type: "genre", name: "Romance" },
+    23: { type: "tag", name: "School" }, 24: { type: "genre", name: "Sci-Fi" },
+    25: { type: "tag", name: "Shoujo" }, 26: { type: "tag", name: "Yuri" },
+    27: { type: "tag", name: "Shounen" }, 28: { type: "tag", name: "Boys' Love" },
+    29: { type: "tag", name: "Space" }, 30: { type: "genre", name: "Sports" },
+    31: { type: "tag", name: "Super Power" }, 32: { type: "tag", name: "Vampire" },
+    36: { type: "genre", name: "Slice of Life" }, 37: { type: "genre", name: "Supernatural" },
+    38: { type: "tag", name: "Military" }, 40: { type: "genre", name: "Psychological" },
+    41: { type: "genre", name: "Thriller" }, 42: { type: "tag", name: "Seinen" },
+    43: { type: "tag", name: "Josei" }, 73: { type: "tag", name: "Yuri" },
+    74: { type: "tag", name: "Boys' Love" },
+    // 5 (Avant Garde), 46 (Award Winning), 47 (Gourmet): no AniList equivalent →
+    // byGenre falls through to the top-tag client filter for those.
+  },
+
+  _aniCache: new Map(),   // query+variables key -> { at, val }
+  _aniInflight: new Map(), // key -> Promise
+  async _aniQuery(query, variables) {
+    const key = JSON.stringify([query, variables]);
+    const hit = this._aniCache.get(key);
+    if (hit && Date.now() - hit.at < 10 * 60 * 1000) return hit.val;
+    if (this._aniInflight.has(key)) return this._aniInflight.get(key);
+    const p = (async () => {
+      const res = await fetch(CONFIG.ANILIST_BASE, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Accept: "application/json" },
+        body: JSON.stringify({ query, variables }),
+      });
+      const body = await res.json();
+      if (!body || body.errors) throw new Error(body?.errors?.[0]?.message || "AniList error");
+      return body.data;
+    })().then((val) => {
+      this._aniCache.set(key, { at: Date.now(), val });
+      return val;
+    }).finally(() => this._aniInflight.delete(key));
+    this._aniInflight.set(key, p);
+    return p;
+  },
+
+  // Convert an AniList media node into a Jikan-shaped anime object so every
+  // consumer (cards, suggest, detail links) works unchanged.
+  _aniToJikan(m) {
+    return {
+      mal_id: m.idMal,
+      title: m.title?.english || m.title?.romaji || "",
+      title_english: m.title?.english || "",
+      title_japanese: m.title?.native || "",
+      images: { jpg: { image_url: m.coverImage?.extraLarge || m.coverImage?.large || "" } },
+      score: m.averageScore != null ? m.averageScore / 10 : null,
+      type: m.format,
+      year: m.startDate?.year,
+      rank: null,
+      genres: (m.genres || []).map((name) => ({ name })),
+    };
+  },
+
+  _ANI_PAGE_FIELDS: `
+      pageInfo { currentPage lastPage hasNextPage total }
+      media(type: ANIME, isAdult: false, idMal_not: null, sort: [POPULARITY_DESC]) {
+        id idMal title { romaji english native }
+        coverImage { extraLarge large }
+        averageScore format startDate { year } genres
+      }`,
+
+  // Wide genre browse via AniList (genre or tag filter). Returns Jikan shape.
+  async aniByGenre(genreId, page = 1) {
+    const map = this._ANI_GENRE_MAP[Number(genreId)];
+    if (!map) return { data: [], pagination: { last_visible_page: 1, items: { total: 0, per_page: 25, count: 0 } } };
+    const q = map.type === "genre"
+      ? `query($g: [String], $p: Int, $per: Int) { Page(page: $p, perPage: $per) { ${this._ANI_PAGE_FIELDS.replace("media(type: ANIME, isAdult: false, idMal_not: null, sort: [POPULARITY_DESC])", `media(type: ANIME, genre_in: $g, isAdult: false, idMal_not: null, sort: [POPULARITY_DESC])`)} } }`
+      : `query($t: [String], $p: Int, $per: Int) { Page(page: $p, perPage: $per) { ${this._ANI_PAGE_FIELDS.replace("media(type: ANIME, isAdult: false, idMal_not: null, sort: [POPULARITY_DESC])", `media(type: ANIME, tag_in: $t, isAdult: false, idMal_not: null, sort: [POPULARITY_DESC])`)} } }`;
+    const vars = map.type === "genre" ? { g: [map.name] } : { t: [map.name] };
+    const data = await this._aniQuery(q, { ...vars, p: page, per: 25 });
+    const nodes = data?.Page?.media || [];
+    const total = data?.Page?.pageInfo?.total || nodes.length;
+    return {
+      data: nodes.map((m) => this._aniToJikan(m)),
+      pagination: {
+        last_visible_page: data?.Page?.pageInfo?.lastPage || 1,
+        items: { total, per_page: 25, count: nodes.length },
+      },
+    };
+  },
+
+  // Wide direct search via AniList. Returns Jikan shape.
+  async aniSearch(query, page = 1) {
+    const q = `query($s: String, $p: Int, $per: Int) { Page(page: $p, perPage: $per) { ${this._ANI_PAGE_FIELDS.replace("media(type: ANIME, isAdult: false, idMal_not: null, sort: [POPULARITY_DESC])", "media(type: ANIME, search: $s, isAdult: false, idMal_not: null, sort: [POPULARITY_DESC])")} } }`;
+    const data = await this._aniQuery(q, { s: query, p: page, per: 25 });
+    const nodes = data?.Page?.media || [];
+    const total = data?.Page?.pageInfo?.total || nodes.length;
+    return {
+      data: nodes.map((m) => this._aniToJikan(m)),
+      pagination: {
+        last_visible_page: data?.Page?.pageInfo?.lastPage || 1,
+        items: { total, per_page: 25, count: nodes.length },
+      },
+    };
+  },
+
+  // All anime for catalog browsing. Rotates the sort daily so the "Latest
+  // titles" first page isn't the same every visit, falling back to Jikan's
+  // cached top list when AniList is unreachable.
+  _ANI_SORTS: ["POPULARITY_DESC", "SCORE_DESC", "TRENDING_DESC", "FAVOURITES_DESC"],
   async catalog(page = 1) {
+    try {
+      const day = Math.floor(Date.now() / 86400000);
+      const sort = this._ANI_SORTS[day % this._ANI_SORTS.length];
+      const q = `query($p: Int, $per: Int, $sort: [MediaSort]) { Page(page: $p, perPage: $per) { ${this._ANI_PAGE_FIELDS.replace("sort: [POPULARITY_DESC]", "sort: $sort")} } }`;
+      const data = await this._aniQuery(q, { p: page, per: 25, sort: [sort] });
+      const nodes = data?.Page?.media || [];
+      if (nodes.length) {
+        return {
+          data: nodes.map((m) => this._aniToJikan(m)),
+          pagination: {
+            last_visible_page: data.Page.pageInfo.lastPage || 1,
+            items: { total: data.Page.pageInfo.total || nodes.length, per_page: 25, count: nodes.length },
+          },
+        };
+      }
+    } catch (e) { /* fall back below */ }
     return this.topPage(page);
   },
 
