@@ -33,7 +33,19 @@ const JIKAN = {
   // Small wrapper with retry/backoff to respect Jikan rate limits (~3 req/sec).
   // Retries are fast (no long sleep on transient failures) so slow Jikan
   // periods don't make pages crawl.
+  _health: new Map(), // list-endpoint path -> last failure timestamp (ms)
+  _markDown(family) { this._health.set(family, Date.now()); },
+  _isDown(family, windowMs = 45 * 1000) {
+    const t = this._health.get(family);
+    return t != null && Date.now() - t < windowMs;
+  },
   async get(path, retries = 3) {
+    // Only list/search endpoints (/anime?…, /top/…) are circuit-broken —
+    // detail lookups like /anime/123 must never be blocked by a dead search
+    // endpoint. /top/anime is excluded too (it's our reliable fallback).
+    const qidx = path.indexOf("?");
+    const family = qidx >= 0 && !path.startsWith("/top/anime") ? path.slice(0, qidx) : null;
+    if (family && this._isDown(family)) return Promise.reject(new Error(`Jikan API ${family} marked down`));
     return this._enqueue(async () => {
       for (let attempt = 0; attempt < retries; attempt++) {
         if (attempt > 0) await new Promise((r) => setTimeout(r, 350));
@@ -42,6 +54,7 @@ const JIKAN = {
           res = await fetch(`${this.base}${path}`);
         } catch (err) {
           if (attempt < retries - 1) continue;
+          if (family) this._markDown(family);
           throw err;
         }
         if (res.ok) {
@@ -53,6 +66,7 @@ const JIKAN = {
         }
         if (res.status === 429 || res.status >= 500) {
           if (attempt < retries - 1) continue;
+          if (family) this._markDown(family);
         }
         throw new Error(`Jikan API error ${res.status}`);
       }
@@ -63,13 +77,36 @@ const JIKAN = {
   // In-memory cache for repeated lookups (e.g. the same anime referenced from
   // related/cards). Keys on the full path so paginated calls stay distinct.
   _cache: new Map(),
+  _inflight: new Map(), // path -> Promise (dedupes concurrent identical fetches)
   cachedGet(path, ttlMs = 10 * 60 * 1000) {
     const hit = this._cache.get(path);
     if (hit && Date.now() - hit.at < ttlMs) return Promise.resolve(hit.val);
-    return this.get(path).then((val) => {
+    if (this._inflight.has(path)) return this._inflight.get(path);
+    const p = this.get(path).then((val) => {
       this._cache.set(path, { at: Date.now(), val });
       return val;
-    });
+    }).finally(() => this._inflight.delete(path));
+    this._inflight.set(path, p);
+    return p;
+  },
+
+  // Cached+deduped top-list page. /top/anime is the most reliable Jikan
+  // endpoint (its items also carry genre tags), so it backs genre fallback
+  // and the search pool — fetching it once per session and sharing the
+  // in-flight promise avoids redundant calls when several features hit it
+  // at once (catalog browsing + search pool + genre fallback).
+  _topCache: new Map(), // page -> { at, val }
+  _topInflight: new Map(), // page -> Promise
+  topPage(page = 1, ttlMs = 10 * 60 * 1000) {
+    const hit = this._topCache.get(page);
+    if (hit && Date.now() - hit.at < ttlMs) return Promise.resolve(hit.val);
+    if (this._topInflight.has(page)) return this._topInflight.get(page);
+    const p = this.get(`/top/anime?page=${page}`).then((val) => {
+      this._topCache.set(page, { at: Date.now(), val });
+      return val;
+    }).finally(() => this._topInflight.delete(page));
+    this._topInflight.set(page, p);
+    return p;
   },
 
   // Trending/popular anime for the homepage. Jikan's popularity filter is
@@ -77,9 +114,9 @@ const JIKAN = {
   // top list rather than failing the whole request.
   async topAnime(page = 1) {
     try {
-      return await this.get(`/top/anime?filter=bypopularity&page=${page}`);
+      return await this.get(`/top/anime?filter=bypopularity&page=${page}`, 2);
     } catch (err) {
-      return this.get(`/top/anime?page=${page}`);
+      return this.topPage(page);
     }
   },
 
@@ -272,8 +309,8 @@ const JIKAN = {
   async _buildSearchPool(query, qn, genreId) {
     const pool = [];
     if (query && !genreId) {
-      pool.push(this.get(`/anime?type=anime&sfw=true&page=1&q=${encodeURIComponent(query)}`));
-      pool.push(this.get(`/anime?type=anime&sfw=true&page=2&q=${encodeURIComponent(query)}`));
+      pool.push(this.get(`/anime?type=anime&sfw=true&page=1&q=${encodeURIComponent(query)}`, 2));
+      pool.push(this.get(`/anime?type=anime&sfw=true&page=2&q=${encodeURIComponent(query)}`, 2));
     }
     let genre = null;
     if (genreId) {
@@ -287,15 +324,15 @@ const JIKAN = {
     if (genre && genre.id) {
       genrePool = true;
       genreStart = pool.length;
-      pool.push(this.get(`/anime?genres=${genre.id}&order_by=popularity&sfw=true&page=1`));
-      pool.push(this.get(`/anime?genres=${genre.id}&order_by=popularity&sfw=true&page=2`));
+      pool.push(this.get(`/anime?genres=${genre.id}&order_by=popularity&sfw=true&page=1`, 2));
+      pool.push(this.get(`/anime?genres=${genre.id}&order_by=popularity&sfw=true&page=2`, 2));
       genreEnd = pool.length;
     }
     // Top list = a wider fuzzy-matching pool for near/partial titles Jikan's
     // search endpoint misses (and a client-side fallback when it's down).
-    pool.push(this.get(`/top/anime?page=1`));
-    pool.push(this.get(`/top/anime?page=2`));
-    pool.push(this.get(`/top/anime?page=3`));
+    pool.push(this.topPage(1));
+    pool.push(this.topPage(2));
+    pool.push(this.topPage(3));
 
     const settled = await Promise.allSettled(pool);
     const map = new Map(); // mal_id -> { anime, score }
@@ -311,8 +348,11 @@ const JIKAN = {
       for (const a of s.value.data) {
         let score = this._bestScore(qn, a);
         // Genre-pool titles are valid answers for a genre query even when the
-        // title itself doesn't contain the genre word.
-        if (fromGenrePool && genre && genre.id) score = Math.max(score, 0.55);
+        // title itself doesn't contain the genre word. The same boost applies
+        // to ANY pool item tagged with the genre (e.g. top-list items) so a
+        // failing /anime endpoint can't empty a genre search.
+        const tagged = genre && genre.id && (a.genres || []).some((g) => g.mal_id === genre.id);
+        if ((fromGenrePool || tagged) && genre && genre.id) score = Math.max(score, 0.55);
         add(a, score);
       }
     });
@@ -339,12 +379,43 @@ const JIKAN = {
 
   // Anime list filtered by genre
   async byGenre(genreId, page = 1) {
-    return this.get(`/anime?genres=${genreId}&order_by=popularity&page=${page}`);
+    try {
+      // Fewer retries — the client-side fallback below is near-instant, so a
+      // slow retry loop on the dead endpoint would only delay showing results.
+      return await this.get(`/anime?genres=${genreId}&order_by=popularity&page=${page}`, 2);
+    } catch (err) {
+      // /anime 504s when Jikan's upstream (MAL) is down, but /top/anime keeps
+      // working and its items carry genre tags — so filter the top list
+      // client-side as a same-shaped fallback instead of showing an empty grid.
+      const per = 25;
+      const pages = (await Promise.allSettled([1, 2, 3].map((p) => this.topPage(p))))
+        .filter((s) => s.status === "fulfilled")
+        .map((s) => s.value);
+      const gid = Number(genreId);
+      const matched = [];
+      for (const res of pages) {
+        for (const a of res.data || []) {
+          if (a.genres && a.genres.some((g) => g.mal_id === gid) && !matched.some((m) => m.mal_id === a.mal_id)) {
+            matched.push(a);
+          }
+        }
+      }
+      const start = (page - 1) * per;
+      return {
+        data: matched.slice(start, start + per),
+        pagination: {
+          last_visible_page: Math.max(1, Math.ceil(matched.length / per)),
+          items: { total: matched.length, per_page: per, count: Math.min(per, Math.max(0, matched.length - start)) },
+        },
+      };
+    }
   },
 
-  // All anime for catalog browsing (paged)
+  // All anime for catalog browsing (paged) — served from the cached+deduped
+  // top-list fetcher so the homepage/catalog and search pool share one set of
+  // top-page requests instead of each firing their own.
   async catalog(page = 1) {
-    return this.get(`/top/anime?page=${page}`);
+    return this.topPage(page);
   },
 
   // Full details for one anime (cached — the same anime is looked up from
