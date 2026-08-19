@@ -3372,6 +3372,15 @@ footer .footer-links {
   object-fit: cover;
 }
 
+.avatar-lg.avatar-clickable {
+  cursor: pointer;
+  transition: box-shadow 0.15s ease, transform 0.15s ease;
+}
+.avatar-lg.avatar-clickable:hover {
+  transform: scale(1.04);
+  box-shadow: 0 0 0 4px var(--bg-card), 0 0 0 5px rgba(230, 70, 92, 0.9), 0 0 24px rgba(230, 70, 92, 0.5);
+}
+
 /* ---------- Edit profile (name, bio, preset avatars) ---------- */
 .edit-profile-card {
   padding: 18px;
@@ -3795,3 +3804,31 @@ footer .footer-links {
   align-items: center;
 }
 
+
+/* SEO / crawlable content blocks */
+.seo-content {
+  margin-top: 40px;
+  padding: 24px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--bg-alt, rgba(255, 255, 255, 0.03));
+}
+.seo-content h2 {
+  margin-bottom: 10px;
+}
+.seo-content p {
+  color: var(--text-dim);
+  line-height: 1.7;
+  margin-bottom: 10px;
+}
+.seo-content ul {
+  margin: 8px 0 10px 18px;
+  color: var(--text-dim);
+  line-height: 1.7;
+}
+.seo-content li {
+  margin-bottom: 6px;
+}
+.seo-content a {
+  color: var(--accent-3);
+}
