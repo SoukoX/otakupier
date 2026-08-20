@@ -14,6 +14,12 @@
   <link rel="icon" type="image/x-icon" href="../favicon.ico">
   <link rel="preconnect" href="https://api.jikan.moe">
   <link rel="preconnect" href="https://cdn.jsdelivr.net">
+  <link rel="preconnect" href="https://graphql.anilist.co">
+  <link rel="preconnect" href="https://megavid.buzz">
+  <link rel="preconnect" href="https://cp.megavid.buzz">
+  <link rel="preconnect" href="https://anixo.buzz">
+  <link rel="preconnect" href="https://anikototvapi.vercel.app">
+  <link rel="preconnect" href="https://anipub.xyz">
   <link rel="stylesheet" href="../css/style.css">
 </head>
 <body>
@@ -75,6 +81,9 @@
         renderShareRow();
         renderTrailer();
         SEO.setAnimeMeta(animeData);
+        loadNextEpisode();
+        // Warm the MAL→AniList mapping used by the AniXo embed.
+        JIKAN.anilistIdOf(animeData.mal_id).catch(() => {});
         loadCommunityRating();
         loadSavedState();
         loadReviews();
@@ -109,8 +118,8 @@
         </div>
         <div class="detail-header">
           <div class="detail-poster">
-            <img src="${c.image_url || "https://placehold.co/300x450?text=?"}"
-                 alt="${JIKAN.esc(c.title)}" onerror="this.src='https://placehold.co/300x450?text=?'">
+            <img src="${c.image_url || JIKAN.PLACEHOLDER}"
+                 alt="${JIKAN.esc(c.title)}" onerror="this.onerror=null;this.src=JIKAN.PLACEHOLDER">
           </div>
           <div>
             <h1 class="detail-title">${JIKAN.esc(c.title)}</h1>
@@ -159,39 +168,46 @@
         <div style="margin-bottom:14px;">
           <a class="btn btn-outline btn-small" href="javascript:goBack()">&larr; Back</a>
         </div>
-        <div class="detail-header">
-          <div class="detail-poster">
-            <img src="${a.images?.jpg?.large_image_url || a.images?.jpg?.image_url || ""}"
-                 alt="${JIKAN.esc(mainTitle)}" onerror="this.src='https://placehold.co/300x450?text=?'">
+        <div class="anime-hero">
+          <div class="anime-hero-bg" aria-hidden="true" style="background-image:url('${JIKAN.esc(a.images?.jpg?.large_image_url || a.images?.jpg?.image_url || "")}')"></div>
+          <div class="anime-hero-overlay" aria-hidden="true"></div>
+          <div class="anime-hero-inner">
+            <div class="detail-poster">
+              <img src="${a.images?.jpg?.large_image_url || a.images?.jpg?.image_url || JIKAN.PLACEHOLDER}"
+                   alt="${JIKAN.esc(mainTitle)}" onerror="this.onerror=null;this.src=JIKAN.PLACEHOLDER">
+            </div>
+            <div class="anime-hero-body">
+              <div class="anime-hero-kicker">${JIKAN.esc(a.type || "Anime")}${a.year ? " · " + a.year : ""}</div>
+              <h1 class="detail-title">${JIKAN.esc(mainTitle)}</h1>
+              ${jpTitle ? `<div class="detail-jtitle">${JIKAN.esc(jpTitle)}</div>` : ""}
+              <div class="detail-meta-line">
+                ${a.episodes ? `<span class="meta-item">${a.episodes} eps</span>` : ""}
+                ${a.status ? `<span class="meta-item">${JIKAN.esc(a.status)}</span>` : ""}
+                ${a.score ? `<span class="meta-score" title="MyAnimeList score">★ ${a.score.toFixed(2)}</span>` : ""}
+                <span class="meta-score" id="opScoreStat" title="OtakuPier community score">★ --</span>
+                ${a.rank ? `<span class="meta-item">Rank #${a.rank}</span>` : ""}
+              </div>
+              <div class="detail-hero-actions">
+                <button class="btn btn-primary btn-glow watch-hero-btn" id="watchNowBtn" onclick="startWatching()">▶ Watch Now</button>
+                <button class="btn btn-outline watch-hero-trailer" id="trailerBtn" onclick="scrollToTrailer()" style="display:none;">▶ Trailer</button>
+              </div>
+              <div id="nextEpSlot"></div>
+              <div class="detail-genres">${genres}</div>
+              <p class="detail-synopsis">${JIKAN.esc(synopsis)}</p>
+              <div class="share-row" id="shareRow"></div>
+              <div id="watchSlot"></div>
+              <div id="mangaLinks" style="margin-top:20px; padding-top:18px; border-top:1px solid rgba(255,255,255,0.08);"></div>
+            </div>
           </div>
-          <div>
-            <h1 class="detail-title">${JIKAN.esc(mainTitle)}</h1>
-            ${jpTitle ? `<div class="detail-jtitle">${JIKAN.esc(jpTitle)}</div>` : ""}
-            <div class="detail-stats">
-              <span class="stat" title="MyAnimeList score">Official: <strong>${a.score ? a.score.toFixed(2) : "N/A"}</strong></span>
-              <span class="stat" id="opScoreStat" title="OtakuPier community score">OtakuPier: <strong>--</strong></span>
-              <span class="stat">Rank: <strong>#${a.rank || "N/A"}</strong></span>
-              <span class="stat">Episodes: <strong>${a.episodes || "?"}</strong></span>
-              <span class="stat">Type: <strong>${a.type || "N/A"}</strong></span>
-              <span class="stat">Status: <strong>${a.status || "N/A"}</strong></span>
-            </div>
-            <div class="detail-stats">
-              <span class="stat">Studio: <strong>${JIKAN.esc(studios)}</strong></span>
-              <span class="stat">Aired: <strong>${JIKAN.esc(aired)}</strong></span>
-            </div>
-            <div class="detail-stats">
-              <span class="stat">Licensors: <strong>${JIKAN.esc(licensors)}</strong></span>
-              <span class="stat">Source: <strong>${a.source || "N/A"}</strong></span>
-              <span class="stat">Rating: <strong>${a.rating || "N/A"}</strong></span>
-              <span class="stat">Duration: <strong>${a.duration || "N/A"}</strong></span>
-            </div>
-            <p class="detail-synopsis">${JIKAN.esc(synopsis)}</p>
-            <div class="detail-genres">${genres}</div>
-            <div class="share-row" id="shareRow"></div>
-            <button class="btn btn-primary watch-hero-btn" id="watchNowBtn" onclick="startWatching()" style="margin-top:6px; margin-bottom:20px;">▶ Watch Now</button>
-            <div id="watchSlot"></div>
-            <div id="mangaLinks" style="margin-top:20px; padding-top:18px; border-top:1px solid var(--border);"></div>
-          </div>
+        </div>
+
+        <div class="detail-facts">
+          <span class="fact">Studio: <b>${JIKAN.esc(studios)}</b></span>
+          <span class="fact">Aired: <b>${JIKAN.esc(aired)}</b></span>
+          <span class="fact">Licensors: <b>${JIKAN.esc(licensors)}</b></span>
+          <span class="fact">Source: <b>${JIKAN.esc(a.source || "N/A")}</b></span>
+          <span class="fact">Rating: <b>${JIKAN.esc(a.rating || "N/A")}</b></span>
+          <span class="fact">Duration: <b>${JIKAN.esc(a.duration || "N/A")}</b></span>
         </div>
 
         <div id="rankBox"></div>
@@ -233,6 +249,42 @@
     function copyShareLink() {
       const url = SEO.BASE + "/pages/anime?id=" + encodeURIComponent(animeData.mal_id);
       navigator.clipboard?.writeText(url).then(() => showToast("Link copied!")).catch(() => showToast("Could not copy link"));
+    }
+
+    // ---------- Next episode air date (currently-airing shows) ----------
+    // Fetches AniList's nextAiringEpisode and shows a countdown-style banner
+    // ("Episode 12 airs in 2d 4h"). Hidden for finished/upcoming titles.
+    async function loadNextEpisode() {
+      const slot = document.getElementById("nextEpSlot");
+      if (!slot || !animeData) return;
+      const airing = await JIKAN.nextAiring(animeData.mal_id).catch(() => null);
+      if (!airing) return;
+      const diffMs = airing.airingAt * 1000 - Date.now();
+      if (diffMs <= 0) return;
+      const fmt = (ms) => {
+        const d = Math.floor(ms / 86400000);
+        const h = Math.floor((ms % 86400000) / 3600000);
+        const m = Math.floor((ms % 3600000) / 60000);
+        return d > 0 ? `${d}d ${h}h ${m}m` : h > 0 ? `${h}h ${m}m` : `${m}m`;
+      };
+      const dateStr = new Date(airing.airingAt * 1000).toLocaleString(undefined, {
+        weekday: "short", month: "short", day: "numeric", hour: "2-digit", minute: "2-digit",
+      });
+      const el = document.createElement("div");
+      el.className = "next-ep-banner";
+      el.innerHTML = `
+        <div class="next-ep-label">Next episode</div>
+        <div class="next-ep-text"><strong>Episode ${airing.episode}</strong> airs in <span id="nextEpCount">${fmt(diffMs)}</span></div>
+        <div class="next-ep-date">${JIKAN.esc(dateStr)}</div>`;
+      slot.appendChild(el);
+      const count = document.getElementById("nextEpCount");
+      const tick = () => {
+        const ms = airing.airingAt * 1000 - Date.now();
+        if (ms <= 0) { el.querySelector(".next-ep-text").innerHTML = "<strong>Episode " + airing.episode + "</strong> is airing now"; clearInterval(timer); return; }
+        if (count) count.textContent = fmt(ms);
+      };
+      const timer = setInterval(tick, 60000);
+      window.addEventListener("beforeunload", () => clearInterval(timer), { once: true });
     }
 
     // ---------- Seasons & related anime (sequels, movies, OVAs) ----------
@@ -285,10 +337,10 @@
         const el = document.createElement("div");
         el.className = "anime-card";
         el.dataset.malId = r.mal_id;
-        const img = r.image || "https://placehold.co/300x400?text=Loading";
+        const img = r.image || JIKAN.PLACEHOLDER;
         el.innerHTML = `<div class="poster">
             <img src="${img}" alt="${JIKAN.esc(r.name)}"
-                 loading="lazy" onerror="this.src='https://placehold.co/300x400?text=?'">
+                 loading="lazy" onerror="this.onerror=null;this.src=JIKAN.PLACEHOLDER">
           </div>
           <div class="info">
             <div class="title">${JIKAN.esc(r.name)}</div>
@@ -311,7 +363,7 @@
           const res = await JIKAN.getAnime(malId);
           const a = res.data;
           const img = el.querySelector("img");
-          if (img) img.src = a.images?.jpg?.image_url || "https://placehold.co/300x400?text=?";
+          if (img) img.src = a.images?.jpg?.image_url || JIKAN.PLACEHOLDER;
           const meta = el.querySelector(".info");
           const score = a.score ? a.score.toFixed(2) : "N/A";
           meta.insertAdjacentHTML("beforeend", `<div class="meta">
@@ -320,7 +372,7 @@
           </div>`);
         } catch (err) {
           const img = el.querySelector("img");
-          if (img) img.src = "https://placehold.co/300x400?text=?";
+          if (img) img.src = JIKAN.PLACEHOLDER;
         }
       }
     }
@@ -682,16 +734,17 @@
           if (slot) slot.scrollIntoView({ behavior: "smooth", block: "center" });
           return;
         }
-      } else if (provider.dynamic === "nineanime") {
-        showToast("Resolving 9anime source…");
-        // 9anime streams via the hosted NineAnime API (proxied HLS). Timeboxed
-        // the same way so a slow/offline API never leaves the modal hanging.
+      } else if (provider.id === "megavid") {
+        url = JIKAN.megavidUrl(animeData, ep, streamLang);
+      } else if (provider.id === "anixo") {
+        showToast("Resolving AniXo source…");
+        // AniXo needs the AniList id for this MAL id (one cached lookup).
         url = await Promise.race([
-          JIKAN.nineAnimeUrl(animeData, ep),
-          new Promise((r) => setTimeout(() => r(null), 15000)),
+          JIKAN.anixoUrl(animeData, ep, streamLang),
+          new Promise((r) => setTimeout(() => r(null), 8000)),
         ]);
         if (!url) {
-          showToast(`Couldn't resolve episode ${ep} on ${provider.name}.`);
+          showToast(`Couldn't resolve episode ${ep} on ${provider.name}. Try another provider.`);
           const slot = document.getElementById("watchSlot");
           if (slot) slot.scrollIntoView({ behavior: "smooth", block: "center" });
           return;
@@ -779,7 +832,7 @@
             </div>
           </div>
           ${frame}
-          ${provider.id === "anipub" || provider.id === "anikoto" ? `<div class="watch-lang-bar stream-lang-bar">
+          ${["anipub", "anikoto", "megavid", "anixo"].includes(provider.id) ? `<div class="watch-lang-bar stream-lang-bar">
             <span class="watch-lang-label">Audio</span>
             <button class="lang-btn${streamLang === "sub" ? " is-active" : ""}" data-lang="sub" onclick="streamSetLang('sub')">Sub</button>
             <button class="lang-btn${streamLang === "dub" ? " is-active" : ""}" data-lang="dub" onclick="streamSetLang('dub')">Dub</button>
@@ -805,7 +858,7 @@
         const hideLoad = () => { if (loading) loading.classList.add("hide"); };
         if (iframe) {
           iframe.addEventListener("load", hideLoad);
-          setTimeout(hideLoad, 12000);
+          setTimeout(hideLoad, 8000);
         }
       }
     }
@@ -830,7 +883,7 @@
               showToast("No English dub for this title on AniKoto — try switching provider.");
               return;
             }
-          } else {
+          } else if (provider?.id === "anipub") {
             const info = await JIKAN.anipubEpisodes(animeData);
             const item = info?.eps?.[Math.min(Math.max(lastStreamEpisode - 1, 0), (info?.eps?.length || 1) - 1)];
             if (item) {
@@ -899,6 +952,11 @@
       document.removeEventListener("keydown", streamEscKey);
     }
 
+    function scrollToTrailer() {
+      const slot = document.getElementById("trailerSlot");
+      if (slot) slot.scrollIntoView({ behavior: "smooth", block: "center" });
+    }
+
     function renderTrailer() {
       const slot = document.getElementById("trailerSlot");
       const t = animeData.trailer;
@@ -908,6 +966,8 @@
           <div class="trailer-wrap">
             <iframe src="https://www.youtube-nocookie.com/embed/${ytId}" allowfullscreen loading="lazy"></iframe>
           </div>`;
+        const btn = document.getElementById("trailerBtn");
+        if (btn) btn.style.display = "";
       }
     }
 
@@ -922,9 +982,9 @@
           const el = document.createElement("div");
           el.className = "char-card";
           el.innerHTML = `
-            <img src="${c.character.images?.jpg?.image_url || "https://placehold.co/200x200?text=?"}"
+            <img src="${c.character.images?.jpg?.image_url || JIKAN.PLACEHOLDER}"
                  alt="${JIKAN.esc(c.character.name)}" loading="lazy"
-                 onerror="this.src='https://placehold.co/200x200?text=?'">
+                 onerror="this.onerror=null;this.src=JIKAN.PLACEHOLDER">
             <div class="char-name">${JIKAN.esc(c.character.name)}</div>
             <div class="char-role">${c.role || ""}</div>
             ${vaName ? `<div class="char-role" style="color:var(--accent-3);">${JIKAN.esc(vaName)}</div>` : ""}`;
@@ -1015,10 +1075,8 @@
         communityRating = { avg: avg.toFixed(2), count: n };
         const stat = document.getElementById("opScoreStat");
         if (stat) {
-          const boost = Object.values(perkMap).some((p) => p.vote_power)
-            ? ` <span title="Some voters have Voting Power 2x" style="font-size:.72rem; color:#ffd54a;">⚡ weighted</span>`
-            : "";
-          stat.innerHTML = `OtakuPier: <strong style="color:var(--accent-3)">${avg.toFixed(2)}</strong> (${n} vote${n === 1 ? "" : "s"})${boost}`;
+          stat.innerHTML = `★ ${avg.toFixed(2)} (${n})`;
+          stat.title = `OtakuPier community score (${n} votes)`;
         }
       } catch (err) {
         // silently ignore; official score stays
