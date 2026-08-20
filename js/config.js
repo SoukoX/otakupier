@@ -86,12 +86,12 @@ const CONFIG = {
     // /api/stream resolves each episode to a megaplay embed URL; api.js proxies
     // those through AniPub's generic player wrapper so megaplay always receives
     // a Referer and serves its player inside an iframe ("dynamic" provider).
-    // Listed first — it is the preferred on-site provider. Ad-free player.
+    // Listed first — it is the preferred on-site provider.
     { id: "anikoto", name: "AniKoto", mode: "embed", dynamic: "anikoto",
       referrerPolicy: "no-referrer-when-downgrade",
       // Its embeds are proxied through AniPub's generic player wrapper, which
       // refuses to run inside a sandboxed frame — so sandbox is disabled.
-      sandbox: false, adfree: true, url: "", enabled: true },
+      sandbox: false, url: "", enabled: true },
 
     // AniPub — open-source, ad-free community anime catalog with a free public
     // API (https://anipub.xyz) that is CORS-open. Its embeddable episode pages
@@ -104,17 +104,7 @@ const CONFIG = {
     // embeds), hence referrerPolicy below.
     { id: "anipub", name: "AniPub", mode: "embed", sandbox: false, dynamic: "anipub",
       referrerPolicy: "no-referrer-when-downgrade",
-      url: "https://anipub.xyz/video/{anipub_ep_id}/sub", adfree: true, enabled: true },
-
-    // Megavid — embed player keyed by MAL id + episode ("dynamic" provider;
-    // URL resolved by JIKAN.megavidUrl so sub/dub variants work). Embed-only
-    // player: it refuses direct URL access, so it must live inside an iframe.
-    // Kept as an independent backend (KissKH player) for load redundancy when
-    // many users stream at once. Its player header shows a home link and some
-    // ISPs block its hosts, so it's a fallback provider rather than the default.
-    { id: "megavid", name: "Megavid", mode: "embed", dynamic: "megavid",
-      referrerPolicy: "no-referrer-when-downgrade",
-      url: "https://megavid.buzz/mal/{mal_id}/{ep_num}/{sub}", adfree: true, enabled: true },
+      url: "https://anipub.xyz/video/{anipub_ep_id}/sub", enabled: true },
 
     // AniXo — embed player keyed by AniList id + episode ("dynamic" provider;
     // URL resolved by JIKAN.anixoUrl which maps the MAL id to AniList first).
@@ -122,7 +112,7 @@ const CONFIG = {
     // refuses sandboxed iframes. Independent backend, kept for redundancy.
     { id: "anixo", name: "AniXo", mode: "embed", dynamic: "anixo",
       sandbox: false, referrerPolicy: "no-referrer-when-downgrade",
-      url: "https://anixo.buzz/embed/ani/{anilist_id}/{ep_num}/{sub}", adfree: true, enabled: true },
+      url: "https://anixo.buzz/embed/ani/{anilist_id}/{ep_num}/{sub}", enabled: true },
 
     // Direct video playback (mode "video") plays an actual MP4/HLS file
     // inline with the built-in player. Only add sources whose hosting you
