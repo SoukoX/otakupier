@@ -91,7 +91,7 @@ const CONFIG = {
       referrerPolicy: "no-referrer-when-downgrade",
       // Its embeds are proxied through AniPub's generic player wrapper, which
       // refuses to run inside a sandboxed frame — so sandbox is disabled.
-      sandbox: false, url: "", enabled: true },
+      sandbox: false, url: "", enabled: true, volumeControl: "none" },
 
     // AniPub — open-source, ad-free community anime catalog with a free public
     // API (https://anipub.xyz) that is CORS-open. Its embeddable episode pages
@@ -104,7 +104,7 @@ const CONFIG = {
     // embeds), hence referrerPolicy below.
     { id: "anipub", name: "AniPub", mode: "embed", sandbox: false, dynamic: "anipub",
       referrerPolicy: "no-referrer-when-downgrade",
-      url: "https://anipub.xyz/video/{anipub_ep_id}/sub", enabled: true },
+      url: "https://anipub.xyz/video/{anipub_ep_id}/sub", enabled: true, volumeControl: "none" },
 
     // AniXo — embed player keyed by AniList id + episode ("dynamic" provider;
     // URL resolved by JIKAN.anixoUrl which maps the MAL id to AniList first).
@@ -112,7 +112,7 @@ const CONFIG = {
     // refuses sandboxed iframes. Independent backend, kept for redundancy.
     { id: "anixo", name: "AniXo", mode: "embed", dynamic: "anixo",
       sandbox: false, referrerPolicy: "no-referrer-when-downgrade",
-      url: "https://anixo.buzz/embed/ani/{anilist_id}/{ep_num}/{sub}", enabled: true },
+      url: "https://anixo.buzz/embed/ani/{anilist_id}/{ep_num}/{sub}", enabled: true, volumeControl: "full" },
 
     // Direct video playback (mode "video") plays an actual MP4/HLS file
     // inline with the built-in player. Only add sources whose hosting you
