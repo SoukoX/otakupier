@@ -262,7 +262,7 @@
         const el = document.createElement("div");
         el.className = "admin-list-item";
         el.innerHTML = `
-          <img src="${c.image_url || "https://placehold.co/45x60?text=?"}" alt="" style="width:45px; height:60px; object-fit:cover; border-radius:6px;" onerror="this.src='https://placehold.co/45x60?text=?'">
+          <img src="${c.image_url || JIKAN.PLACEHOLDER}" alt="" style="width:45px; height:60px; object-fit:cover; border-radius:6px;" onerror="this.onerror=null;this.src=JIKAN.PLACEHOLDER">
           <div class="grow">
             <b>${JIKAN.esc(c.title)}</b>
             <div style="color:var(--text-dim); font-size:.8rem;">${JIKAN.esc(c.status || "Unknown")}${c.year ? " • " + c.year : ""}</div>
