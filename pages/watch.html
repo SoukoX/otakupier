@@ -20,7 +20,7 @@
   <link rel="preconnect" href="https://anixo.buzz">
   <link rel="preconnect" href="https://anikototvapi.vercel.app">
   <link rel="preconnect" href="https://anipub.xyz">
-  <link rel="stylesheet" href="../css/style.css?v=6">
+  <link rel="stylesheet" href="../css/style.css?v=7">
   <script src="https://anixo.buzz/embed-sdk.js" async></script>
 </head>
 <body class="watch-page">
@@ -33,9 +33,9 @@
   <footer id="siteFooter"></footer>
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <script src="../js/config.js?v=6"></script>
-  <script src="../js/api.js?v=6"></script>
-  <script src="../js/app.js?v=6"></script>
+  <script src="../js/config.js?v=7"></script>
+  <script src="../js/api.js?v=7"></script>
+  <script src="../js/app.js?v=7"></script>
   <script>
     const params = new URLSearchParams(window.location.search);
     const id = params.get("id");
@@ -113,6 +113,8 @@
       const idx = embed.findIndex((p) => p.id === providerParam);
       if (idx >= 0) activeEmbedIndex = idx;
       renderTheater();
+      initWatchVolume();
+      loadSavedState();
       playEpisode(1);
     }
 
@@ -151,6 +153,10 @@
             <div class="watch-player-bar">
               <span class="watch-player-title" id="watchPlayerTitle">On-site player</span>
               <div class="watch-player-actions">
+                <label class="watch-vol" title="Volume">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 5 6 9H2v6h4l5 4V5z"/><path d="M15.5 8.5a5 5 0 0 1 0 7"/><path d="M18.5 5.5a9 9 0 0 1 0 13"/></svg>
+                  <input type="range" id="watchVol" min="0" max="100" value="100" aria-label="Volume">
+                </label>
                 <button class="stream-nav" id="prevEpBtn" onclick="playEpisode(lastStreamEpisode - 1)" title="Previous episode (←)">‹</button>
                 <button class="stream-nav" id="nextEpBtn" onclick="playEpisode(lastStreamEpisode + 1)" title="Next episode (→)">›</button>
                 <button class="watch-hide" onclick="hideTheater()" title="Hide player">&times;</button>
@@ -177,7 +183,10 @@
                   <span class="stat">Episodes: <strong>${a.episodes || "?"}</strong></span>
                   <span class="stat">Status: <strong>${JIKAN.esc(a.status || "N/A")}</strong></span>
                 </div>
-                <a class="btn btn-outline btn-small" href="${pageHref("anime")}?id=${a.mal_id}">Details</a>
+                <div class="watch-mini-actions">
+                  <a class="btn btn-outline btn-small" href="${pageHref("anime")}?id=${a.mal_id}">Details</a>
+                  <span id="watchSaveSlot"></span>
+                </div>
               </div>
             </div>
             ${embed.length ? `<div class="watch-side-title">Provider</div>
@@ -349,9 +358,34 @@
         iframe.setAttribute("sandbox", "allow-scripts allow-same-origin");
       }
       iframe.allowFullscreen = true;
-      iframe.addEventListener("load", hideLoad);
+      const onLoad = () => {
+        hideLoad();
+        iframe.dataset.loaded = "1";
+        // Persisted volume -> AniXo player (others ignore the message).
+        const vol = Math.max(0, Math.min(1, Number(localStorage.getItem("otk.playerVolume") ?? 1)));
+        for (const t of [0, 500, 1500, 3000]) {
+          setTimeout(() => {
+            try { iframe.contentWindow && iframe.contentWindow.postMessage({ type: "aniko:setVolume", volume: vol }, "*"); } catch (e) {}
+          }, t);
+        }
+      };
+      iframe.addEventListener("load", onLoad);
       frame.replaceChildren(loading, iframe);
       setTimeout(hideLoad, 8000); // safety net for pages that never fire load
+      // If the provider host is unreachable (no load event), auto-fall back to
+      // the next provider once instead of leaving a dead player on screen.
+      let fallbackDone = false;
+      setTimeout(() => {
+        if (fallbackDone || iframe.dataset.loaded) return;
+        fallbackDone = true;
+        const idx = activeEmbedIndex;
+        const nxt = activeEmbedIndex + 1;
+        const embed = getStreamingProviders().filter((p) => p.mode === "embed");
+        if (nxt < embed.length) {
+          showToast(`${provider.name} is unreachable — trying ${embed[nxt].name}…`);
+          pickEmbedProvider(nxt);
+        }
+      }, 12000);
     }
 
     // Switch the AniPub player between subtitled and English-dubbed audio and
@@ -649,6 +683,83 @@
     }
 
     document.addEventListener("DOMContentLoaded", load);
+
+    // ---------- Persisted volume (pushed into the AniXo player) ----------
+    function initWatchVolume() {
+      const vol = document.getElementById("watchVol");
+      if (!vol) return;
+      const stored = Math.max(0, Math.min(1, Number(localStorage.getItem("otk.playerVolume") ?? 1)));
+      vol.value = Math.round(stored * 100);
+      vol.addEventListener("input", () => {
+        const v = Number(vol.value) / 100;
+        localStorage.setItem("otk.playerVolume", String(v));
+        const frame = document.querySelector("#watchFrame iframe");
+        if (frame && frame.contentWindow) {
+          try {
+            frame.contentWindow.postMessage({ type: "aniko:setVolume", volume: v }, "*");
+          } catch (e) {}
+        }
+      });
+    }
+
+    // ---------- Save to My List ----------
+    let isSaved = false;
+    async function loadSavedState() {
+      const slot = document.getElementById("watchSaveSlot");
+      if (!slot) return;
+      if (!isLoggedIn()) {
+        slot.innerHTML = `<button class="btn btn-outline btn-small" onclick="location.href='${pageHref("login")}'">Save</button>`;
+        return;
+      }
+      try {
+        const { data } = await supabase
+          .from("saved_anime")
+          .select("id")
+          .eq("anime_mal_id", Number(id))
+          .eq("user_id", currentUser.id)
+          .maybeSingle();
+        isSaved = !!data;
+        renderSaveButton(slot);
+      } catch (err) {
+        slot.innerHTML = "";
+      }
+    }
+
+    function renderSaveButton(slot) {
+      slot.innerHTML = isSaved
+        ? `<button class="btn btn-outline btn-small" onclick="unsaveAnime()">✓ Saved</button>`
+        : `<button class="btn btn-primary btn-small" onclick="saveAnime()">＋ Save</button>`;
+    }
+
+    async function saveAnime() {
+      if (!isLoggedIn()) return;
+      try {
+        await dbInsert("saved_anime", {
+          user_id: currentUser.id,
+          anime_mal_id: Number(id),
+          anime_title: JIKAN.title(animeData),
+          anime_image: animeData.images?.jpg?.image_url,
+        });
+        isSaved = true;
+        awardXp(5); // +5 XP for saving an anime
+        awardRp("save"); // +3 RP
+        showToast("Saved to My List! +5 XP");
+        renderSaveButton(document.getElementById("watchSaveSlot"));
+      } catch (err) {
+        showToast("Could not save: " + err.message);
+      }
+    }
+
+    async function unsaveAnime() {
+      try {
+        await supabase.from("saved_anime").delete().eq("anime_mal_id", Number(id)).eq("user_id", currentUser.id);
+        isSaved = false;
+        showToast("Removed from My List");
+        renderSaveButton(document.getElementById("watchSaveSlot"));
+      } catch (err) {
+        showToast("Could not remove");
+      }
+    }
   </script>
 </body>
 </html>
