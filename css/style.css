@@ -928,6 +928,19 @@ img {
   box-shadow: 0 0 0 3px rgba(56, 214, 181, 0.18);
   flex: 0 0 auto;
 }
+.adfree-tag {
+  display: inline-block;
+  margin-left: 5px;
+  padding: 1px 5px;
+  border-radius: 999px;
+  font-size: 0.62rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  color: #063d2e;
+  background: #38d6b5;
+  vertical-align: middle;
+}
+.provider-chip.is-active .adfree-tag { background: #fff; color: var(--bg); }
 
 /* ---------- Streaming player modal ---------- */
 .stream-modal-overlay {
