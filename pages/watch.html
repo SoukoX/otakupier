@@ -20,7 +20,7 @@
   <link rel="preconnect" href="https://anixo.buzz">
   <link rel="preconnect" href="https://anikototvapi.vercel.app">
   <link rel="preconnect" href="https://anipub.xyz">
-  <link rel="stylesheet" href="../css/style.css?v=16">
+  <link rel="stylesheet" href="../css/style.css?v=17">
   <script src="https://anixo.buzz/embed-sdk.js" async></script>
 </head>
 <body class="watch-page">
@@ -33,9 +33,9 @@
   <footer id="siteFooter"></footer>
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <script src="../js/config.js?v=16"></script>
-  <script src="../js/api.js?v=16"></script>
-  <script src="../js/app.js?v=16"></script>
+  <script src="../js/config.js?v=17"></script>
+  <script src="../js/api.js?v=17"></script>
+  <script src="../js/app.js?v=17"></script>
   <script>
     const params = new URLSearchParams(window.location.search);
     const id = params.get("id");
@@ -231,20 +231,48 @@
       if (theater) theater.innerHTML = "";
     }
 
-    // Fullscreen the whole player (bar + frame). On portrait phones the frame
-    // is rotated to landscape by CSS so the video fills the screen instead of
-    // shrinking into a tiny vertical letterbox. Keyboard: F toggles it.
+    // Fullscreen the whole player (bar + frame). On portrait phones the screen
+    // is locked to landscape and the frame is rotated by CSS so the video
+    // fills the screen instead of shrinking into a tiny vertical letterbox.
+    // Keyboard: F toggles it.
+    function lockLandscape() {
+      try {
+        if (screen.orientation && screen.orientation.lock) {
+          screen.orientation.lock("landscape").catch(() => {});
+        }
+      } catch (e) {}
+    }
+    function unlockOrientation() {
+      try {
+        if (screen.orientation && screen.orientation.unlock) screen.orientation.unlock();
+      } catch (e) {}
+    }
     function toggleWatchFullscreen() {
       const player = document.querySelector(".watch-player");
       if (!player) return;
       const isFs = document.fullscreenElement || document.webkitFullscreenElement;
       if (isFs) {
+        unlockOrientation();
         (document.exitFullscreen || document.webkitExitFullscreen).call(document);
       } else {
         const req = player.requestFullscreen || player.webkitRequestFullscreen;
         if (req) req.call(player);
       }
     }
+    document.addEventListener("fullscreenchange", () => {
+      if (document.fullscreenElement || document.webkitFullscreenElement) {
+        lockLandscape();
+      } else {
+        unlockOrientation();
+      }
+    });
+    document.addEventListener("webkitfullscreenchange", () => {
+      if (document.fullscreenElement || document.webkitFullscreenElement) {
+        lockLandscape();
+      } else {
+        unlockOrientation();
+      }
+    });
     document.addEventListener("keydown", (e) => {
       if (e.key.toLowerCase() === "f" && e.target && /^(input|textarea)$/i.test(e.target.tagName)) return;
       if (e.key.toLowerCase() === "f" && document.getElementById("watchTheater")?.innerHTML) {
