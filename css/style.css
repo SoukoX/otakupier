@@ -1254,6 +1254,33 @@ img {
   .watch-vol-hint { display: none; }
 }
 
+/* Mobile fullscreen: rotate the player to landscape so the video fills the
+   whole screen instead of shrinking into a tiny vertical letterbox. Desktop
+   is untouched (it never matches the portrait orientation query). */
+@media (orientation: portrait) and (max-width: 720px) {
+  .watch-player:fullscreen,
+  .watch-player:-webkit-full-screen,
+  #watchFrame iframe:fullscreen,
+  #watchFrame iframe:-webkit-full-screen {
+    width: 100vh !important;
+    height: 100vw !important;
+    transform: rotate(90deg);
+    transform-origin: center;
+    border-radius: 0;
+  }
+  .watch-player:fullscreen .watch-frame,
+  .watch-player:-webkit-full-screen .watch-frame {
+    aspect-ratio: auto;
+    flex: 1 1 auto;
+    height: auto;
+    border-radius: 0;
+  }
+  .watch-player:fullscreen .watch-frame iframe,
+  .watch-player:-webkit-full-screen .watch-frame iframe {
+    animation: none;
+  }
+}
+
 @media (max-width: 720px) {
   .watch-vol input[type="range"] { width: 52px; }
   .watch-vol { gap: 3px; }
