@@ -287,14 +287,33 @@ function pathPrefix() {
   return window.location.pathname.includes("/pages/") ? "../" : "";
 }
 
-// Reliable "back" navigation. Prefer the referring page within this site
-// (deterministic, identical in Chrome & Firefox), then the real previous
-// history entry, and only fall back to the home page when there is nowhere
-// else to return to.
+// Track the previous page (sessionStorage survives full page loads, unlike
+// relying on history.length which Chrome reports differently). Runs on every
+// page load so "Back" always knows the page we actually came from.
+function trackNav() {
+  try {
+    const cur = location.href;
+    const prev = sessionStorage.getItem("otk_cur");
+    if (prev) sessionStorage.setItem("otk_prev", prev);
+    sessionStorage.setItem("otk_cur", cur);
+  } catch (e) {}
+}
+trackNav();
+
+// Reliable "back" navigation. Prefer the tracked previous page / referring
+// page within this site (deterministic, identical in Chrome & Firefox), but
+// never bounce back onto another player page; then the real previous history
+// entry, and finally fall back to the home page.
 function goBack() {
+  const cands = [];
+  const prev = sessionStorage.getItem("otk_prev") || "";
   const ref = document.referrer || "";
-  if (ref && ref.startsWith(location.origin) && ref !== location.href) {
-    location.href = ref;
+  if (prev && prev.startsWith(location.origin)) cands.push(prev);
+  if (ref && ref.startsWith(location.origin)) cands.push(ref);
+  for (const c of cands) {
+    if (c === location.href) continue;
+    if (/\/pages\/watch(\.html)?([?#]|$)/.test(c)) continue; // never reload the player
+    location.href = c;
     return;
   }
   if (window.history && window.history.length > 1) {
