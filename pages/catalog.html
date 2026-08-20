@@ -15,7 +15,7 @@
   <link rel="preconnect" href="https://api.jikan.moe">
   <link rel="preconnect" href="https://graphql.anilist.co">
   <link rel="preconnect" href="https://cdn.jsdelivr.net">
-  <link rel="stylesheet" href="../css/style.css?v=11">
+  <link rel="stylesheet" href="../css/style.css?v=12">
 </head>
 <body>
   <nav class="navbar" id="navbar"></nav>
@@ -52,8 +52,8 @@
           <h2>Trending Now</h2>
         </div>
         <div class="sc-row-wrap">
-          <button class="sc-row-btn prev" aria-label="Scroll left">&lsaquo;</button>
-          <button class="sc-row-btn next" aria-label="Scroll right">&rsaquo;</button>
+          <button class="sc-row-btn prev" aria-label="Scroll left"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg></button>
+          <button class="sc-row-btn next" aria-label="Scroll right"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6l6 6-6 6"/></svg></button>
           <div class="scroll-row" id="rowTrending"><div class="skeleton-row"></div></div>
         </div>
       </div>
@@ -63,8 +63,8 @@
           <h2>Recently Updated</h2>
         </div>
         <div class="sc-row-wrap">
-          <button class="sc-row-btn prev" aria-label="Scroll left">&lsaquo;</button>
-          <button class="sc-row-btn next" aria-label="Scroll right">&rsaquo;</button>
+          <button class="sc-row-btn prev" aria-label="Scroll left"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg></button>
+          <button class="sc-row-btn next" aria-label="Scroll right"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6l6 6-6 6"/></svg></button>
           <div class="scroll-row" id="rowUpdated"><div class="skeleton-row"></div></div>
         </div>
       </div>
@@ -95,9 +95,9 @@
   <footer id="siteFooter"></footer>
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <script src="../js/config.js?v=11"></script>
-  <script src="../js/api.js?v=11"></script>
-  <script src="../js/app.js?v=11"></script>
+  <script src="../js/config.js?v=12"></script>
+  <script src="../js/api.js?v=12"></script>
+  <script src="../js/app.js?v=12"></script>
   <script>
     const params = new URLSearchParams(window.location.search);
     let state = {
