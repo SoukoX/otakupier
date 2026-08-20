@@ -20,7 +20,7 @@
   <link rel="preconnect" href="https://anixo.buzz">
   <link rel="preconnect" href="https://anikototvapi.vercel.app">
   <link rel="preconnect" href="https://anipub.xyz">
-  <link rel="stylesheet" href="../css/style.css?v=12">
+  <link rel="stylesheet" href="../css/style.css?v=13">
   <script src="https://anixo.buzz/embed-sdk.js" async></script>
 </head>
 <body class="watch-page">
@@ -33,9 +33,9 @@
   <footer id="siteFooter"></footer>
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <script src="../js/config.js?v=12"></script>
-  <script src="../js/api.js?v=12"></script>
-  <script src="../js/app.js?v=12"></script>
+  <script src="../js/config.js?v=13"></script>
+  <script src="../js/api.js?v=13"></script>
+  <script src="../js/app.js?v=13"></script>
   <script>
     const params = new URLSearchParams(window.location.search);
     const id = params.get("id");
@@ -100,7 +100,7 @@
             ${a.title_japanese ? `<div class="detail-jtitle">${JIKAN.esc(a.title_japanese)}</div>` : ""}
           </div>
           <div class="watch-top-actions">
-            <a class="btn btn-outline btn-small" href="${pageHref("anime")}?id=${a.mal_id}">Open in catalog</a>
+            <a class="btn btn-outline btn-small" href="${pageHref("catalog")}?q=${encodeURIComponent(JIKAN.title(a))}">Open in catalog</a>
             <button class="btn btn-outline btn-small" onclick="goBack()">&larr; Back</button>
           </div>
         </div>
