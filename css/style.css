@@ -928,19 +928,6 @@ img {
   box-shadow: 0 0 0 3px rgba(56, 214, 181, 0.18);
   flex: 0 0 auto;
 }
-.adfree-tag {
-  display: inline-block;
-  margin-left: 5px;
-  padding: 1px 5px;
-  border-radius: 999px;
-  font-size: 0.62rem;
-  font-weight: 700;
-  letter-spacing: 0.04em;
-  color: #063d2e;
-  background: #38d6b5;
-  vertical-align: middle;
-}
-.provider-chip.is-active .adfree-tag { background: #fff; color: var(--bg); }
 
 /* ---------- Streaming player modal ---------- */
 .stream-modal-overlay {
@@ -2288,8 +2275,6 @@ section {
   border: 1px solid rgba(255, 255, 255, 0.18);
   background: rgba(10, 11, 22, 0.72);
   color: #fff;
-  font-size: 1.5rem;
-  line-height: 1;
   cursor: pointer;
   display: grid;
   place-items: center;
@@ -2297,6 +2282,8 @@ section {
   box-shadow: 0 4px 14px rgba(0, 0, 0, 0.35);
   transition: opacity 0.2s, background 0.2s, transform 0.2s, box-shadow 0.2s, border-color 0.2s;
 }
+
+.sc-row-btn svg { width: 18px; height: 18px; display: block; }
 
 .sc-row-btn.prev { left: -8px; }
 .sc-row-btn.next { right: -8px; }
@@ -2550,7 +2537,6 @@ section {
   border: 1px solid var(--border);
   background: var(--bg-card);
   color: var(--text);
-  font-size: 1.1rem;
   cursor: pointer;
   display: flex;
   align-items: center;
@@ -2558,6 +2544,7 @@ section {
   opacity: 0;
   transition: opacity 0.2s, background 0.2s, border-color 0.2s;
 }
+.carousel-btn svg { width: 18px; height: 18px; display: block; }
 
 .carousel-btn:hover {
   background: var(--bg-hover);
