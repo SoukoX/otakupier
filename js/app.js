@@ -287,34 +287,44 @@ function pathPrefix() {
   return window.location.pathname.includes("/pages/") ? "../" : "";
 }
 
-// Track the previous page (sessionStorage survives full page loads, unlike
-// relying on history.length which Chrome reports differently). Runs on every
-// page load so "Back" always knows the page we actually came from.
+// Track every visited NON-watch page in a sessionStorage stack so "Back"
+// always lands on the last real page. Watch pages are never recorded — they
+// are just players, so Back must skip them whether you're ON the player or
+// landed on a page right after leaving it (watch → anime → Back must reach
+// catalog, not bounce back into the player). sessionStorage survives full
+// page loads, unlike history.length which Chrome reports differently.
 function trackNav() {
   try {
-    const cur = location.href;
-    const prev = sessionStorage.getItem("otk_cur");
-    if (prev) sessionStorage.setItem("otk_prev", prev);
-    sessionStorage.setItem("otk_cur", cur);
+    const cur = location.href.split("#")[0];
+    if (/\/pages\/watch(\.html)?([?#]|$)/.test(cur)) return; // don't record players
+    let stack = [];
+    try { stack = JSON.parse(sessionStorage.getItem("otk_stack") || "[]"); } catch (e) {}
+    if (!Array.isArray(stack)) stack = [];
+    if (stack[stack.length - 1] !== cur) {
+      stack.push(cur);
+      if (stack.length > 40) stack = stack.slice(-40);
+      sessionStorage.setItem("otk_stack", JSON.stringify(stack));
+    }
   } catch (e) {}
 }
 trackNav();
 
-// Reliable "back" navigation. Prefer the tracked previous page / referring
-// page within this site (deterministic, identical in Chrome & Firefox), but
-// never bounce back onto another player page; then the real previous history
-// entry, and finally fall back to the home page.
+// Reliable "back" navigation. The stack holds only non-watch pages, so Back
+// skips the player whether it's the current page or an entry in between.
+// Falls back to the real previous history entry, then to the home page.
 function goBack() {
-  const cands = [];
-  const prev = sessionStorage.getItem("otk_prev") || "";
-  const ref = document.referrer || "";
-  if (prev && prev.startsWith(location.origin)) cands.push(prev);
-  if (ref && ref.startsWith(location.origin)) cands.push(ref);
-  for (const c of cands) {
-    if (c === location.href) continue;
-    if (/\/pages\/watch(\.html)?([?#]|$)/.test(c)) continue; // never reload the player
-    location.href = c;
-    return;
+  let stack = [];
+  try { stack = JSON.parse(sessionStorage.getItem("otk_stack") || "[]"); } catch (e) {}
+  if (!Array.isArray(stack)) stack = [];
+  const onWatch = /\/pages\/watch(\.html)?([?#]|$)/.test(location.href.split("#")[0]);
+  if (stack.length) {
+    if (!onWatch) stack.pop(); // leave the current non-watch page
+    const dest = stack[stack.length - 1];
+    sessionStorage.setItem("otk_stack", JSON.stringify(stack));
+    if (dest && dest !== location.href && dest.startsWith(location.origin)) {
+      location.href = dest;
+      return;
+    }
   }
   if (window.history && window.history.length > 1) {
     window.history.back();
