@@ -327,10 +327,10 @@
           : "";
       }
       return `<div class="cat-hero-slide${active ? " active" : ""}" data-i="${a.mal_id}">
-        <div class="cat-hero-bg"${active ? ` style="background-image:${bgLayers}"` : ""}></div>
+        <div class="cat-hero-bg" data-src="${JIKAN.esc(bgLayers)}"${active ? ` style="background-image:${bgLayers}"` : ""}></div>
         <div class="cat-hero-overlay"></div>
         <div class="cat-hero-content">
-          <div class="cat-hero-cover"><img${active ? ` src="${JIKAN.esc(img)}"` : ` src="${JIKAN.PLACEHOLDER}"`} alt="${JIKAN.esc(title)}" onerror="this.onerror=null;this.src=JIKAN.PLACEHOLDER"></div>
+          <div class="cat-hero-cover"><img data-src="${JIKAN.esc(img)}"${active ? ` src="${JIKAN.esc(img)}"` : ` src="${JIKAN.PLACEHOLDER}"`} alt="${JIKAN.esc(title)}" onerror="this.onerror=null;this.src=JIKAN.PLACEHOLDER"></div>
           <div class="cat-hero-info">
             <span class="cat-hero-badge">Now Airing</span>
             <h2 class="cat-hero-title">${JIKAN.esc(title)}</h2>
@@ -358,21 +358,16 @@
           const on = k === idx;
           s.classList.toggle("active", on);
           if (on) {
+            // Hydrate the slide's backdrop + cover lazily on first activation
+            // (only the initial slide ships with its media preloaded).
             const bg = s.querySelector(".cat-hero-bg");
-            const bgUrl = bg.dataset.src;
-            if (bgUrl && !bg.style.backgroundImage) bg.style.backgroundImage = `url('${bgUrl}')`;
+            if (bg && bg.dataset.src && !bg.style.backgroundImage) bg.style.backgroundImage = bg.dataset.src;
             const img = s.querySelector("img");
-            if (img && !img.getAttribute("src")) img.src = img.dataset.src;
+            if (img && img.dataset.src && img.src !== img.dataset.src) img.src = img.dataset.src;
           }
         });
         dotsEl.querySelectorAll(".cat-hero-dot").forEach((d, k) => d.classList.toggle("active", k === idx));
       };
-
-      // Pre-bake slide media URLs so the track can lazily hydrate them.
-      track.querySelectorAll(".cat-hero-slide").forEach((s) => {
-        const bg = s.querySelector(".cat-hero-bg");
-        if (bg) bg.dataset.src = bg.style.backgroundImage ? "" : null;
-      });
 
       const start = () => { clearInterval(timer); if (!document.hidden) timer = setInterval(() => show(idx + 1), 5000); };
       const stop = () => clearInterval(timer);
