@@ -41,7 +41,9 @@
       <button class="cat-hero-arrow prev" id="heroPrev" aria-label="Previous slide">&lsaquo;</button>
       <button class="cat-hero-arrow next" id="heroNext" aria-label="Next slide">&rsaquo;</button>
       <div class="cat-hero-dots" id="heroDots"></div>
+      <button class="cat-hero-collapse" id="heroCollapse" aria-label="Hide highlights" title="Hide highlights">&ndash;</button>
     </section>
+    <button class="cat-hero-restore" id="heroRestore" hidden>Show highlights</button>
 
     <!-- Streaming-style rows (shown in default browse state) -->
     <section class="cat-rows" id="catRows">
@@ -369,8 +371,37 @@
         dotsEl.querySelectorAll(".cat-hero-dot").forEach((d, k) => d.classList.toggle("active", k === idx));
       };
 
-      const start = () => { clearInterval(timer); if (!document.hidden) timer = setInterval(() => show(idx + 1), 5000); };
+      const start = () => { clearInterval(timer); if (!document.hidden && !collapsed) timer = setInterval(() => show(idx + 1), 5000); };
       const stop = () => clearInterval(timer);
+
+      const hero = document.getElementById("catHero");
+      const collapseBtn = document.getElementById("heroCollapse");
+      const restoreBtn = document.getElementById("heroRestore");
+      let collapsed = localStorage.getItem("otk.catHeroCollapsed") === "1";
+      const applyCollapsed = () => {
+        hero.classList.toggle("collapsed", collapsed);
+        restoreBtn.hidden = !collapsed;
+        if (collapsed) {
+          hero.style.height = "0px";
+          hero.style.minHeight = "0px";
+          stop();
+        } else {
+          hero.style.height = "";
+          hero.style.minHeight = "";
+          start();
+        }
+      };
+      collapseBtn.addEventListener("click", () => {
+        collapsed = true;
+        localStorage.setItem("otk.catHeroCollapsed", "1");
+        applyCollapsed();
+      });
+      restoreBtn.addEventListener("click", () => {
+        collapsed = false;
+        localStorage.setItem("otk.catHeroCollapsed", "0");
+        applyCollapsed();
+      });
+      applyCollapsed();
 
       document.getElementById("heroPrev").addEventListener("click", () => { show(idx - 1); start(); });
       document.getElementById("heroNext").addEventListener("click", () => { show(idx + 1); start(); });
@@ -378,7 +409,6 @@
         const b = e.target.closest(".cat-hero-dot");
         if (b) { show(Number(b.dataset.i)); start(); }
       });
-      const hero = document.getElementById("catHero");
       hero.addEventListener("mouseenter", stop);
       hero.addEventListener("mouseleave", start);
       document.addEventListener("visibilitychange", () => { if (document.hidden) stop(); else start(); });
