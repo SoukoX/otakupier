@@ -20,7 +20,7 @@
   <link rel="preconnect" href="https://anixo.buzz">
   <link rel="preconnect" href="https://anikototvapi.vercel.app">
   <link rel="preconnect" href="https://anipub.xyz">
-  <link rel="stylesheet" href="../css/style.css?v=11">
+  <link rel="stylesheet" href="../css/style.css?v=12">
   <script src="https://anixo.buzz/embed-sdk.js" async></script>
 </head>
 <body class="watch-page">
@@ -33,9 +33,9 @@
   <footer id="siteFooter"></footer>
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <script src="../js/config.js?v=11"></script>
-  <script src="../js/api.js?v=11"></script>
-  <script src="../js/app.js?v=11"></script>
+  <script src="../js/config.js?v=12"></script>
+  <script src="../js/api.js?v=12"></script>
+  <script src="../js/app.js?v=12"></script>
   <script>
     const params = new URLSearchParams(window.location.search);
     const id = params.get("id");
@@ -140,8 +140,8 @@
       const embed = getStreamingProviders().filter((p) => p.mode === "embed");
       const provChips = embed.map((p, i) =>
 `<button class="ep-chip provider-chip${i === activeEmbedIndex ? " is-active" : ""}" data-eprov="${i}" onclick="pickEmbedProvider(${i})"
-            title="${JIKAN.esc(p.name)} — streams on this site${p.adfree ? " (ad-free)" : ""}">
-            <span class="provider-chip-name">${JIKAN.esc(p.name)}${p.adfree ? ` <span class="adfree-tag">no ads</span>` : ""}</span>
+            title="${JIKAN.esc(p.name)} — streams on this site">
+            <span class="provider-chip-name">${JIKAN.esc(p.name)}</span>
             <span class="mode-dot" title="Streams on this site"></span>
           </button>`
       ).join("");
