@@ -12,12 +12,6 @@ const CONFIG = {
   // (MAL upstream issues). Same MAL ids (idMal), CORS-open, huge coverage.
   ANILIST_BASE: "https://graphql.anilist.co",
 
-  // 9anime API (NineAnimeClient demo server, https://github.com/.../NineAnime).
-  // Node-only, so it CANNOT run on static GitHub Pages — it must be hosted
-  // separately (Railway/Render/Vercel). Set this to your deployed base URL to
-  // enable on-site HLS streaming from 9anime. Leave "" to keep it disabled.
-  NINEANIME_API_BASE: "",
-
   // CAPTCHA (bot protection) for login/signup forms.
   // Provider: "turnstile" (Cloudflare) or "hcaptcha".
   // CAPTCHA_SITE_KEY is the PUBLIC site key from your provider dashboard.
@@ -112,13 +106,20 @@ const CONFIG = {
       referrerPolicy: "no-referrer-when-downgrade",
       url: "https://anipub.xyz/video/{anipub_ep_id}/sub", enabled: true },
 
-    // 9anime via the hosted NineAnimeClient API ("dynamic" provider — the
-    // URL is resolved by JIKAN.nineAnimeUrl). Plays HLS through the on-site
-    // <video> player (mode "video"). api.js hides this provider until
-    // CONFIG.NINEANIME_API_BASE is set (requires the NineAnime demo server
-    // deployed separately — it can't run on static GitHub Pages).
-    { id: "nineanime", name: "9anime", mode: "video", dynamic: "nineanime",
-      enabled: true, url: "" },
+    // Megavid — embed player keyed by MAL id + episode ("dynamic" provider;
+    // URL resolved by JIKAN.megavidUrl so sub/dub variants work). Embed-only
+    // player: it refuses direct URL access, so it must live inside an iframe
+    // with scripts + same-origin allowed (matches the proven AniCult embed).
+    { id: "megavid", name: "Megavid", mode: "embed", dynamic: "megavid",
+      referrerPolicy: "no-referrer-when-downgrade",
+      url: "https://megavid.buzz/mal/{mal_id}/{ep_num}/{sub}", enabled: true },
+
+    // AniXo — embed player keyed by AniList id + episode ("dynamic" provider;
+    // URL resolved by JIKAN.anixoUrl which maps the MAL id to AniList first).
+    // Plays fine sandboxed, so no sandbox override is needed.
+    { id: "anixo", name: "AniXo", mode: "embed", dynamic: "anixo",
+      referrerPolicy: "no-referrer-when-downgrade",
+      url: "https://anixo.buzz/embed/ani/{anilist_id}/{ep_num}/{sub}", enabled: true },
 
     // Direct video playback (mode "video") plays an actual MP4/HLS file
     // inline with the built-in player. Only add sources whose hosting you
