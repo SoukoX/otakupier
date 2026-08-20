@@ -20,7 +20,7 @@
   <link rel="preconnect" href="https://anixo.buzz">
   <link rel="preconnect" href="https://anikototvapi.vercel.app">
   <link rel="preconnect" href="https://anipub.xyz">
-  <link rel="stylesheet" href="../css/style.css?v=11">
+  <link rel="stylesheet" href="../css/style.css?v=12">
   <script src="https://anixo.buzz/embed-sdk.js" async></script>
 </head>
 <body>
@@ -34,10 +34,10 @@
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="https://cdn.jsdelivr.net/npm/hls.js@1/dist/hls.min.js"></script>
-  <script src="../js/config.js?v=11"></script>
-  <script src="../js/seo.js?v=11" defer></script>
-  <script src="../js/api.js?v=11"></script>
-  <script src="../js/app.js?v=11"></script>
+  <script src="../js/config.js?v=12"></script>
+  <script src="../js/seo.js?v=12" defer></script>
+  <script src="../js/api.js?v=12"></script>
+  <script src="../js/app.js?v=12"></script>
   <script>
     const id = new URLSearchParams(window.location.search).get("id");
     let animeData = null;
@@ -115,7 +115,7 @@
       };
       main.innerHTML = `
         <div style="margin-bottom:14px;">
-          <a class="btn btn-outline btn-small" href="javascript:goBack()">&larr; Back</a>
+          <a class="btn btn-outline btn-small" href="#" onclick="goBack();return false;">&larr; Back</a>
         </div>
         <div class="detail-header">
           <div class="detail-poster">
@@ -167,7 +167,7 @@
 
       document.getElementById("main").innerHTML = `
         <div style="margin-bottom:14px;">
-          <a class="btn btn-outline btn-small" href="javascript:goBack()">&larr; Back</a>
+          <a class="btn btn-outline btn-small" href="#" onclick="goBack();return false;">&larr; Back</a>
         </div>
         <div class="anime-hero">
           <div class="anime-hero-bg" aria-hidden="true" style="background-image:url('${JIKAN.esc(a.images?.jpg?.large_image_url || a.images?.jpg?.image_url || "")}')"></div>
