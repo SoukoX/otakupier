@@ -15,7 +15,7 @@
   <link rel="preconnect" href="https://api.jikan.moe">
   <link rel="preconnect" href="https://graphql.anilist.co">
   <link rel="preconnect" href="https://cdn.jsdelivr.net">
-  <link rel="stylesheet" href="../css/style.css?v=8">
+  <link rel="stylesheet" href="../css/style.css?v=10">
 </head>
 <body>
   <nav class="navbar" id="navbar"></nav>
@@ -95,9 +95,9 @@
   <footer id="siteFooter"></footer>
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <script src="../js/config.js?v=8"></script>
-  <script src="../js/api.js?v=8"></script>
-  <script src="../js/app.js?v=8"></script>
+  <script src="../js/config.js?v=10"></script>
+  <script src="../js/api.js?v=10"></script>
+  <script src="../js/app.js?v=10"></script>
   <script>
     const params = new URLSearchParams(window.location.search);
     let state = {
@@ -438,6 +438,7 @@
         fetcher(1).then((res) => {
           row.innerHTML = "";
           (res?.data || []).slice(0, 20).forEach((a) => row.appendChild(JIKAN.streamCard(a)));
+          row.dispatchEvent(new Event("scroll"));
         }).catch(() => { row.innerHTML = `<div class="empty-state">Could not load.</div>`; });
       };
       loadRow("rowTrending", () => JIKAN.aniBrowse({ sort: ["TRENDING_DESC"] }));
