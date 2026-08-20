@@ -108,20 +108,21 @@ const CONFIG = {
 
     // Megavid — embed player keyed by MAL id + episode ("dynamic" provider;
     // URL resolved by JIKAN.megavidUrl so sub/dub variants work). Embed-only
-    // player: it refuses direct URL access, so it must live inside an iframe
-    // with scripts + same-origin allowed (matches the proven AniCult embed).
+    // player: it refuses direct URL access, so it must live inside an iframe.
+    // Disabled by default: its player header shows a "home" link and the host
+    // is often blocked by ISPs; anikoto/anipub cover the same titles.
     { id: "megavid", name: "Megavid", mode: "embed", dynamic: "megavid",
       referrerPolicy: "no-referrer-when-downgrade",
-      url: "https://megavid.buzz/mal/{mal_id}/{ep_num}/{sub}", enabled: true },
+      url: "https://megavid.buzz/mal/{mal_id}/{ep_num}/{sub}", enabled: false },
 
     // AniXo — embed player keyed by AniList id + episode ("dynamic" provider;
     // URL resolved by JIKAN.anixoUrl which maps the MAL id to AniList first).
-    // AniXo verifies embeds through its official embed-sdk.js (loaded on the
-    // watch/anime pages) and REFUSES sandboxed iframes — so sandbox must be
-    // disabled here.
+    // Requires the official embed-sdk.js loaded on the watch/anime pages and
+    // refuses sandboxed iframes. Disabled by default: its custom player UI is
+    // inconsistent with the rest of the site; anikoto/anipub are preferred.
     { id: "anixo", name: "AniXo", mode: "embed", dynamic: "anixo",
       sandbox: false, referrerPolicy: "no-referrer-when-downgrade",
-      url: "https://anixo.buzz/embed/ani/{anilist_id}/{ep_num}/{sub}", enabled: true },
+      url: "https://anixo.buzz/embed/ani/{anilist_id}/{ep_num}/{sub}", enabled: false },
 
     // Direct video playback (mode "video") plays an actual MP4/HLS file
     // inline with the built-in player. Only add sources whose hosting you
