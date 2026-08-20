@@ -1238,6 +1238,22 @@ img {
   height: 4px;
 }
 
+.watch-vol-hint {
+  font-size: 11px;
+  color: var(--text-dim);
+  white-space: nowrap;
+  display: inline-block;
+}
+
+.watch-vol input[type="range"].is-disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
+@media (max-width: 960px) {
+  .watch-vol-hint { display: none; }
+}
+
 @media (max-width: 720px) {
   .watch-vol input[type="range"] { width: 52px; }
   .watch-vol { gap: 3px; }
@@ -2239,7 +2255,7 @@ section {
   grid-auto-columns: clamp(150px, 16vw, 200px);
   gap: 14px;
   overflow-x: auto;
-  scroll-snap-type: x mandatory;
+  scroll-snap-type: x proximity;
   padding-bottom: 8px;
   scrollbar-width: thin;
 }
