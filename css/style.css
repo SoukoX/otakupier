@@ -1256,12 +1256,20 @@ img {
 
 /* Mobile fullscreen: rotate the player to landscape so the video fills the
    whole screen instead of shrinking into a tiny vertical letterbox. Desktop
-   is untouched (it never matches the portrait orientation query). */
+   is untouched (it never matches the portrait orientation query). The
+   position/insets/margin force the fullscreen box to be centered, which makes
+   `transform-origin: center` rotate it around the exact viewport center. */
 @media (orientation: portrait) and (max-width: 720px) {
   .watch-player:fullscreen,
   .watch-player:-webkit-full-screen,
   #watchFrame iframe:fullscreen,
   #watchFrame iframe:-webkit-full-screen {
+    position: fixed;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    left: 0;
+    margin: auto;
     width: 100vh !important;
     height: 100vw !important;
     transform: rotate(90deg);
