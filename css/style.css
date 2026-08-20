@@ -2215,6 +2215,51 @@ section {
   scrollbar-width: thin;
 }
 
+.scroll-row.no-snap { scroll-snap-type: none; }
+
+.sc-row-wrap { position: relative; }
+
+.sc-row-fade {
+  position: absolute;
+  top: 0;
+  bottom: 8px;
+  width: 52px;
+  z-index: 2;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.2s;
+}
+
+.sc-row-fade.left { left: 0; background: linear-gradient(90deg, var(--bg) 15%, transparent); }
+.sc-row-fade.right { right: 0; background: linear-gradient(270deg, var(--bg) 15%, transparent); }
+.sc-row-wrap.show-fade-l .sc-row-fade.left { opacity: 1; }
+.sc-row-wrap.show-fade-r .sc-row-fade.right { opacity: 1; }
+
+.sc-row-btn {
+  position: absolute;
+  top: 46%;
+  transform: translateY(-50%);
+  z-index: 4;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  background: rgba(10, 11, 22, 0.72);
+  color: #fff;
+  font-size: 1.5rem;
+  line-height: 1;
+  cursor: pointer;
+  display: grid;
+  place-items: center;
+  opacity: 0;
+  transition: opacity 0.2s, background 0.2s;
+}
+
+.sc-row-btn.prev { left: -8px; }
+.sc-row-btn.next { right: -8px; }
+.sc-row-wrap:hover .sc-row-btn { opacity: 1; }
+.sc-row-btn:hover { background: var(--accent); border-color: var(--accent); }
+
 .scroll-row::-webkit-scrollbar { height: 8px; }
 .scroll-row::-webkit-scrollbar-track { background: transparent; }
 .scroll-row::-webkit-scrollbar-thumb { background: var(--border); border-radius: 999px; }
@@ -2356,6 +2401,7 @@ section {
   .cat-hero-title { font-size: 1.5rem; }
   .cat-hero-meta { margin-bottom: 12px; }
   .cat-hero-arrow { display: none; }
+  .sc-row-btn { display: none; }
 }
 
 /* ============ End streaming-platform catalog ============ */
