@@ -1213,6 +1213,35 @@ img {
   gap: 6px;
   margin-left: auto;
 }
+
+.watch-mini-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 10px;
+  flex-wrap: wrap;
+}
+
+.watch-vol {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 4px;
+}
+
+.watch-vol svg { width: 16px; height: 16px; color: var(--text-dim); flex: 0 0 auto; }
+
+.watch-vol input[type="range"] {
+  width: 84px;
+  accent-color: var(--accent);
+  cursor: pointer;
+  height: 4px;
+}
+
+@media (max-width: 720px) {
+  .watch-vol input[type="range"] { width: 52px; }
+  .watch-vol { gap: 3px; }
+}
 .watch-frame .stream-loading {
   background:
     linear-gradient(110deg, transparent 35%, rgba(255, 255, 255, 0.05) 50%, transparent 65%),
