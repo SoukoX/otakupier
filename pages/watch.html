@@ -20,7 +20,7 @@
   <link rel="preconnect" href="https://anixo.buzz">
   <link rel="preconnect" href="https://anikototvapi.vercel.app">
   <link rel="preconnect" href="https://anipub.xyz">
-  <link rel="stylesheet" href="../css/style.css?v=13">
+  <link rel="stylesheet" href="../css/style.css?v=14">
   <script src="https://anixo.buzz/embed-sdk.js" async></script>
 </head>
 <body class="watch-page">
@@ -33,9 +33,9 @@
   <footer id="siteFooter"></footer>
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <script src="../js/config.js?v=13"></script>
-  <script src="../js/api.js?v=13"></script>
-  <script src="../js/app.js?v=13"></script>
+  <script src="../js/config.js?v=14"></script>
+  <script src="../js/api.js?v=14"></script>
+  <script src="../js/app.js?v=14"></script>
   <script>
     const params = new URLSearchParams(window.location.search);
     const id = params.get("id");
@@ -45,6 +45,8 @@
     let activeEmbedIndex = 0;
     let lastStreamEpisode = 0;
     let streamLang = "sub"; // "sub" | "dub" (AniPub); other providers ignore it
+    let playerIframe = null;   // reused across episodes so Chrome keeps autoplay
+    let playerIframeProvider = null; // provider.id the reused frame belongs to
     let anipubEpCount = 0;  // playable episodes AniPub actually lists for this title
     let anikotoEpCount = 0; // playable episodes AniKoto actually lists for this title
 
@@ -156,6 +158,7 @@
                 <label class="watch-vol" title="Volume">
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 5 6 9H2v6h4l5 4V5z"/><path d="M15.5 8.5a5 5 0 0 1 0 7"/><path d="M18.5 5.5a9 9 0 0 1 0 13"/></svg>
                   <input type="range" id="watchVol" min="0" max="100" value="100" aria-label="Volume">
+                  <span class="watch-vol-hint" id="watchVolHint"></span>
                 </label>
                 <button class="stream-nav" id="prevEpBtn" onclick="playEpisode(lastStreamEpisode - 1)" title="Previous episode (←)">‹</button>
                 <button class="stream-nav" id="nextEpBtn" onclick="playEpisode(lastStreamEpisode + 1)" title="Next episode (→)">›</button>
@@ -216,6 +219,7 @@
       activeEmbedIndex = i;
       document.querySelectorAll(".watch-providers .ep-chip[data-eprov]").forEach((c, idx) =>
         c.classList.toggle("is-active", idx === i));
+      updateVolumeUI();
       playEpisode(lastStreamEpisode || 1);
     }
 
@@ -342,12 +346,18 @@
       // Build the iframe + loading overlay via DOM so each new episode gets a
       // fresh, clean player and the shimmer is hidden when it actually loads.
       // replaceChildren clears the initial "Loading…" shimmer first so it can
-      // never linger on top of the player.
+      // never linger on top of the player. When switching episodes on the SAME
+      // provider the existing iframe element is reused — Chrome keeps its
+      // autoplay allowance across navigations, so the next episode starts with
+      // sound instead of re-entering Chrome's autoplay-mute policy.
       const loading = document.createElement("div");
       loading.className = "stream-loading";
       loading.innerHTML = `<div class="spinner"></div><span>Preparing player…</span>`;
       const hideLoad = () => loading.classList.add("hide");
-      const iframe = document.createElement("iframe");
+      const reuse = playerIframe && playerIframeProvider === provider.id && playerIframe.isConnected;
+      const iframe = reuse ? playerIframe : document.createElement("iframe");
+      playerIframe = iframe;
+      playerIframeProvider = provider.id;
       iframe.src = url;
       iframe.title = `${JIKAN.esc(provider.name)} — Episode ${ep}`;
       iframe.referrerPolicy = provider.referrerPolicy || "no-referrer";
@@ -361,17 +371,14 @@
       const onLoad = () => {
         hideLoad();
         iframe.dataset.loaded = "1";
-        // Persisted volume -> AniXo player (others ignore the message).
-        const vol = Math.max(0, Math.min(1, Number(localStorage.getItem("otk.playerVolume") ?? 1)));
-        for (const t of [0, 500, 1500, 3000]) {
-          setTimeout(() => {
-            try { iframe.contentWindow && iframe.contentWindow.postMessage({ type: "aniko:setVolume", volume: vol }, "*"); } catch (e) {}
-          }, t);
+        pushVolumeToPlayer();
+        for (const t of [300, 1000, 2500]) {
+          setTimeout(pushVolumeToPlayer, t);
         }
       };
-      iframe.addEventListener("load", onLoad);
+      iframe.onload = onLoad;
       frame.replaceChildren(loading, iframe);
-      setTimeout(hideLoad, 8000); // safety net for pages that never fire load
+      setTimeout(hideLoad, 8000);
       // If the provider host is unreachable (no load event), auto-fall back to
       // the next provider once instead of leaving a dead player on screen.
       let fallbackDone = false;
@@ -684,22 +691,53 @@
 
     document.addEventListener("DOMContentLoaded", load);
 
-    // ---------- Persisted volume (pushed into the AniXo player) ----------
+    // ---------- Volume: persisted, pushed to whatever player supports it ----------
+    function playerVol() {
+      return Math.max(0, Math.min(1, Number(localStorage.getItem("otk.playerVolume") ?? 1)));
+    }
+    // Send the persisted volume into the mounted player using that provider's
+    // postMessage API. Only AniXo supports a real volume message; megavid-style
+    // players only unmute/play. Re-sent on a heartbeat so Chrome's autoplay
+    // mute on episode changes is corrected as soon as the player is ready.
+    function pushVolumeToPlayer() {
+      const f = document.querySelector("#watchFrame iframe");
+      if (!f || !f.contentWindow) return;
+      const prov = activeProvider();
+      const v = playerVol();
+      try {
+        if (prov?.volumeControl === "full") {
+          f.contentWindow.postMessage({ type: "aniko:setVolume", volume: v }, "*");
+        } else if (prov?.volumeControl === "mute") {
+          f.contentWindow.postMessage(v > 0 ? "unmute" : "mute", "*");
+        }
+      } catch (e) {}
+    }
+    function updateVolumeUI() {
+      const vol = document.getElementById("watchVol");
+      const hint = document.getElementById("watchVolHint");
+      if (!vol) return;
+      const ctrl = (activeProvider() || {}).volumeControl || "none";
+      vol.disabled = ctrl === "none";
+      vol.classList.toggle("is-disabled", ctrl === "none");
+      if (hint) {
+        hint.textContent = ctrl === "full" ? "Syncs with the AniXo player"
+          : ctrl === "mute" ? "This player only allows mute/unmute"
+          : "Use the player's on-screen volume";
+      }
+    }
     function initWatchVolume() {
       const vol = document.getElementById("watchVol");
       if (!vol) return;
-      const stored = Math.max(0, Math.min(1, Number(localStorage.getItem("otk.playerVolume") ?? 1)));
-      vol.value = Math.round(stored * 100);
+      vol.value = Math.round(playerVol() * 100);
       vol.addEventListener("input", () => {
         const v = Number(vol.value) / 100;
         localStorage.setItem("otk.playerVolume", String(v));
-        const frame = document.querySelector("#watchFrame iframe");
-        if (frame && frame.contentWindow) {
-          try {
-            frame.contentWindow.postMessage({ type: "aniko:setVolume", volume: v }, "*");
-          } catch (e) {}
-        }
+        pushVolumeToPlayer();
       });
+      // Heartbeat: re-apply the volume every 2s while a player is mounted so
+      // it survives player reloads and Chrome's autoplay mute.
+      setInterval(pushVolumeToPlayer, 2000);
+      updateVolumeUI();
     }
 
     // ---------- Save to My List ----------
