@@ -2278,26 +2278,23 @@ section {
   cursor: pointer;
   display: grid;
   place-items: center;
-  opacity: 0;
+  opacity: 0.55;
   box-shadow: 0 4px 14px rgba(0, 0, 0, 0.35);
   transition: opacity 0.2s, background 0.2s, transform 0.2s, box-shadow 0.2s, border-color 0.2s;
 }
 
 .sc-row-btn svg { width: 18px; height: 18px; display: block; }
+.sc-row-wrap:hover .sc-row-btn { opacity: 1; }
+.sc-row-btn.off { opacity: 0.3; }
 
 .sc-row-btn.prev { left: -8px; }
 .sc-row-btn.next { right: -8px; }
-.sc-row-wrap:hover .sc-row-btn { opacity: 1; }
 
 .sc-row-btn:hover {
   background: var(--accent);
   border-color: var(--accent);
   transform: translateY(-50%) scale(1.12);
   box-shadow: 0 0 20px rgba(230, 70, 92, 0.45);
-}
-
-.sc-row-btn.off {
-  opacity: 0.35;
 }
 
 .scroll-row::-webkit-scrollbar { height: 8px; }
