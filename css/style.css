@@ -1953,8 +1953,8 @@ section {
 /* Hero slideshow */
 .cat-hero {
   position: relative;
-  height: min(64vh, 520px);
-  min-height: 380px;
+  height: min(48vh, 400px);
+  min-height: 300px;
   overflow: hidden;
   background: var(--bg-alt);
 }
@@ -2000,7 +2000,7 @@ section {
   height: 100%;
   max-width: 1500px;
   margin: 0 auto;
-  padding: 70px clamp(20px, 4vw, 48px) 30px;
+  padding: 44px clamp(20px, 4vw, 48px) 26px;
   display: flex;
   align-items: center;
   gap: clamp(24px, 4vw, 56px);
@@ -2135,7 +2135,7 @@ section {
   padding: 8px clamp(16px, 3vw, 40px) 8px;
 }
 
-.row-section { margin: 30px 0; }
+.row-section { margin: 22px 0; }
 
 .row-head {
   display: flex;
