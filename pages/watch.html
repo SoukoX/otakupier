@@ -14,6 +14,12 @@
   <link rel="icon" type="image/x-icon" href="../favicon.ico">
   <link rel="preconnect" href="https://api.jikan.moe">
   <link rel="preconnect" href="https://cdn.jsdelivr.net">
+  <link rel="preconnect" href="https://graphql.anilist.co">
+  <link rel="preconnect" href="https://megavid.buzz">
+  <link rel="preconnect" href="https://cp.megavid.buzz">
+  <link rel="preconnect" href="https://anixo.buzz">
+  <link rel="preconnect" href="https://anikototvapi.vercel.app">
+  <link rel="preconnect" href="https://anipub.xyz">
   <link rel="stylesheet" href="../css/style.css">
 </head>
 <body class="watch-page">
@@ -73,6 +79,9 @@
 
         renderPage();
         loadReviews();
+        // Warm the MAL→AniList mapping used by the AniXo embed so the first
+        // episode click doesn't wait on a live lookup.
+        JIKAN.anilistIdOf(animeData.mal_id).catch(() => {});
       } catch (err) {
         main.innerHTML = `<div class="empty-state">Could not load this anime.</div>`;
       }
@@ -134,7 +143,7 @@
          </button>`
       ).join("");
       const a = animeData || {};
-      const miniImg = a.images?.jpg?.image_url || "https://placehold.co/120x170?text=?";
+      const miniImg = a.images?.jpg?.image_url || JIKAN.PLACEHOLDER;
       theater.innerHTML = `
         <div class="watch-theater">
           <div class="watch-player">
@@ -158,7 +167,7 @@
           <div class="watch-side">
             <div class="watch-mini-info">
               <img class="watch-mini-img" src="${JIKAN.esc(miniImg)}" alt=""
-                   onerror="this.src='https://placehold.co/120x170?text=?'">
+                   onerror="this.onerror=null;this.src=JIKAN.PLACEHOLDER">
               <div class="watch-mini-body">
                 <div class="watch-mini-title">${JIKAN.esc(JIKAN.title(a))}</div>
                 ${a.title_japanese ? `<div class="watch-mini-jp">${JIKAN.esc(a.title_japanese)}</div>` : ""}
@@ -235,7 +244,7 @@
       if (titleEl) titleEl.textContent = `Episode ${ep}`;
       const langBar = document.getElementById("watchLangBar");
       if (langBar) {
-        const showLang = provider.id === "anipub" || provider.id === "anikoto";
+        const showLang = ["anipub", "anikoto", "megavid", "anixo"].includes(provider.id);
         langBar.style.display = showLang ? "" : "none";
         langBar.querySelectorAll(".lang-btn").forEach((b) =>
           b.classList.toggle("is-active", b.dataset.lang === streamLang));
@@ -295,8 +304,25 @@
             if (nextBtn) nextBtn.disabled = ep >= listOfEpisodes().length;
           }
         } catch (e) {}
+      } else if (provider.id === "megavid") {
+        url = JIKAN.megavidUrl(animeData, ep, streamLang);
+        if (!url) {
+          frame.innerHTML = `<div class="stream-notice">This provider could not build a link for this episode.</div>`;
+          return;
+        }
+      } else if (provider.id === "anixo") {
+        url = await Promise.race([
+          JIKAN.anixoUrl(animeData, ep, streamLang),
+          new Promise((r) => setTimeout(() => r(null), 8000)),
+        ]);
+        if (!url) {
+          frame.innerHTML = `<div class="stream-notice">
+            <div class="not-found-title">Couldn't resolve this episode</div>
+            <p style="margin-top:8px;">This title isn't available on ${JIKAN.esc(provider.name)}. Try switching to another provider above, or open the anime in the catalog for more options.</p>
+          </div>`;
+          return;
+        }
       } else {
-        url = JIKAN.streamingUrl(provider, { mal_id: animeData?.mal_id, ep, title: JIKAN.title(animeData) });
         if (!url) {
           frame.innerHTML = `<div class="stream-notice">This provider could not build a link for this episode.</div>`;
           return;
@@ -324,7 +350,7 @@
       iframe.allowFullscreen = true;
       iframe.addEventListener("load", hideLoad);
       frame.replaceChildren(loading, iframe);
-      setTimeout(hideLoad, 12000); // safety net for pages that never fire load
+      setTimeout(hideLoad, 8000); // safety net for pages that never fire load
     }
 
     // Switch the AniPub player between subtitled and English-dubbed audio and
@@ -341,7 +367,7 @@
               showToast("No English dub for this title on AniKoto — try switching provider.");
               return;
             }
-          } else {
+          } else if (prov?.id === "anipub") {
             const eps = listOfEpisodes();
             const idx = Math.min(Math.max(lastStreamEpisode - 1, 0), eps.length - 1);
             const info = await JIKAN.anipubEpisodes(animeData);
