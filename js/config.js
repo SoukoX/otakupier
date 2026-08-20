@@ -116,9 +116,11 @@ const CONFIG = {
 
     // AniXo — embed player keyed by AniList id + episode ("dynamic" provider;
     // URL resolved by JIKAN.anixoUrl which maps the MAL id to AniList first).
-    // Plays fine sandboxed, so no sandbox override is needed.
+    // AniXo verifies embeds through its official embed-sdk.js (loaded on the
+    // watch/anime pages) and REFUSES sandboxed iframes — so sandbox must be
+    // disabled here.
     { id: "anixo", name: "AniXo", mode: "embed", dynamic: "anixo",
-      referrerPolicy: "no-referrer-when-downgrade",
+      sandbox: false, referrerPolicy: "no-referrer-when-downgrade",
       url: "https://anixo.buzz/embed/ani/{anilist_id}/{ep_num}/{sub}", enabled: true },
 
     // Direct video playback (mode "video") plays an actual MP4/HLS file
