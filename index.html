@@ -23,7 +23,7 @@
   <meta name="twitter:card" content="summary_large_image">
   <link rel="preconnect" href="https://api.jikan.moe">
   <link rel="preconnect" href="https://cdn.jsdelivr.net">
-  <link rel="stylesheet" href="css/style.css?v=14">
+  <link rel="stylesheet" href="css/style.css?v=15">
   <script type="application/ld+json">
   {
     "@context": "https://schema.org",
@@ -138,9 +138,9 @@
   <footer id="siteFooter"></footer>
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <script src="js/config.js?v=14"></script>
-  <script src="js/api.js?v=14"></script>
-  <script src="js/app.js?v=14"></script>
+  <script src="js/config.js?v=15"></script>
+  <script src="js/api.js?v=15"></script>
+  <script src="js/app.js?v=15"></script>
   <script>
     async function loadHome() {
       const carousel = document.getElementById("topRatedCarousel");
@@ -237,15 +237,27 @@
       // animation, which is what made the buttons appear to not work there.
       const boundary = (dir) => {
         const w = snapStep();
+        const max = el.scrollWidth - el.clientWidth;
         const cur = el.scrollLeft;
-        const n = dir > 0 ? Math.floor(cur / w) + 1 : Math.ceil(cur / w) - 1;
-        return Math.max(0, Math.min(n * w, el.scrollWidth - el.clientWidth));
+        const cards = Math.max(1, Math.round((el.clientWidth * 0.8) / w));
+        const n = dir > 0 ? Math.floor(cur / w) + cards : Math.ceil(cur / w) - cards;
+        return Math.max(0, Math.min(n * w, max));
       };
+      let settleTimer = null;
       const animateTo = (target) => {
         const max = el.scrollWidth - el.clientWidth;
         const t = Math.max(0, Math.min(max, target));
         if (Math.abs(t - el.scrollLeft) < 2) return;
+        // Disable snap while the native smooth scroll runs — Chrome otherwise
+        // re-snaps mid-animation and the row stops short of the target.
+        clearTimeout(settleTimer);
+        el.classList.add("no-snap");
         el.scrollTo({ left: t, behavior: "smooth" });
+        const settle = () => {
+          if (Math.abs(el.scrollLeft - t) >= 4) { settleTimer = setTimeout(settle, 120); return; }
+          el.classList.remove("no-snap");
+        };
+        settleTimer = setTimeout(settle, 250);
       };
 
       if (prev) prev.addEventListener("click", () => animateTo(boundary(-1)));
