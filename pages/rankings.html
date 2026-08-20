@@ -112,9 +112,9 @@
         el.innerHTML = `
           <div class="rank-num">${i + 1}</div>
           <div class="rank-thumb">
-            <img src="${r.image || "https://placehold.co/200x280?text=?"}"
+            <img src="${r.image || JIKAN.PLACEHOLDER}"
                  alt="${JIKAN.esc(r.title)}" loading="lazy"
-                 onerror="this.src='https://placehold.co/200x280?text=?'">
+                 onerror="this.onerror=null;this.src=JIKAN.PLACEHOLDER">
           </div>
           <div class="rank-title">
             ${JIKAN.esc(r.title)}
