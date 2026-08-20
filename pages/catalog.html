@@ -51,14 +51,22 @@
         <div class="row-head">
           <h2>Trending Now</h2>
         </div>
-        <div class="scroll-row" id="rowTrending"><div class="skeleton-row"></div></div>
+        <div class="sc-row-wrap">
+          <button class="sc-row-btn prev" aria-label="Scroll left">&lsaquo;</button>
+          <button class="sc-row-btn next" aria-label="Scroll right">&rsaquo;</button>
+          <div class="scroll-row" id="rowTrending"><div class="skeleton-row"></div></div>
+        </div>
       </div>
 
       <div class="row-section">
         <div class="row-head">
           <h2>Recently Updated</h2>
         </div>
-        <div class="scroll-row" id="rowUpdated"><div class="skeleton-row"></div></div>
+        <div class="sc-row-wrap">
+          <button class="sc-row-btn prev" aria-label="Scroll left">&lsaquo;</button>
+          <button class="sc-row-btn next" aria-label="Scroll right">&rsaquo;</button>
+          <div class="scroll-row" id="rowUpdated"><div class="skeleton-row"></div></div>
+        </div>
       </div>
 
       <div class="row-section">
@@ -437,6 +445,47 @@
       loadRow("rowPopular", () => JIKAN.aniBrowse({ sort: ["POPULARITY_DESC"] }));
     }
 
+    function setupScrollRow(el) {
+      if (!el || el.dataset.scwired) return;
+      el.dataset.scwired = "1";
+      const wrap = el.closest(".sc-row-wrap");
+      if (!wrap) return;
+      const prev = wrap.querySelector(".sc-row-btn.prev");
+      const next = wrap.querySelector(".sc-row-btn.next");
+      const step = () => Math.max(el.clientWidth * 0.8, 320);
+      const updateEdges = () => {
+        const max = el.scrollWidth - el.clientWidth;
+        const atStart = el.scrollLeft <= 2;
+        const atEnd = el.scrollLeft >= max - 2;
+        if (prev) prev.style.opacity = atStart ? "0" : "1";
+        if (next) next.style.opacity = atEnd ? "0" : "1";
+        wrap.classList.toggle("show-fade-l", !atStart);
+        wrap.classList.toggle("show-fade-r", !atEnd);
+      };
+      el.addEventListener("scroll", updateEdges, { passive: true });
+      let raf = null;
+      const animateTo = (target, duration = 450) => {
+        const from = el.scrollLeft;
+        const dist = target - from;
+        if (Math.abs(dist) < 2) return;
+        cancelAnimationFrame(raf); raf = null;
+        el.classList.add("no-snap");
+        el.style.scrollBehavior = "auto";
+        const start = performance.now();
+        const ease = (t) => (t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2);
+        const tick = (now) => {
+          const p = Math.min(1, (now - start) / duration);
+          el.scrollLeft = from + dist * ease(p);
+          if (p < 1) raf = requestAnimationFrame(tick);
+          else { raf = null; el.classList.remove("no-snap"); el.style.scrollBehavior = ""; }
+        };
+        raf = requestAnimationFrame(tick);
+      };
+      if (prev) prev.addEventListener("click", () => animateTo(el.scrollLeft - step()));
+      if (next) next.addEventListener("click", () => animateTo(el.scrollLeft + step()));
+      updateEdges();
+    }
+
     document.addEventListener("DOMContentLoaded", () => {
       if (state.q) {
         document.getElementById("searchBox").value = state.q;
@@ -445,6 +494,7 @@
       }
       loadGenres();
       showBrowse();
+      document.querySelectorAll(".scroll-row").forEach(setupScrollRow);
     });
   </script>
 </body>
