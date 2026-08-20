@@ -15,7 +15,7 @@
   <link rel="preconnect" href="https://api.jikan.moe">
   <link rel="preconnect" href="https://graphql.anilist.co">
   <link rel="preconnect" href="https://cdn.jsdelivr.net">
-  <link rel="stylesheet" href="../css/style.css?v=5">
+  <link rel="stylesheet" href="../css/style.css?v=6">
 </head>
 <body>
   <nav class="navbar" id="navbar"></nav>
@@ -95,9 +95,9 @@
   <footer id="siteFooter"></footer>
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <script src="../js/config.js?v=5"></script>
-  <script src="../js/api.js?v=5"></script>
-  <script src="../js/app.js?v=5"></script>
+  <script src="../js/config.js?v=6"></script>
+  <script src="../js/api.js?v=6"></script>
+  <script src="../js/app.js?v=6"></script>
   <script>
     const params = new URLSearchParams(window.location.search);
     let state = {
@@ -457,8 +457,8 @@
         const max = el.scrollWidth - el.clientWidth;
         const atStart = el.scrollLeft <= 2;
         const atEnd = el.scrollLeft >= max - 2;
-        if (prev) prev.style.opacity = atStart ? "0" : "1";
-        if (next) next.style.opacity = atEnd ? "0" : "1";
+        if (prev) prev.classList.toggle("off", atStart);
+        if (next) next.classList.toggle("off", atEnd);
         wrap.classList.toggle("show-fade-l", !atStart);
         wrap.classList.toggle("show-fade-r", !atEnd);
       };
