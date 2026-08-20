@@ -48,8 +48,8 @@
           </div>
           <div class="detail-header">
             <div class="detail-poster">
-              <img src="${c.images?.jpg?.image_url || "https://placehold.co/300x450?text=?"}"
-                   alt="${JIKAN.esc(c.name)}" onerror="this.src='https://placehold.co/300x450?text=?'">
+              <img src="${c.images?.jpg?.image_url || JIKAN.PLACEHOLDER}"
+                   alt="${JIKAN.esc(c.name)}" onerror="this.onerror=null;this.src=JIKAN.PLACEHOLDER">
             </div>
             <div>
               <h1 class="detail-title">${JIKAN.esc(c.name)}</h1>
