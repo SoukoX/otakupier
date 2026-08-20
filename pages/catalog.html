@@ -6,13 +6,14 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta name="msvalidate.01" content="4F55345C289F9597335C55566F2B31F9" />
 
-  <title>Anime Catalog & Search - OtakuPier</title>
+  <title>Browse Anime - OtakuPier</title>
   <meta name="robots" content="index, follow">
-  <meta name="description" content="Search and browse the anime catalog on OtakuPier. Filter by genre, popularity and score.">
+  <meta name="description" content="Browse and search the anime catalog on OtakuPier. See what's airing now, trending, and most popular — filter by genre and watch anywhere.">
   <link rel="canonical" href="https://otakupier.2bd.net/pages/catalog.html">
   <link rel="icon" type="image/svg+xml" href="../favicon.svg?v=2">
   <link rel="icon" type="image/x-icon" href="../favicon.ico">
   <link rel="preconnect" href="https://api.jikan.moe">
+  <link rel="preconnect" href="https://graphql.anilist.co">
   <link rel="preconnect" href="https://cdn.jsdelivr.net">
   <link rel="stylesheet" href="../css/style.css">
 </head>
@@ -20,29 +21,56 @@
   <nav class="navbar" id="navbar"></nav>
 
   <main class="catalog-page">
-    <header class="catalog-hero">
-      <div class="catalog-hero-inner">
-        <p class="catalog-kicker">The full pier</p>
-        <h1>Anime Catalog</h1>
-        <p class="catalog-sub">Search thousands of titles, filter by genre, and find watch links for everything you love.</p>
-        <div class="catalog-searchbar">
-          <div class="search-box">
-            <input type="text" id="searchBox" placeholder="Search anime..." autocomplete="off"
-                   oninput="onSearchInput(this.value)" onkeydown="onSearchKey(event)">
-            <div class="search-suggest" id="searchSuggest" hidden></div>
-          </div>
-          <select id="genreSelect" onchange="applyFilters(1)">
-            <option value="">All genres</option>
-          </select>
-          <button class="btn btn-primary" id="searchBtn" onclick="applyFilters(1)">Search</button>
-          <button class="btn btn-outline" onclick="clearFilters()">Clear</button>
-        </div>
+    <!-- Sticky search bar -->
+    <div class="cat-searchbar">
+      <div class="search-box">
+        <input type="text" id="searchBox" placeholder="Search anime..." autocomplete="off"
+               oninput="onSearchInput(this.value)" onkeydown="onSearchKey(event)">
+        <div class="search-suggest" id="searchSuggest" hidden></div>
       </div>
-    </header>
+      <select id="genreSelect" onchange="applyFilters(1)" aria-label="Filter by genre">
+        <option value="">All genres</option>
+      </select>
+      <button class="btn btn-primary" id="searchBtn" onclick="applyFilters(1)">Search</button>
+      <button class="btn btn-outline" onclick="clearFilters()">Clear</button>
+    </div>
 
+    <!-- Now Airing hero slideshow (streaming-style spotlight) -->
+    <section class="cat-hero" id="catHero" aria-label="Now airing">
+      <div class="cat-hero-track" id="heroSlides"></div>
+      <button class="cat-hero-arrow prev" id="heroPrev" aria-label="Previous slide">&lsaquo;</button>
+      <button class="cat-hero-arrow next" id="heroNext" aria-label="Next slide">&rsaquo;</button>
+      <div class="cat-hero-dots" id="heroDots"></div>
+    </section>
+
+    <!-- Streaming-style rows (shown in default browse state) -->
+    <section class="cat-rows" id="catRows">
+      <div class="row-section">
+        <div class="row-head">
+          <h2>Trending Now</h2>
+        </div>
+        <div class="scroll-row" id="rowTrending"><div class="skeleton-row"></div></div>
+      </div>
+
+      <div class="row-section">
+        <div class="row-head">
+          <h2>Recently Updated</h2>
+        </div>
+        <div class="scroll-row" id="rowUpdated"><div class="skeleton-row"></div></div>
+      </div>
+
+      <div class="row-section">
+        <div class="row-head">
+          <h2>All Time Popular</h2>
+        </div>
+        <div class="grid catalog-grid" id="rowPopular"><div class="skeleton-row"></div></div>
+      </div>
+    </section>
+
+    <!-- Full browse / search grid with pagination -->
     <div class="catalog-body">
       <div class="catalog-results-head">
-        <h2 id="resultsTitle">Latest titles</h2>
+        <h2 id="resultsTitle">Browse the catalog</h2>
       </div>
       <div class="grid catalog-grid" id="catalogGrid"></div>
 
@@ -68,10 +96,21 @@
       page: 1,
     };
 
+    function isFiltered() {
+      return state.q || state.genre;
+    }
+
     function goPage(delta) {
       state.page = Math.max(1, state.page + delta);
       loadCatalog();
-      window.scrollTo({ top: 0, behavior: "smooth" });
+      scrollToBrowse();
+    }
+
+    // Keep the user on the browse grid when paging — the hero and rows at the
+    // top never change, so jumping there on every page change is just noise.
+    function scrollToBrowse() {
+      const el = document.querySelector(".catalog-body");
+      if (el) el.scrollIntoView({ behavior: "smooth", block: "start" });
     }
 
     function clearFilters() {
@@ -80,7 +119,7 @@
       state.q = "";
       state.genre = "";
       state.page = 1;
-      loadCatalog();
+      showBrowse();
       history.replaceState(null, "", "catalog");
     }
 
@@ -89,7 +128,10 @@
       state.genre = document.getElementById("genreSelect").value;
       state.page = p || 1;
       hideSuggest();
+      document.getElementById("catHero").style.display = "none";
+      document.getElementById("catRows").style.display = "none";
       loadCatalog();
+      scrollToBrowse();
     }
 
     // ---------- Live typeahead suggestions ----------
@@ -105,7 +147,7 @@
           const items = await JIKAN.suggest(q);
           renderSuggest(items, q);
         } catch (e) { hideSuggest(); }
-      }, 260);
+      }, 220);
     }
 
     function renderSuggest(items, q) {
@@ -114,12 +156,12 @@
       if (!items.length) { hideSuggest(); return; }
       box.innerHTML = items.map((a, i) => `
         <a class="suggest-item" data-i="${i}" href="${pageHref("anime")}?id=${a.mal_id}">
-          <img class="suggest-img" src="${JIKAN.esc(a.images?.jpg?.image_url || "https://placehold.co/60x85?text=?")}"
+          <img class="suggest-img" src="${JIKAN.esc(a.images?.jpg?.image_url || JIKAN.PLACEHOLDER)}"
                alt="" loading="lazy"
-               onerror="this.src='https://placehold.co/60x85?text=?'">
+               onerror="this.onerror=null;this.src=JIKAN.PLACEHOLDER">
           <span class="suggest-body">
             <span class="suggest-title">${JIKAN.esc(JIKAN.title(a))}</span>
-            <span class="suggest-meta">${JIKAN.esc(a.type || "Anime")}${a.year ? " · " + a.year : ""}</span>
+            <span class="suggest-meta">${JIKAN.esc(a.type || "Anime")}${a.year ? " · " + a.year : ""}${a.status === "RELEASING" ? " · Airing" : ""}</span>
           </span>
           <span class="suggest-score">${a.score ? "★ " + a.score.toFixed(1) : ""}</span>
         </a>`).join("");
@@ -172,23 +214,17 @@
       if (!e.target.closest(".search-box")) hideSuggest();
     });
 
+    // ---------- Default browse grid (rotating catalog) ----------
     async function loadCatalog() {
       const grid = document.getElementById("catalogGrid");
       grid.innerHTML = skeletonGrid(20);
 
       try {
-        // Show ~100 anime per page by fetching a few API pages (25 each),
-        // so the catalog feels as full as the home page. Pages are fetched
-        // in parallel and failures are tolerated — if Jikan drops one page,
-        // we still show whatever loaded instead of killing the whole grid.
         const PER_PAGE = 4;
         const firstPage = (state.page - 1) * PER_PAGE + 1;
         const fetchers = [];
         for (let p = 0; p < PER_PAGE; p++) {
           if (state.q) {
-            // Fuzzy + genre-aware: merges the search pool, a genre-matched
-            // pool (when the query is basically a genre name), and the top
-            // list — scored client-side so near/partial matches surface too.
             fetchers.push(JIKAN.smartSearch(state.q, firstPage + p, state.genre || ""));
           } else if (state.genre) {
             fetchers.push(JIKAN.byGenre(state.genre, firstPage + p));
@@ -207,22 +243,18 @@
         results.forEach((res) => {
           res.data.forEach((a) => {
             const el = JIKAN.card(a);
-            // Staggered entrance so the grid feels alive (capped delay).
-            el.style.animationDelay = ((count % 30) * 40) + "ms";
+            el.style.animationDelay = ((count % 24) * 40) + "ms";
             grid.appendChild(el);
             count++;
           });
         });
 
         if (!count) {
-          // Distinguish a genuine no-match from an upstream (Jikan/MAL)
-          // failure so the grid never just says "no anime found" misleadingly.
           grid.innerHTML = results.length
             ? `<div class="empty-state">No anime found for this search. Try a different title or genre.</div>`
             : `<div class="empty-state">Couldn't reach the anime database right now (Jikan/MAL may be down). Try again in a moment.</div>`;
         }
 
-        // Use the first successful response for pagination metadata
         const metaRes = results[0] || settled.find((s) => s.status === "fulfilled")?.value;
         const total = metaRes?.pagination?.items?.total;
         const apiLast = metaRes?.pagination?.last_visible_page || state.page;
@@ -233,7 +265,7 @@
             ? `Results for "${state.q}"`
             : state.genre
               ? "By genre"
-              : "Latest titles";
+              : "Browse the catalog";
         }
         document.getElementById("pageInfo").textContent =
           total ? `Page ${state.page} of ${lastPage} (${total.toLocaleString()} titles)` : `Page ${state.page} of ${lastPage}`;
@@ -254,15 +286,140 @@
           opt.textContent = g.name;
           sel.appendChild(opt);
         });
-      } catch (err) {
-        // genre list failed; filtering by genre just won't be available
+      } catch (err) {}
+    }
+
+    // ---------- Streaming rows + hero ----------
+    function showBrowse() {
+      document.getElementById("catHero").style.display = "";
+      document.getElementById("catRows").style.display = "";
+      loadHero();
+      loadRows();
+      loadCatalog();
+      history.replaceState(null, "", "catalog");
+    }
+
+    async function loadHero() {
+      const track = document.getElementById("heroSlides");
+      if (!track) return;
+      try {
+        const res = await JIKAN.airingNow(1);
+        const list = (res.data || []).slice(0, 6);
+        if (!list.length) { track.innerHTML = ""; return; }
+        await JIKAN.loadEdits();
+        track.innerHTML = list.map((a, i) => heroSlide(a, i === 0)).join("");
+        initHero(list.length);
+      } catch (e) { track.innerHTML = ""; }
+    }
+
+    function heroSlide(a, active) {
+      const title = JIKAN.title(a);
+      const img = a.images?.jpg?.image_url || "";
+      const bgLayers = a.banner
+        ? `url('${JIKAN.esc(a.banner)}'), url('${JIKAN.esc(img)}')`
+        : `url('${JIKAN.esc(img)}')`;
+      const genres = (a.genres || []).slice(0, 3).map((g) => `<span>${JIKAN.esc(g.name)}</span>`).join("");
+      const next = a.nextAiringEpisode;
+      let air = "";
+      if (a.status === "RELEASING") {
+        air = next
+          ? ` · Next Ep ${next.episode} in ${JIKAN.esc(JIKAN.countdownLabel(next.airingAt))}`
+          : "";
       }
+      return `<div class="cat-hero-slide${active ? " active" : ""}" data-i="${a.mal_id}">
+        <div class="cat-hero-bg"${active ? ` style="background-image:${bgLayers}"` : ""}></div>
+        <div class="cat-hero-overlay"></div>
+        <div class="cat-hero-content">
+          <div class="cat-hero-cover"><img${active ? ` src="${JIKAN.esc(img)}"` : ` src="${JIKAN.PLACEHOLDER}"`} alt="${JIKAN.esc(title)}" onerror="this.onerror=null;this.src=JIKAN.PLACEHOLDER"></div>
+          <div class="cat-hero-info">
+            <span class="cat-hero-badge">Now Airing</span>
+            <h2 class="cat-hero-title">${JIKAN.esc(title)}</h2>
+            <div class="cat-hero-tags">${genres}${a.score ? `<span class="sc-badge-inline">★ ${a.score.toFixed(1)}</span>` : ""}</div>
+            <div class="cat-hero-meta">${JIKAN.esc(a.type || "TV")}${air}</div>
+            <div class="cat-hero-actions">
+              <a class="btn btn-primary btn-glow" href="${pageHref("anime")}?id=${a.mal_id}">View Details</a>
+              <a class="btn btn-outline" href="${pageHref("anime")}?id=${a.mal_id}#watchSlot">▶ Watch Now</a>
+            </div>
+          </div>
+        </div>
+      </div>`;
+    }
+
+    function initHero(n) {
+      const track = document.getElementById("heroSlides");
+      const dotsEl = document.getElementById("heroDots");
+      let idx = 0, timer = null;
+      dotsEl.innerHTML = Array.from({ length: n }, (_, i) =>
+        `<button class="cat-hero-dot${i === 0 ? " active" : ""}" data-i="${i}" aria-label="Slide ${i + 1}"></button>`).join("");
+
+      const show = (i) => {
+        idx = (i + n) % n;
+        track.querySelectorAll(".cat-hero-slide").forEach((s, k) => {
+          const on = k === idx;
+          s.classList.toggle("active", on);
+          if (on) {
+            const bg = s.querySelector(".cat-hero-bg");
+            const bgUrl = bg.dataset.src;
+            if (bgUrl && !bg.style.backgroundImage) bg.style.backgroundImage = `url('${bgUrl}')`;
+            const img = s.querySelector("img");
+            if (img && !img.getAttribute("src")) img.src = img.dataset.src;
+          }
+        });
+        dotsEl.querySelectorAll(".cat-hero-dot").forEach((d, k) => d.classList.toggle("active", k === idx));
+      };
+
+      // Pre-bake slide media URLs so the track can lazily hydrate them.
+      track.querySelectorAll(".cat-hero-slide").forEach((s) => {
+        const bg = s.querySelector(".cat-hero-bg");
+        if (bg) bg.dataset.src = bg.style.backgroundImage ? "" : null;
+      });
+
+      const start = () => { clearInterval(timer); if (!document.hidden) timer = setInterval(() => show(idx + 1), 5000); };
+      const stop = () => clearInterval(timer);
+
+      document.getElementById("heroPrev").addEventListener("click", () => { show(idx - 1); start(); });
+      document.getElementById("heroNext").addEventListener("click", () => { show(idx + 1); start(); });
+      dotsEl.addEventListener("click", (e) => {
+        const b = e.target.closest(".cat-hero-dot");
+        if (b) { show(Number(b.dataset.i)); start(); }
+      });
+      const hero = document.getElementById("catHero");
+      hero.addEventListener("mouseenter", stop);
+      hero.addEventListener("mouseleave", start);
+      document.addEventListener("visibilitychange", () => { if (document.hidden) stop(); else start(); });
+      let tx = null;
+      hero.addEventListener("touchstart", (e) => { tx = e.changedTouches[0].clientX; stop(); }, { passive: true });
+      hero.addEventListener("touchend", (e) => {
+        if (tx === null) return;
+        const dx = e.changedTouches[0].clientX - tx;
+        tx = null;
+        if (Math.abs(dx) > 40) { show(idx + (dx < 0 ? 1 : -1)); start(); }
+      }, { passive: true });
+      start();
+    }
+
+    async function loadRows() {
+      const loadRow = (id, fetcher) => {
+        const row = document.getElementById(id);
+        if (!row) return;
+        fetcher(1).then((res) => {
+          row.innerHTML = "";
+          (res?.data || []).slice(0, 20).forEach((a) => row.appendChild(JIKAN.streamCard(a)));
+        }).catch(() => { row.innerHTML = `<div class="empty-state">Could not load.</div>`; });
+      };
+      loadRow("rowTrending", () => JIKAN.aniBrowse({ sort: ["TRENDING_DESC"] }));
+      loadRow("rowUpdated", () => JIKAN.aniBrowse({ sort: ["UPDATED_AT_DESC"] }));
+      loadRow("rowPopular", () => JIKAN.aniBrowse({ sort: ["POPULARITY_DESC"] }));
     }
 
     document.addEventListener("DOMContentLoaded", () => {
-      if (state.q) document.getElementById("searchBox").value = state.q;
+      if (state.q) {
+        document.getElementById("searchBox").value = state.q;
+        document.getElementById("catHero").style.display = "none";
+        document.getElementById("catRows").style.display = "none";
+      }
       loadGenres();
-      loadCatalog();
+      showBrowse();
     });
   </script>
 </body>
