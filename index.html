@@ -23,7 +23,7 @@
   <meta name="twitter:card" content="summary_large_image">
   <link rel="preconnect" href="https://api.jikan.moe">
   <link rel="preconnect" href="https://cdn.jsdelivr.net">
-  <link rel="stylesheet" href="css/style.css?v=13">
+  <link rel="stylesheet" href="css/style.css?v=14">
   <script type="application/ld+json">
   {
     "@context": "https://schema.org",
@@ -138,9 +138,9 @@
   <footer id="siteFooter"></footer>
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <script src="js/config.js?v=13"></script>
-  <script src="js/api.js?v=13"></script>
-  <script src="js/app.js?v=13"></script>
+  <script src="js/config.js?v=14"></script>
+  <script src="js/api.js?v=14"></script>
+  <script src="js/app.js?v=14"></script>
   <script>
     async function loadHome() {
       const carousel = document.getElementById("topRatedCarousel");
@@ -211,7 +211,11 @@
 
       const prev = wrap.querySelector(".carousel-btn.prev");
       const next = wrap.querySelector(".carousel-btn.next");
-      const step = () => Math.max(el.clientWidth * 0.8, 320);
+      const snapStep = () => {
+        const gap = parseFloat(getComputedStyle(el).gap) || 0;
+        const w = (el.firstElementChild ? el.firstElementChild.offsetWidth : 0) + gap;
+        return Math.max(w, 320);
+      };
 
       const updateEdges = () => {
         const max = el.scrollWidth - el.clientWidth;
@@ -227,26 +231,25 @@
       el.addEventListener("scroll", updateEdges, { passive: true });
       updateEdges();
 
-      const animateTo = (target, duration = 500) => {
-        const from = el.scrollLeft;
-        const dist = target - from;
-        if (Math.abs(dist) < 2) return;
-        cancelAnimationFrame(raf); raf = null;
-        el.classList.add("no-snap");
-        el.style.scrollBehavior = "auto";
-        const start = performance.now();
-        const ease = (t) => (t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2);
-        const tick = (now) => {
-          const p = Math.min(1, (now - start) / duration);
-          el.scrollLeft = from + dist * ease(p);
-          if (p < 1) raf = requestAnimationFrame(tick);
-          else { raf = null; el.classList.remove("no-snap"); el.style.scrollBehavior = ""; }
-        };
-        raf = requestAnimationFrame(tick);
+      // Native smooth scroll landing exactly on a card boundary. Using the
+      // browser's own smooth scroll (plus proximity snap) behaves identically
+      // in Chrome and Firefox — Chrome's mandatory snap otherwise re-snaps mid
+      // animation, which is what made the buttons appear to not work there.
+      const boundary = (dir) => {
+        const w = snapStep();
+        const cur = el.scrollLeft;
+        const n = dir > 0 ? Math.floor(cur / w) + 1 : Math.ceil(cur / w) - 1;
+        return Math.max(0, Math.min(n * w, el.scrollWidth - el.clientWidth));
+      };
+      const animateTo = (target) => {
+        const max = el.scrollWidth - el.clientWidth;
+        const t = Math.max(0, Math.min(max, target));
+        if (Math.abs(t - el.scrollLeft) < 2) return;
+        el.scrollTo({ left: t, behavior: "smooth" });
       };
 
-      if (prev) prev.addEventListener("click", () => animateTo(el.scrollLeft - step()));
-      if (next) next.addEventListener("click", () => animateTo(el.scrollLeft + step()));
+      if (prev) prev.addEventListener("click", () => animateTo(boundary(-1)));
+      if (next) next.addEventListener("click", () => animateTo(boundary(1)));
 
       // Momentum drag-to-scroll
       let down = false, moved = false, startX = 0, startScroll = 0, lastX = 0, vel = 0, raf = null;
@@ -295,7 +298,7 @@
         stopAuto();
         autoTimer = setInterval(() => {
           if (hovered || down || document.hidden) return;
-          const to = el.scrollLeft + step();
+          const to = el.scrollLeft + snapStep();
           animateTo(to >= maxScroll() ? 0 : to, 700);
         }, 4500);
       };
