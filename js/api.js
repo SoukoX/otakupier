@@ -525,24 +525,42 @@ const JIKAN = {
 
   _aniCache: new Map(),   // query+variables key -> { at, val }
   _aniInflight: new Map(), // key -> Promise
+  _aniChain: Promise.resolve(), // serializes AniList calls so bursts (catalog rows) don't trip its rate limit
   async _aniQuery(query, variables) {
     const key = JSON.stringify([query, variables]);
     const hit = this._aniCache.get(key);
-    if (hit && Date.now() - hit.at < 10 * 60 * 1000) return hit.val;
+    if (hit && Date.now() - hit.at < 30 * 60 * 1000) return hit.val;
     if (this._aniInflight.has(key)) return this._aniInflight.get(key);
-    const p = (async () => {
-      const res = await fetch(CONFIG.ANILIST_BASE, {
-        method: "POST",
-        headers: { "Content-Type": "application/json", Accept: "application/json" },
-        body: JSON.stringify({ query, variables }),
-      });
-      const body = await res.json();
-      if (!body || body.errors) throw new Error(body?.errors?.[0]?.message || "AniList error");
-      return body.data;
-    })().then((val) => {
-      this._aniCache.set(key, { at: Date.now(), val });
-      return val;
-    }).finally(() => this._aniInflight.delete(key));
+    const run = async () => {
+      let lastErr = new Error("AniList error");
+      for (let attempt = 0; attempt < 3; attempt++) {
+        if (attempt) await new Promise((r) => setTimeout(r, 700 * attempt));
+        try {
+          const res = await fetch(CONFIG.ANILIST_BASE, {
+            method: "POST",
+            headers: { "Content-Type": "application/json", Accept: "application/json" },
+            body: JSON.stringify({ query, variables }),
+          });
+          if (res.status === 429 || res.status >= 500) {
+            lastErr = new Error("AniList " + res.status);
+            continue;
+          }
+          const body = await res.json();
+          if (!body || body.errors) throw new Error(body?.errors?.[0]?.message || "AniList error");
+          return body.data;
+        } catch (e) {
+          lastErr = e;
+        }
+      }
+      throw lastErr;
+    };
+    const p = (this._aniChain = this._aniChain
+      .then(run)
+      .then((val) => {
+        this._aniCache.set(key, { at: Date.now(), val });
+        return val;
+      })
+      .finally(() => this._aniInflight.delete(key)));
     this._aniInflight.set(key, p);
     return p;
   },
@@ -582,15 +600,51 @@ const JIKAN = {
     }
   } }`,
   async aniBrowse(vars, page = 1) {
-    const data = await this._aniQuery(this._ANI_BROWSE_QUERY, { p: page, per: 25, ...vars });
-    const nodes = data?.Page?.media || [];
-    return {
-      data: nodes.map((m) => this._aniToJikan(m)),
-      pagination: {
-        last_visible_page: data?.Page?.pageInfo?.lastPage || 1,
-        items: { total: data?.Page?.pageInfo?.total || nodes.length, per_page: 25, count: nodes.length },
-      },
+    try {
+      const data = await this._aniQuery(this._ANI_BROWSE_QUERY, { p: page, per: 25, ...vars });
+      const nodes = data?.Page?.media || [];
+      return {
+        data: nodes.map((m) => this._aniToJikan(m)),
+        pagination: {
+          last_visible_page: data?.Page?.pageInfo?.lastPage || 1,
+          items: { total: data?.Page?.pageInfo?.total || nodes.length, per_page: 25, count: nodes.length },
+        },
+      };
+    } catch (e) {
+      return this._jikanBrowseFallback(vars, page);
+    }
+  },
+
+  // JIKAN endpoint per AniList sort — keeps the catalog working when AniList
+  // is rate-limited (429) or down. Returns the same { data, pagination } shape.
+  _jikanBrowseFallback(vars, page = 1) {
+    const sort = (vars?.sort || [])[0];
+    const map = {
+      TRENDING_DESC: "https://api.jikan.moe/v4/top/anime?filter=airing",
+      RELEASING: "https://api.jikan.moe/v4/top/anime?filter=airing",
+      POPULARITY_DESC: "https://api.jikan.moe/v4/top/anime?filter=bypopularity",
+      UPDATED_AT_DESC: "https://api.jikan.moe/v4/seasons/now",
     };
+    const url = map[sort];
+    if (!url) throw new Error("No fallback for sort " + sort);
+    return fetch(`${url}&page=${page}&limit=25`)
+      .then((res) => {
+        if (!res.ok) throw new Error("JIKAN " + res.status);
+        return res.json();
+      })
+      .then((body) => ({
+        data: (body?.data || []).map((a) => {
+          const st = a.status;
+          return {
+            ...a,
+            status: st === "Currently Airing" ? "RELEASING"
+              : st === "Finished Airing" ? "FINISHED"
+              : st === "Not yet aired" ? "NOT_YET_RELEASED"
+              : st,
+          };
+        }),
+        pagination: body?.pagination || { last_visible_page: 1 },
+      }));
   },
 
   // "Now Airing" — currently-releasing anime, most popular first. Powers the
