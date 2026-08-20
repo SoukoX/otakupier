@@ -4,6 +4,21 @@
 const JIKAN = {
   base: CONFIG.JIKAN_BASE,
 
+  // Instant, offline-safe poster fallback (no network dependency). A dark
+  // card with a subtle film frame and the site monogram, so a failed image
+  // never leaves a broken-image icon. Used as the last step in onerror
+  // chains across all cards.
+  PLACEHOLDER:
+    "data:image/svg+xml;utf8," +
+    encodeURIComponent(
+      "<svg xmlns='http://www.w3.org/2000/svg' width='300' height='400'>" +
+      "<rect width='100%' height='100%' fill='#161a2e'/>" +
+      "<rect x='8' y='8' width='284' height='384' rx='10' fill='none' stroke='#262c47' stroke-width='2'/>" +
+      "<rect x='1' y='1' width='298' height='398' rx='10' fill='none' stroke='#e6465c' stroke-opacity='0.35' stroke-width='1.5'/>" +
+      "<text x='150' y='215' font-family='Georgia, serif' font-size='72' font-weight='bold' fill='#e6465c' fill-opacity='0.85' text-anchor='middle'>OP</text>" +
+      "</svg>"
+    ),
+
   // Jikan allows roughly 3 requests/sec. Instead of fully serializing every
   // request (which makes the anime page crawl when it fires 25+ fetches at
   // once), run up to MAX_CONCURRENT requests in parallel — still under the
@@ -546,7 +561,93 @@ const JIKAN = {
       year: m.startDate?.year,
       rank: null,
       genres: (m.genres || []).map((name) => ({ name })),
+      status: m.status,
+      episodes: m.episodes,
+      nextAiringEpisode: m.nextAiringEpisode,
+      banner: m.bannerImage || "",
     };
+  },
+
+  // Generic AniList browse: any combination of sort / status / search / genre
+  // filter. Returns Jikan-shaped cards (with status + nextAiringEpisode so
+  // streaming-style badges can render). Cached 10 min by _aniQuery.
+  _ANI_BROWSE_QUERY: `query($p: Int, $per: Int, $sort: [MediaSort], $status: MediaStatus, $s: String, $g: [String]) { Page(page: $p, perPage: $per) {
+    pageInfo { currentPage lastPage hasNextPage total }
+    media(type: ANIME, isAdult: false, idMal_not: null, status: $status, search: $s, genre_in: $g, sort: $sort) {
+      id idMal title { romaji english native }
+      coverImage { extraLarge large }
+      bannerImage
+      averageScore format episodes status startDate { year } genres
+      nextAiringEpisode { airingAt episode }
+    }
+  } }`,
+  async aniBrowse(vars, page = 1) {
+    const data = await this._aniQuery(this._ANI_BROWSE_QUERY, { p: page, per: 25, ...vars });
+    const nodes = data?.Page?.media || [];
+    return {
+      data: nodes.map((m) => this._aniToJikan(m)),
+      pagination: {
+        last_visible_page: data?.Page?.pageInfo?.lastPage || 1,
+        items: { total: data?.Page?.pageInfo?.total || nodes.length, per_page: 25, count: nodes.length },
+      },
+    };
+  },
+
+  // "Now Airing" — currently-releasing anime, most popular first. Powers the
+  // catalog hero slideshow. Falls back to trending if the query fails.
+  async airingNow(page = 1) {
+    return this.aniBrowse({ status: "RELEASING", sort: ["POPULARITY_DESC"] }, page)
+      .catch(() => this.aniBrowse({ sort: ["TRENDING_DESC"] }, page));
+  },
+
+  // Streaming-style card: poster + top-left format badge + top-right score,
+  // bottom gradient overlay with title + airing/status line, hover play button.
+  streamCard(anime) {
+    this.applyEdits(anime);
+    const title = this.title(anime);
+    const img = anime.images?.jpg?.image_url || JIKAN.PLACEHOLDER;
+    const score = anime.score != null ? `<span class="sc-badge">${anime.score.toFixed(1)}</span>` : "";
+    const fmt = (anime.type || "TV").replace(/_/g, " ");
+    let statusLine = "";
+    const next = anime.nextAiringEpisode;
+    if (anime.status === "RELEASING") {
+      statusLine = next
+        ? `Ep ${next.episode} · ${this.countdownLabel(next.airingAt)}`
+        : "Airing";
+    } else if (anime.status === "FINISHED") {
+      statusLine = anime.episodes ? `${anime.episodes} eps` : "Finished";
+    } else if (anime.status === "NOT_YET_RELEASED") {
+      statusLine = "Coming soon";
+    } else if (anime.episodes) {
+      statusLine = `${anime.episodes} eps`;
+    }
+    const el = document.createElement("a");
+    el.className = "sc-card";
+    el.href = `${pageHref("anime")}?id=${anime.mal_id}`;
+    el.innerHTML = `
+      <div class="sc-poster">
+        <img src="${this.esc(img)}" alt="${this.esc(title)}" loading="lazy"
+             onerror="this.onerror=null;this.src=JIKAN.PLACEHOLDER">
+        <span class="sc-fmt">${this.esc(fmt)}</span>
+        ${score}
+        <div class="sc-overlay">
+          <span class="sc-play">▶</span>
+          <span class="sc-overlay-title">${this.esc(title)}</span>
+          ${statusLine ? `<span class="sc-status">${this.esc(statusLine)}</span>` : ""}
+        </div>
+      </div>`;
+    return el;
+  },
+
+  // "2d 4h" / "5h" style label for a unix-seconds air time.
+  countdownLabel(airingAt) {
+    if (!airingAt) return "";
+    const ms = airingAt * 1000 - Date.now();
+    if (ms <= 0) return "soon";
+    const d = Math.floor(ms / 86400000);
+    const h = Math.floor((ms % 86400000) / 3600000);
+    const m = Math.floor((ms % 3600000) / 60000);
+    return d > 0 ? `${d}d ${h}h` : h > 0 ? `${h}h ${m}m` : `${m}m`;
   },
 
   _ANI_PAGE_FIELDS: `
@@ -696,6 +797,30 @@ const JIKAN = {
       }
     } catch (e) { /* fall back below */ }
     return this.topPage(page);
+  },
+
+  // When the NEXT episode of a currently-airing anime airs, via AniList's
+  // nextAiringEpisode. Returns { episode, airingAt } (airingAt = unix seconds)
+  // or null when the show is not airing / has no scheduled episode. Cached
+  // briefly so anime pages / hero banners don't re-query on every render.
+  _nextAiringCache: new Map(), // mal_id -> { at, val }
+  async nextAiring(malId) {
+    if (!malId) return null;
+    const cached = this._nextAiringCache.get(malId);
+    if (cached && Date.now() - cached.at < 10 * 60 * 1000) return cached.val;
+    const q = `query($idMal: Int) { Media(idMal: $idMal, type: ANIME) {
+      status nextAiringEpisode { airingAt episode }
+    } }`;
+    let val = null;
+    try {
+      const data = await this._aniQuery(q, { idMal: malId });
+      const m = data?.Media;
+      if (m?.status === "RELEASING" && m?.nextAiringEpisode) {
+        val = { episode: m.nextAiringEpisode.episode, airingAt: m.nextAiringEpisode.airingAt };
+      }
+    } catch (e) { val = null; }
+    this._nextAiringCache.set(malId, { at: Date.now(), val });
+    return val;
   },
 
   // Full details for one anime (cached — the same anime is looked up from
@@ -979,9 +1104,9 @@ const JIKAN = {
       ? `<div class="jtitle">${this.esc(anime.title_japanese)}</div>` : "";
     el.innerHTML = `
       <div class="poster">
-        <img src="${anime.images?.jpg?.image_url || "https://placehold.co/300x400?text=?"}"
+        <img src="${anime.images?.jpg?.image_url || JIKAN.PLACEHOLDER}"
              alt="${this.esc(this.title(anime))}" loading="lazy"
-             onerror="this.src='https://placehold.co/300x400?text=?'">
+             onerror="this.onerror=null;this.src=JIKAN.PLACEHOLDER">
       </div>
       <div class="info">
         <div class="title">${this.esc(this.title(anime))}</div>
@@ -1033,12 +1158,9 @@ const JIKAN = {
   },
 
   // ---------- Watch Online (third-party streaming providers) ----------
-  // Enabled streaming providers configured in CONFIG.STREAMING. The 9anime
-  // provider stays hidden until its hosted API base URL is configured.
+  // Enabled streaming providers configured in CONFIG.STREAMING.
   streamingProviders() {
-    return (CONFIG.STREAMING || [])
-      .filter((s) => s && s.enabled)
-      .filter((s) => !(s.id === "nineanime") || CONFIG.NINEANIME_API_BASE);
+    return (CONFIG.STREAMING || []).filter((s) => s && s.enabled);
   },
 
   // Look up an enabled streaming provider by its id (e.g. "anipub").
@@ -1254,143 +1376,53 @@ const JIKAN = {
     return null;
   },
 
-  // ---------- 9anime dynamic provider (hosted NineAnimeClient API) ----------
-  // The NineAnimeClient npm lib is Node-only, so it cannot run on static
-  // GitHub Pages. When CONFIG.NINEANIME_API_BASE points at a hosted copy of
-  // its demo server (Vercel/Railway/Render), these helpers resolve 9anime
-  // streams and play them through the on-site <video> player (mode "video"),
-  // tunneling around referer/CORS limits via the demo's /proxy/m3u8 +
-  // /proxy/segment endpoints. Every step resolves to null when the API is
-  // missing, disabled, or the title/episode can't be found (callers show a
-  // graceful fallback). Enabled only once CONFIG.NINEANIME_API_BASE is set.
-  nineAnimeBase() {
-    return (CONFIG.NINEANIME_API_BASE || "").replace(/\/+$/, "");
-  },
-
-  _nineCache: new Map(), // mal_id -> { animeId, eps: [{n, season}] } | null
-
-  async nineAnimeUrl(anime, ep) {
-    const base = this.nineAnimeBase();
-    if (!base) return null;
-    const key = anime?.mal_id;
-    if (key && this._nineCache.has(key)) {
-      return this._nineStreamUrl(base, this._nineCache.get(key), ep);
-    }
-    const resolved = await this._resolveNineAnime(anime).catch(() => null);
-    if (key) this._nineCache.set(key, resolved);
-    return resolved ? this._nineStreamUrl(base, resolved, ep) : null;
-  },
-
-  async _nineGet(url) {
-    const ctrl = new AbortController();
-    const timer = setTimeout(() => ctrl.abort(), 10000);
+  // ---------- Megavid dynamic provider (MAL-id megaplay-style embeds) ----------
+  // Megavid (https://megavid.buzz) is an embed-only player keyed by MAL id +
+  // episode: https://megavid.buzz/mal/{mal_id}/{ep}/{sub|dub}. It refuses
+  // direct URL access ("Embed Only"), so it must be shown inside an iframe —
+  // sandbox is enabled by default, matching the proven AniCult embed.
+  async megavidUrl(anime, ep, variant) {
+    if (!anime?.mal_id || !Number(ep)) return null;
+    const track = variant === "dub" ? "dub" : "sub";
+    const u = `https://megavid.buzz/mal/${anime.mal_id}/${Number(ep)}/${track}?color=%23e6465c&autoplay=true`;
     try {
-      const res = await fetch(url, { signal: ctrl.signal });
-      if (!res.ok) return null;
-      return await res.json().catch(() => null);
-    } catch (e) {
-      return null;
-    } finally {
-      clearTimeout(timer);
-    }
+      const url = new URL(u);
+      if (url.protocol !== "https:" && url.protocol !== "http:") return null;
+    } catch (e) { return null; }
+    return u;
   },
 
-  async _resolveNineAnime(anime) {
-    const base = this.nineAnimeBase();
-    const title = this.title(anime) || anime?.title;
-    if (!base || !title) return null;
+  _anilistIdCache: new Map(), // mal_id -> anilist id | null
 
-    // 1) search the 9anime catalog for the title
-    const search = await this._nineGet(`${base}/api/search?q=${encodeURIComponent(title)}`);
-    const results = Array.isArray(search) ? search
-      : (Array.isArray(search?.data) ? search.data : []);
-    if (!results.length) return null;
-
-    // 2) pick the best title match (exact > prefix > contains > first)
-    const norm = (s) => String(s || "").toLowerCase().replace(/[^\p{L}\p{N}]/gu, "");
-    const needle = norm(title);
-    const score = (name) => {
-      const n = norm(name);
-      if (!needle || !n) return 0;
-      if (n === needle) return 100;
-      if (n.startsWith(needle) || needle.startsWith(n)) return 60;
-      if (n.includes(needle) || needle.includes(n)) return 30;
-      return 0;
-    };
-    let best = results[0];
-    let bestScore = -1;
-    results.forEach((r) => {
-      const s = score(r.title || r.name || r.animeTitle || "");
-      if (s > bestScore) { bestScore = s; best = r; }
-    });
-    const animeId = best?.id || best?.animeId || best?.anime_id;
-    if (!animeId) return null;
-
-    // 3) episode list (accepts the common response shapes)
-    const details = await this._nineGet(`${base}/api/anime/${animeId}/details`);
-    const eps = this._nineEpisodes(details);
-    if (!eps.length) return null;
-    return { animeId, eps };
+  // Map a MAL id to its AniList id (AniXo embeds are keyed by AniList id).
+  async anilistIdOf(malId) {
+    if (!malId) return null;
+    if (this._anilistIdCache.has(malId)) return this._anilistIdCache.get(malId);
+    const q = `query($idMal: Int) { Media(idMal: $idMal, type: ANIME) { id } }`;
+    let id = null;
+    try {
+      const data = await this._aniQuery(q, { idMal: malId });
+      id = data?.Media?.id || null;
+    } catch (e) { id = null; }
+    this._anilistIdCache.set(malId, id);
+    return id;
   },
 
-  // Normalize the episode list from a details response. Accepts:
-  //   { seasons: [{ id, episodes: [{number, episodeId}] }] }
-  //   { episodes: [{number, episodeId}] }
-  //   { data: { episodes: [...] } }
-  _nineEpisodes(details) {
-    const out = [];
-    const push = (n, season) => { if (n) out.push({ n: Number(n), season }); };
-    const src = details?.data || details;
-    const seasons = Array.isArray(src?.seasons) ? src.seasons
-      : (Array.isArray(src?.seasonList) ? src.seasonList : []);
-    if (seasons.length) {
-      seasons.forEach((s) => {
-        const id = s.id || s.season || "season-1";
-        (Array.isArray(s.episodes) ? s.episodes : []).forEach((e) =>
-          push(e.number ?? e.ep ?? e.episodeId, id));
-      });
-    } else {
-      const flat = Array.isArray(src?.episodes) ? src.episodes
-        : (Array.isArray(src?.epList) ? src.epList : []);
-      flat.forEach((e) => push(e.number ?? e.ep ?? e.episodeId, "season-1"));
-    }
-    return out.sort((a, b) => a.n - b.n);
-  },
-
-  // Resolve one episode to a proxied HLS URL on the demo server.
-  async _nineStreamUrl(base, info, ep) {
-    if (!info) return null;
-    const item = info.eps.find((e) => e.n === Number(ep)) || info.eps[Number(ep) - 1];
-    if (!item) return null;
-    const q = `season=${encodeURIComponent(item.season || "season-1")}&episode=${Number(ep)}`;
-    const streams = await this._nineGet(`${base}/api/anime/${info.animeId}/streams?${q}`);
-    if (!streams) return null;
-
-    // Flatten every plausible source shape into { urls, ref } candidates.
-    const candidates = [];
-    const add = (c) => {
-      if (!c || typeof c !== "object") return;
-      const urls = [];
-      if (typeof c.streamUrl === "string") urls.push(c.streamUrl);
-      (Array.isArray(c.streams) ? c.streams : []).forEach((st) => {
-        if (st && typeof st === "object" && st.url) urls.push(st.url);
-        else if (typeof st === "string") urls.push(st);
-      });
-      if (typeof c.url === "string") urls.push(c.url);
-      const ref = c.headers?.referer || c.headers?.Referer || c.headers?.referrer || "";
-      if (urls.length) candidates.push({ urls, ref });
-    };
-    [streams, streams?.sources, streams?.sub, streams?.dub, streams?.unknown]
-      .forEach((x) => {
-        if (Array.isArray(x)) x.forEach(add);
-        else add(x);
-      });
-
-    const hit = candidates.find((c) => c.urls.some((u) => /\.m3u8(\?|$)/i.test(u))) ||
-      candidates[0];
-    if (!hit) return null;
-    const m3u8 = hit.urls.find((u) => /\.m3u8(\?|$)/i.test(u)) || hit.urls[0];
-    return `${base}/api/proxy/m3u8?url=${encodeURIComponent(m3u8)}&ref=${encodeURIComponent(hit.ref || "")}`;
+  // ---------- AniXo dynamic provider (AniList-id embeds) ----------
+  // AniXo (https://anixo.buzz) is an embed player keyed by AniList id +
+  // episode: https://anixo.buzz/embed/ani/{anilist_id}/{ep}/{sub|dub}. The
+  // MAL→AniList mapping is resolved once and cached per session.
+  async anixoUrl(anime, ep, variant) {
+    if (!anime?.mal_id || !Number(ep)) return null;
+    const aniId = await this.anilistIdOf(anime.mal_id);
+    if (!aniId) return null;
+    const track = variant === "dub" ? "dub" : "sub";
+    const u = `https://anixo.buzz/embed/ani/${aniId}/${Number(ep)}/${track}?color=%23e6465c`;
+    try {
+      const url = new URL(u);
+      if (url.protocol !== "https:" && url.protocol !== "http:") return null;
+    } catch (e) { return null; }
+    return u;
   },
 
   // ---------- AniKotoAPI dynamic provider (megaplay embed URLs) ----------
