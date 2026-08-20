@@ -2298,7 +2298,6 @@ section {
 
 .sc-row-btn.off {
   opacity: 0.35;
-  pointer-events: none;
 }
 
 .scroll-row::-webkit-scrollbar { height: 8px; }
