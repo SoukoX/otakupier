@@ -20,7 +20,7 @@
   <link rel="preconnect" href="https://anixo.buzz">
   <link rel="preconnect" href="https://anikototvapi.vercel.app">
   <link rel="preconnect" href="https://anipub.xyz">
-  <link rel="stylesheet" href="../css/style.css?v=15">
+  <link rel="stylesheet" href="../css/style.css?v=16">
   <script src="https://anixo.buzz/embed-sdk.js" async></script>
 </head>
 <body class="watch-page">
@@ -33,9 +33,9 @@
   <footer id="siteFooter"></footer>
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <script src="../js/config.js?v=15"></script>
-  <script src="../js/api.js?v=15"></script>
-  <script src="../js/app.js?v=15"></script>
+  <script src="../js/config.js?v=16"></script>
+  <script src="../js/api.js?v=16"></script>
+  <script src="../js/app.js?v=16"></script>
   <script>
     const params = new URLSearchParams(window.location.search);
     const id = params.get("id");
@@ -162,6 +162,9 @@
                 </label>
                 <button class="stream-nav" id="prevEpBtn" onclick="playEpisode(lastStreamEpisode - 1)" title="Previous episode (←)">‹</button>
                 <button class="stream-nav" id="nextEpBtn" onclick="playEpisode(lastStreamEpisode + 1)" title="Next episode (→)">›</button>
+                <button class="stream-nav" onclick="toggleWatchFullscreen()" title="Fullscreen (F)">
+                  <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"/></svg>
+                </button>
                 <button class="watch-hide" onclick="hideTheater()" title="Hide player">&times;</button>
               </div>
             </div>
@@ -227,6 +230,28 @@
       const theater = document.getElementById("watchTheater");
       if (theater) theater.innerHTML = "";
     }
+
+    // Fullscreen the whole player (bar + frame). On portrait phones the frame
+    // is rotated to landscape by CSS so the video fills the screen instead of
+    // shrinking into a tiny vertical letterbox. Keyboard: F toggles it.
+    function toggleWatchFullscreen() {
+      const player = document.querySelector(".watch-player");
+      if (!player) return;
+      const isFs = document.fullscreenElement || document.webkitFullscreenElement;
+      if (isFs) {
+        (document.exitFullscreen || document.webkitExitFullscreen).call(document);
+      } else {
+        const req = player.requestFullscreen || player.webkitRequestFullscreen;
+        if (req) req.call(player);
+      }
+    }
+    document.addEventListener("keydown", (e) => {
+      if (e.key.toLowerCase() === "f" && e.target && /^(input|textarea)$/i.test(e.target.tagName)) return;
+      if (e.key.toLowerCase() === "f" && document.getElementById("watchTheater")?.innerHTML) {
+        e.preventDefault();
+        toggleWatchFullscreen();
+      }
+    });
 
     // Load an episode into the on-site player. Embed providers stream right in
     // the page (AniKoto / AniPub); a shimmer overlays the frame until the
