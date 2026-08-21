@@ -25,6 +25,8 @@
      <div class="loading"><div class="spinner"></div>Loading profile...</div>
    </main>
 
+   <h1 style="display:none;">User Profile - OtakuPier</h1>
+
    <!-- Static SEO content for search engines -->
    <section class="seo-content container">
      <h2>User Profiles on OtakuPier</h2>
@@ -90,7 +92,7 @@
         <div class="profile-card">
           <div style="display:flex; flex-direction:column; align-items:center; flex:0 0 auto;">
             <div class="avatar-lg${perk.avatar_ring ? " avatar-ring" : ""}${isSelf ? " avatar-clickable" : ""}"${isSelf ? ' title="Click to change avatar" onclick="toggleAvatarPicker()"' : ""}>${st.profile.avatar_url
-              ? `<img src="${JIKAN.safeImg(st.profile.avatar_url)}" alt="">`
+              ? `<img src="${JIKAN.safeImg(st.profile.avatar_url)}" alt="${JIKAN.esc(st.profile.name || "User")} avatar">`
               : (st.profile.name || "U").charAt(0).toUpperCase()}</div>
             ${isSelf ? `<div style="text-align:center; margin-top:8px; font-size:.78rem; color:var(--text-dim);">Click your avatar to change it</div>` : ""}
           </div>
@@ -483,7 +485,7 @@
           <h3 class="sub-head">Choose an avatar</h3>
           <p style="color:var(--text-dim); font-size:.85rem; margin:0 0 12px;">Pick any of these free, non-copyright avatars. They're generated from open-source art — safe to use anywhere.</p>
           <div style="display:flex; gap:10px; align-items:center; margin-bottom:12px;">
-            <div class="avatar-lg avatar-preview">${`<img src="${JIKAN.safeImg(curAvatar || presetAvatar("adventurer", curName))}" alt="">`}</div>
+            <div class="avatar-lg avatar-preview">${`<img src="${JIKAN.safeImg(curAvatar || presetAvatar("adventurer", curName))}" alt="Current avatar preview">`}</div>
             <div style="color:var(--text-dim); font-size:.8rem;">Current avatar preview</div>
           </div>
           <div class="avatar-grid" id="avatarGrid">
@@ -491,7 +493,7 @@
               const [seed, style] = key.split("|");
               const url = presetAvatar(style, seed);
               return `<button type="button" class="avatar-choice" data-url="${JIKAN.esc(url)}" onclick="pickAvatar(this)" title="${style}">
-                <img src="${url}" alt="" loading="lazy" onerror="this.closest('.avatar-choice').style.display='none'">
+                <img src="${url}" alt="${style} avatar preset" loading="lazy" onerror="this.closest('.avatar-choice').style.display='none'">
               </button>`;
             }).join("")}
           </div>
