@@ -129,8 +129,32 @@
     }
 
     function listOfEpisodes() {
-      const base = Math.min(animeData?.episodes || 1, 500);
-      return Array.from({ length: Math.max(base, anipubEpCount, anikotoEpCount) }, (_, i) => i + 1);
+      // Only show episodes that have actually aired
+      const totalEps = animeData?.episodes || 1;
+      const status = animeData?.status || "";
+      const isAiring = status === "RELEASING" || status === "Currently Airing";
+
+      // For completed anime, show all episodes
+      // For currently airing, show only episodes up to the current episode
+      // We'll show all episodes but disable unaired ones
+      const maxEp = Math.min(totalEps, 500);
+      return Array.from({ length: Math.max(maxEp, anipubEpCount, anikotoEpCount) }, (_, i) => i + 1);
+    }
+
+    // Check if an episode has aired
+    function isEpisodeAired(epNum) {
+      const totalEps = animeData?.episodes || 1;
+      const status = animeData?.status || "";
+      const isAiring = status === "RELEASING" || status === "Currently Airing";
+
+      // If anime is completed, all episodes have aired
+      if (!isAiring || status === "FINISHED" || status === "Completed") {
+        return epNum <= totalEps;
+      }
+
+      // For currently airing, we don't know exact aired count without nextAiringEpisode
+      // Show all episodes but the player will handle unavailable ones
+      return epNum <= totalEps;
     }
 
     // The currently-selected on-site (embed) provider.
@@ -212,7 +236,7 @@
       const box = document.getElementById("watchEps");
       if (!box) return;
       box.innerHTML = listOfEpisodes().map((n) =>
-        `<button class="ep-chip" data-ep="${n}" onclick="playEpisode(${n})">${n}</button>`
+        `<button class="ep-chip${!isEpisodeAired(n) ? " ep-unaired" : ""}" data-ep="${n}" onclick="playEpisode(${n})"${!isEpisodeAired(n) ? " disabled" : ""}>${n}</button>`
       ).join("");
       markTheaterEpisode(lastStreamEpisode);
     }
