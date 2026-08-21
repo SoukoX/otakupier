@@ -68,6 +68,7 @@ img {
   justify-content: space-between;
   gap: 16px;
   position: relative;
+  min-width: 0;
 }
 
 .navbar::after {
@@ -209,6 +210,7 @@ img {
   gap: 16px;
   flex: 1;
   min-width: 0;
+  justify-content: center;
 }
 
 .logo {
@@ -231,7 +233,7 @@ img {
 .nav-links {
   display: flex;
   align-items: center;
-  justify-content: safe center;
+  justify-content: center;
   flex-wrap: nowrap;
   gap: 4px;
   list-style: none;
@@ -298,6 +300,7 @@ img {
   flex: 0 0 auto;
   margin-left: auto;
   white-space: nowrap;
+  flex-shrink: 0;
 }
 
 .btn {
