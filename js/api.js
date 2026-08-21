@@ -829,27 +829,9 @@ const JIKAN = {
     return out.sort((a, b) => a.sort - b.sort || a.year - b.year);
   },
 
-  // All anime for catalog browsing. Rotates the sort daily so the "Latest
-  // titles" first page isn't the same every visit, falling back to Jikan's
-  // cached top list when AniList is unreachable.
-  _ANI_SORTS: ["POPULARITY_DESC", "SCORE_DESC", "TRENDING_DESC", "FAVOURITES_DESC"],
+  // All anime for catalog browsing. Uses Jikan's top list (reliable, CORS-ok).
+  // AniList was used for rotating sorts but has browser CORS/timeout issues.
   async catalog(page = 1) {
-    try {
-      const day = Math.floor(Date.now() / 86400000);
-      const sort = this._ANI_SORTS[day % this._ANI_SORTS.length];
-      const q = `query($p: Int, $per: Int, $sort: [MediaSort]) { Page(page: $p, perPage: $per) { ${this._ANI_PAGE_FIELDS.replace("sort: [POPULARITY_DESC]", "sort: $sort")} } }`;
-      const data = await this._aniQuery(q, { p: page, per: 25, sort: [sort] });
-      const nodes = data?.Page?.media || [];
-      if (nodes.length) {
-        return {
-          data: nodes.map((m) => this._aniToJikan(m)),
-          pagination: {
-            last_visible_page: data.Page.pageInfo.lastPage || 1,
-            items: { total: data.Page.pageInfo.total || nodes.length, per_page: 25, count: nodes.length },
-          },
-        };
-      }
-    } catch (e) { /* fall back below */ }
     return this.topPage(page);
   },
 
