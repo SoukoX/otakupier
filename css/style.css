@@ -59,7 +59,7 @@ img {
 }
 
 .navbar-inner {
-  max-width: 1200px;
+  max-width: 1400px;
   margin: 0 auto;
   padding: 0 20px;
   height: 62px;
@@ -71,19 +71,6 @@ img {
   min-width: 0;
 }
 
-.navbar-inner .nav-links {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  flex-wrap: nowrap;
-  gap: 4px;
-  list-style: none;
-  flex: 0 1 auto;
-  min-width: 0;
-  overflow-x: auto;
-  scrollbar-width: none;
-  margin: 0;
-}
 
 .navbar::after {
   content: "";
@@ -219,12 +206,11 @@ img {
 }
 
 .nav-panel {
-  display: flex;
-  align-items: center;
-  gap: 16px;
-  flex: 1;
   min-width: 0;
-  justify-content: space-between;
+}
+
+.navbar:not(.navbar-home) .nav-panel {
+  display: contents;
 }
 
 .logo {
@@ -247,9 +233,9 @@ img {
 .nav-links {
   display: flex;
   align-items: center;
-  justify-content: center;
+  justify-content: flex-start;
   flex-wrap: nowrap;
-  gap: 4px;
+  gap: 2px;
   list-style: none;
   flex: 0 1 auto;
   min-width: 0;
@@ -268,6 +254,7 @@ img {
   color: var(--text-dim);
   transition: background 0.2s, color 0.2s;
   white-space: nowrap;
+  font-size: 0.95rem;
 }
 
 .nav-links a:hover,
@@ -3876,35 +3863,13 @@ footer .footer-links {
   }
 }
 
-@media (max-width: 720px) {
-  .detail-header {
-    grid-template-columns: 1fr;
-  }
-
-  .detail-poster {
-    max-width: 260px;
-    margin: 0 auto;
-  }
-
-  .grid {
-    grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
-    gap: 14px;
-  }
-
-  .rank-item {
-    grid-template-columns: 30px 50px 1fr;
-  }
-
-  .rank-thumb {
-    width: 50px;
-  }
-
+@media (max-width: 1178px) {
   .nav-toggle {
     display: inline-flex;
   }
 
-  /* Non-home pages: sticky nav becomes dropdown */
   .navbar:not(.navbar-home) .nav-panel {
+    display: flex;
     position: fixed;
     top: 62px;
     left: 0;
@@ -3969,7 +3934,6 @@ footer .footer-links {
     flex: 1;
   }
 
-  /* Home page mobile dropdown (floating nav) */
   .navbar-home .nav-panel {
     position: absolute;
     top: 100%;
@@ -4011,6 +3975,30 @@ footer .footer-links {
 
   .navbar-home .user-menu .btn {
     flex: 1;
+  }
+}
+
+@media (max-width: 720px) {
+  .detail-header {
+    grid-template-columns: 1fr;
+  }
+
+  .detail-poster {
+    max-width: 260px;
+    margin: 0 auto;
+  }
+
+  .grid {
+    grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+    gap: 14px;
+  }
+
+  .rank-item {
+    grid-template-columns: 30px 50px 1fr;
+  }
+
+  .rank-thumb {
+    width: 50px;
   }
 
   .hero {
