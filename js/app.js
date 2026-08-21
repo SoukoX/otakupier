@@ -416,9 +416,7 @@ function renderNav() {
         <button class="nav-toggle" id="navToggle" aria-label="Toggle menu" aria-expanded="false">☰</button>
         <div class="nav-panel">
           <ul class="nav-links">${links}</ul>
-          <div class="nav-auth">
-            ${authArea}
-          </div>
+          <div class="nav-auth">${authArea}</div>
         </div>
       </div>`;
   }
