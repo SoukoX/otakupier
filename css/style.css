@@ -71,6 +71,20 @@ img {
   min-width: 0;
 }
 
+.navbar-inner .nav-links {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-wrap: nowrap;
+  gap: 4px;
+  list-style: none;
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow-x: auto;
+  scrollbar-width: none;
+  margin: 0;
+}
+
 .navbar::after {
   content: "";
   position: absolute;
@@ -210,6 +224,7 @@ img {
   gap: 16px;
   flex: 1;
   min-width: 0;
+  justify-content: space-between;
 }
 
 .logo {
@@ -236,11 +251,10 @@ img {
   flex-wrap: nowrap;
   gap: 4px;
   list-style: none;
-  flex: 1 1 auto;
+  flex: 0 1 auto;
   min-width: 0;
   overflow-x: auto;
   scrollbar-width: none;
-  margin: 0 auto;
 }
 
 .nav-links::-webkit-scrollbar {
@@ -301,6 +315,70 @@ img {
   margin-left: auto;
   white-space: nowrap;
   flex-shrink: 0;
+}
+
+/* Home page mobile dropdown panel */
+.navbar-home .nav-panel {
+  position: absolute;
+  top: 66px;
+  right: 22px;
+  display: none;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 4px;
+  min-width: 230px;
+  padding: 14px;
+  background: rgba(24, 27, 50, 0.96);
+  border: 1px solid var(--border);
+  border-top: 2px solid var(--accent-grad);
+  border-radius: var(--radius);
+  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.55);
+}
+
+.navbar-home.open .nav-panel {
+  display: flex;
+  animation: dropIn 0.25s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+@keyframes dropIn {
+  from { opacity: 0; transform: translateY(-8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.navbar-home .nav-links {
+  flex-direction: column;
+  align-items: stretch;
+  overflow: visible;
+}
+
+.navbar-home .nav-links a {
+  display: block;
+  padding: 10px 12px;
+  border-radius: 6px;
+  font-size: 0.98rem;
+}
+
+.navbar-home .nav-auth {
+  margin-left: 0;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 8px;
+  border-top: 1px solid var(--border);
+  margin-top: 8px;
+  padding-top: 12px;
+}
+
+.navbar-home .nav-auth .btn,
+.navbar-home .nav-auth .user-menu {
+  width: 100%;
+}
+
+.navbar-home .nav-auth .user-menu {
+  flex-wrap: wrap;
+}
+
+.navbar-home .user-menu .btn {
+  flex: 1;
 }
 
 .btn {
@@ -3825,7 +3903,8 @@ footer .footer-links {
     display: inline-flex;
   }
 
-  .nav-panel {
+  /* Non-home pages: sticky nav becomes dropdown */
+  .navbar:not(.navbar-home) .nav-panel {
     position: fixed;
     top: 62px;
     left: 0;
@@ -3847,27 +3926,27 @@ footer .footer-links {
     z-index: 60;
   }
 
-  .navbar.open .nav-panel {
+  .navbar:not(.navbar-home).open .nav-panel {
     transform: translateY(0);
     opacity: 1;
     visibility: visible;
     pointer-events: auto;
   }
 
-  .nav-links {
+  .navbar:not(.navbar-home) .nav-links {
     flex-direction: column;
     align-items: stretch;
     overflow-x: visible;
     flex: none;
   }
 
-  .nav-links a {
+  .navbar:not(.navbar-home) .nav-links a {
     display: block;
     padding: 11px 12px;
     font-size: 0.95rem;
   }
 
-  .nav-auth {
+  .navbar:not(.navbar-home) .nav-auth {
     margin-left: 0;
     flex-direction: column;
     align-items: stretch;
@@ -3877,16 +3956,60 @@ footer .footer-links {
     padding-top: 12px;
   }
 
-  .nav-auth .btn,
-  .nav-auth .user-menu {
+  .navbar:not(.navbar-home) .nav-auth .btn,
+  .navbar:not(.navbar-home) .nav-auth .user-menu {
     width: 100%;
   }
 
-  .nav-auth .user-menu {
+  .navbar:not(.navbar-home) .nav-auth .user-menu {
     flex-wrap: wrap;
   }
 
-  .user-menu .btn {
+  .navbar:not(.navbar-home) .user-menu .btn {
+    flex: 1;
+  }
+
+  /* Home page mobile dropdown (floating nav) */
+  .navbar-home .nav-panel {
+    position: absolute;
+    top: 100%;
+    right: 14px;
+    left: auto;
+    min-width: 220px;
+    max-width: 90vw;
+  }
+
+  .navbar-home .nav-links {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .navbar-home .nav-links a {
+    display: block;
+    padding: 10px 12px;
+    font-size: 0.95rem;
+  }
+
+  .navbar-home .nav-auth {
+    margin-left: 0;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 8px;
+    border-top: 1px solid var(--border);
+    margin-top: 8px;
+    padding-top: 12px;
+  }
+
+  .navbar-home .nav-auth .btn,
+  .navbar-home .nav-auth .user-menu {
+    width: 100%;
+  }
+
+  .navbar-home .nav-auth .user-menu {
+    flex-wrap: wrap;
+  }
+
+  .navbar-home .user-menu .btn {
     flex: 1;
   }
 
