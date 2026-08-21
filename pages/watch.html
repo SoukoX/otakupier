@@ -32,6 +32,8 @@
      <div class="loading"><div class="spinner"></div>Loading player...</div>
    </main>
 
+   <h1 style="display:none;">Watch Anime Online - OtakuPier</h1>
+
    <!-- Static SEO content for search engines -->
    <section class="seo-content container">
      <h2>Watch Anime on OtakuPier</h2>
@@ -196,8 +198,8 @@
           </div>
           <div class="watch-side">
             <div class="watch-mini-info">
-              <img class="watch-mini-img" src="${JIKAN.esc(miniImg)}" alt=""
-                   onerror="this.onerror=null;this.src=JIKAN.PLACEHOLDER">
+<img class="watch-mini-img" src="${JIKAN.esc(miniImg)}" alt="${JIKAN.esc(JIKAN.title(a))} cover"
+                     onerror="this.onerror=null;this.src=JIKAN.PLACEHOLDER">
               <div class="watch-mini-body">
                 <div class="watch-mini-title">${JIKAN.esc(JIKAN.title(a))}</div>
                 ${a.title_japanese ? `<div class="watch-mini-jp">${JIKAN.esc(a.title_japanese)}</div>` : ""}
