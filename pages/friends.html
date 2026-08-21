@@ -74,7 +74,7 @@
 
     function userRowHtml(userId, name, avatar) {
       const letter = (name || "U").charAt(0).toUpperCase();
-      return `<div class="avatar">${avatar ? `<img src="${JIKAN.safeImg(avatar)}" alt="">` : letter}</div>
+      return `<div class="avatar">${avatar ? `<img src="${JIKAN.safeImg(avatar)}" alt="${JIKAN.esc(name || "User")} avatar">` : letter}</div>
         <a href="profile.html?id=${userId}" style="color:var(--text); text-decoration:none; font-weight:600;">${JIKAN.esc(name || "User")}</a>`;
     }
 
@@ -174,7 +174,7 @@
         const el = document.createElement("div");
         el.className = "user-row";
         el.innerHTML = `
-          <div class="avatar">${u.avatar_url ? `<img src="${JIKAN.safeImg(u.avatar_url)}" alt="">` : (u.name || "U").charAt(0).toUpperCase()}</div>
+          <div class="avatar">${u.avatar_url ? `<img src="${JIKAN.safeImg(u.avatar_url)}" alt="${JIKAN.esc(u.name || "User")} avatar">` : (u.name || "U").charAt(0).toUpperCase()}</div>
           <div style="flex:1; min-width:0;">
             <a href="profile.html?id=${u.id}" style="color:var(--text); text-decoration:none; font-weight:600;">${prestigeNameHTML(u, {})}</a>
             <div style="font-size:.75rem; color:var(--text-dim);">${rankForXp(u.xp).icon} ${rankForXp(u.xp).name}</div>
