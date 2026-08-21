@@ -141,20 +141,20 @@
       return Array.from({ length: Math.max(maxEp, anipubEpCount, anikotoEpCount) }, (_, i) => i + 1);
     }
 
-    // Check if an episode has aired
+    // Check if an episode has aired — must stay in sync with listOfEpisodes()
+    // which extends the grid when AniPub/AniKoto report more episodes than Jikan.
     function isEpisodeAired(epNum) {
       const totalEps = animeData?.episodes || 1;
       const status = animeData?.status || "";
       const isAiring = status === "RELEASING" || status === "Currently Airing";
-
-      // If anime is completed, all episodes have aired
+      const maxEp = Math.min(totalEps, 500);
+      const effectiveMax = Math.max(maxEp, anipubEpCount, anikotoEpCount);
+      // Completed anime: all listed episodes are available
       if (!isAiring || status === "FINISHED" || status === "Completed") {
-        return epNum <= totalEps;
+        return epNum <= effectiveMax;
       }
-
-      // For currently airing, we don't know exact aired count without nextAiringEpisode
-      // Show all episodes but the player will handle unavailable ones
-      return epNum <= totalEps;
+      // Currently airing: provider-specific counts override Jikan's total
+      return epNum <= effectiveMax;
     }
 
     // The currently-selected on-site (embed) provider.
