@@ -135,7 +135,7 @@
           el.innerHTML = `
             <div style="width:34px; text-align:center; font-weight:800; color:${r.rank <= 3 ? "var(--accent-2)" : "var(--text-dim)"};">${medal}</div>
             <div class="avatar-sm" style="width:40px;height:40px;border-radius:50%;overflow:hidden;background:var(--bg);display:flex;align-items:center;justify-content:center;">
-              ${r.p.avatar_url ? `<img src="${JIKAN.safeImg(r.p.avatar_url)}" style="width:100%;height:100%;object-fit:cover;" alt="">`
+              ${r.p.avatar_url ? `<img src="${JIKAN.safeImg(r.p.avatar_url)}" style="width:100%;height:100%;object-fit:cover;" alt="${JIKAN.esc(r.p.name || "User")} avatar">`
               : `<span style="font-weight:800;">${(r.p.name || "U").charAt(0).toUpperCase()}</span>`}
             </div>
             <div style="flex:1; min-width:0;">
