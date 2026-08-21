@@ -193,7 +193,7 @@
         const t = a.title_english || a.title;
         prev.innerHTML = `
           <div style="display:flex; gap:12px; align-items:center; margin:10px 0; padding:12px; background:var(--bg-card); border:1px solid var(--border); border-radius:10px;">
-            <img src="${a.images?.jpg?.image_url}" alt="" style="width:48px; height:64px; object-fit:cover; border-radius:6px;">
+            <img src="${a.images?.jpg?.image_url}" alt="${JIKAN.esc(t)} cover" style="width:48px; height:64px; object-fit:cover; border-radius:6px;">
             <div>
               <b>${JIKAN.esc(t)}</b>
               <div style="color:var(--text-dim); font-size:.85rem;">MAL ID ${malId} • ${a.type || ""} • ${a.status || ""}</div>
@@ -264,7 +264,7 @@
         const el = document.createElement("div");
         el.className = "admin-list-item";
         el.innerHTML = `
-          <img src="${c.image_url || JIKAN.PLACEHOLDER}" alt="" style="width:45px; height:60px; object-fit:cover; border-radius:6px;" onerror="this.onerror=null;this.src=JIKAN.PLACEHOLDER">
+          <img src="${c.image_url || JIKAN.PLACEHOLDER}" alt="${JIKAN.esc(c.title)} cover" style="width:45px; height:60px; object-fit:cover; border-radius:6px;" onerror="this.onerror=null;this.src=JIKAN.PLACEHOLDER">
           <div class="grow">
             <b>${JIKAN.esc(c.title)}</b>
             <div style="color:var(--text-dim); font-size:.8rem;">${JIKAN.esc(c.status || "Unknown")}${c.year ? " • " + c.year : ""}</div>
