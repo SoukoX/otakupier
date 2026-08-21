@@ -23,6 +23,7 @@
   <nav class="navbar" id="navbar"></nav>
 
   <main class="catalog-page">
+    <h1 style="display:none;">Browse Anime Catalog - OtakuPier</h1>
     <!-- Sticky search bar -->
     <div class="cat-searchbar">
       <div class="search-box">
@@ -168,9 +169,9 @@
       if (!items.length) { hideSuggest(); return; }
       box.innerHTML = items.map((a, i) => `
         <a class="suggest-item" data-i="${i}" href="${pageHref("anime")}?id=${a.mal_id}">
-          <img class="suggest-img" src="${JIKAN.esc(a.images?.jpg?.image_url || JIKAN.PLACEHOLDER)}"
-               alt="" loading="lazy"
-               onerror="this.onerror=null;this.src=JIKAN.PLACEHOLDER">
+<img class="suggest-img" src="${JIKAN.esc(a.images?.jpg?.image_url || JIKAN.PLACEHOLDER)}"
+                 alt="${JIKAN.esc(JIKAN.title(a))}" loading="lazy"
+                 onerror="this.onerror=null;this.src=JIKAN.PLACEHOLDER">
           <span class="suggest-body">
             <span class="suggest-title">${JIKAN.esc(JIKAN.title(a))}</span>
             <span class="suggest-meta">${JIKAN.esc(a.type || "Anime")}${a.year ? " · " + a.year : ""}${a.status === "RELEASING" ? " · Airing" : ""}</span>
