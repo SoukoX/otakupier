@@ -210,7 +210,6 @@ img {
   gap: 16px;
   flex: 1;
   min-width: 0;
-  justify-content: center;
 }
 
 .logo {
@@ -241,6 +240,7 @@ img {
   min-width: 0;
   overflow-x: auto;
   scrollbar-width: none;
+  margin: 0 auto;
 }
 
 .nav-links::-webkit-scrollbar {
@@ -587,6 +587,20 @@ img {
   color: var(--accent);
   background: rgba(230, 70, 92, 0.1);
   box-shadow: inset 0 0 0 1px var(--accent);
+}
+
+.watch-episodes .ep-chip.ep-unaired {
+  opacity: 0.4;
+  cursor: not-allowed;
+  color: var(--text-dim);
+  background: var(--bg);
+  border-color: var(--border);
+}
+.watch-episodes .ep-chip.ep-unaired:hover {
+  transform: none;
+  box-shadow: none;
+  border-color: var(--border);
+}
 }
 
 .watch-top {
