@@ -191,24 +191,16 @@
             if (batch.length === 0) break;
           }
 
-          // Dedup: keep chapter with most data (skip external chapters)
+          // Dedup: keep first non-external chapter per normalized number
           const seen = new Map();
           allChapters.forEach(ch => {
             if (!ch.attributes || !ch.attributes.chapter) return;
-            // Skip chapters hosted externally (MangaPlus etc.) — no images on MangaDex
             if (ch.attributes.externalUrl) return;
-            const num = ch.attributes.chapter;
-            const existing = seen.get(num);
-            if (!existing) {
-              seen.set(num, ch);
-            } else {
-              const eLen = (existing.attributes.data || existing.attributes.dataSaver || []).length;
-              const nLen = (ch.attributes.data || ch.attributes.dataSaver || []).length;
-              if (nLen > eLen) seen.set(num, ch);
-            }
+            const num = String(ch.attributes.chapter).trim();
+            if (!seen.has(num)) seen.set(num, ch);
           });
 
-          // Sort numerically
+          // Sort numerically by parsed chapter number, then by volume
           chapters = Array.from(seen.values()).sort((a, b) => {
             const na = parseNum(a.attributes.chapter);
             const nb = parseNum(b.attributes.chapter);
@@ -304,17 +296,26 @@
             const full = data.chapter.data || [];
             const saver = data.chapter.dataSaver || [];
             const pages = full.length ? full : saver;
-            const path = full.length ? "data" : "data-saver";
+            const basePath = full.length ? "data" : "data-saver";
 
             if (pages.length) {
               container.innerHTML = "";
               pages.forEach((filename, pi) => {
                 const img = document.createElement("img");
                 img.className = "reader-page-img";
-                img.src = `${data.baseUrl}/${path}/${data.chapter.hash}/${filename}`;
+                img.src = `${data.baseUrl}/${basePath}/${data.chapter.hash}/${filename}`;
                 img.alt = `Page ${pi + 1}`;
                 img.loading = pi < 3 ? "eager" : "lazy";
-                img.onerror = function() { this.style.minHeight = "200px"; };
+                img.onerror = function() {
+                  // If full-quality failed, try dataSaver (and vice versa)
+                  if (this.dataset.retried) {
+                    this.style.minHeight = "200px";
+                    return;
+                  }
+                  this.dataset.retried = "1";
+                  const altPath = basePath === "data" ? "data-saver" : "data";
+                  this.src = `${data.baseUrl}/${altPath}/${data.chapter.hash}/${filename}`;
+                };
                 container.appendChild(img);
               });
               window.scrollTo({ top: 0, behavior: "instant" });
