@@ -6,16 +6,18 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta name="msvalidate.01" content="4F55345C289F9597335C55566F2B31F9" />
 
-  <title>Browse Anime - OtakuPier</title>
+  <title>Browse Anime & Manga - OtakuPier</title>
   <meta name="robots" content="index, follow">
-  <meta name="description" content="Browse and search the anime catalog on OtakuPier. See what's airing now, trending, and most popular — filter by genre and watch anywhere.">
+  <meta name="description" content="Browse and search anime and manga on OtakuPier. See what's airing now, trending, and most popular — filter by genre and watch or read anywhere.">
   <link rel="canonical" href="https://otakupier.2bd.net/pages/catalog.html">
   <link rel="icon" type="image/svg+xml" href="../favicon.svg?v=2">
   <link rel="icon" type="image/x-icon" href="../favicon.ico">
   <link rel="preconnect" href="https://api.jikan.moe">
   <link rel="preconnect" href="https://graphql.anilist.co">
   <link rel="preconnect" href="https://cdn.jsdelivr.net">
-  <link rel="stylesheet" href="../css/style.css?v=20">
+  <link rel="preconnect" href="https://api.mangadex.org">
+  <link rel="stylesheet" href="../css/style.css?v=25">
+<link rel="dns-prefetch" href="https://soukox.goatcounter.com">
 <script data-goatcounter="https://soukox.goatcounter.com/count"
         async src="//gc.zgo.at/count.js"></script>
 </head>
@@ -23,7 +25,13 @@
   <nav class="navbar" id="navbar"></nav>
 
   <main class="catalog-page">
-    <h1 style="display:none;">Browse Anime Catalog - OtakuPier</h1>
+    <h1 style="display:none;">Browse Anime & Manga Catalog - OtakuPier</h1>
+    <!-- Anime / Manga toggle -->
+    <div class="cat-type-toggle">
+      <button class="cat-type-btn active" data-type="anime" onclick="switchCatType('anime')">Anime</button>
+      <button class="cat-type-btn" data-type="manga" onclick="switchCatType('manga')">Manga</button>
+    </div>
+
     <!-- Sticky search bar -->
     <div class="cat-searchbar">
       <div class="search-box">
@@ -47,6 +55,16 @@
       <button class="cat-hero-collapse" id="heroCollapse" aria-label="Hide highlights" title="Hide highlights">&ndash;</button>
     </section>
     <button class="cat-hero-restore" id="heroRestore" hidden>Show highlights</button>
+
+    <!-- Manga hero slideshow (shown in manga mode) -->
+    <section class="cat-hero" id="mangaHero" aria-label="Popular manga" style="display:none;">
+      <div class="cat-hero-track" id="mangaHeroSlides"></div>
+      <button class="cat-hero-arrow prev" id="mangaHeroPrev" aria-label="Previous slide">&lsaquo;</button>
+      <button class="cat-hero-arrow next" id="mangaHeroNext" aria-label="Next slide">&rsaquo;</button>
+      <div class="cat-hero-dots" id="mangaHeroDots"></div>
+      <button class="cat-hero-collapse" id="mangaHeroCollapse" aria-label="Hide highlights" title="Hide highlights">&ndash;</button>
+    </section>
+    <button class="cat-hero-restore" id="mangaHeroRestore" hidden>Show highlights</button>
 
     <!-- Streaming-style rows (shown in default browse state) -->
     <section class="cat-rows" id="catRows">
@@ -80,6 +98,31 @@
       </div>
     </section>
 
+    <!-- Manga rows (shown in manga mode) -->
+    <section class="cat-rows" id="mangaRows" style="display:none;">
+      <div class="row-section">
+        <div class="row-head">
+          <h2>Trending Manga</h2>
+        </div>
+        <div class="sc-row-wrap">
+          <button class="sc-row-btn prev" aria-label="Scroll left"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg></button>
+          <button class="sc-row-btn next" aria-label="Scroll right"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6l6 6-6 6"/></svg></button>
+          <div class="scroll-row" id="mangaRowTrending"><div class="skeleton-row"></div></div>
+        </div>
+      </div>
+
+      <div class="row-section">
+        <div class="row-head">
+          <h2>New Releases</h2>
+        </div>
+        <div class="sc-row-wrap">
+          <button class="sc-row-btn prev" aria-label="Scroll left"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg></button>
+          <button class="sc-row-btn next" aria-label="Scroll right"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6l6 6-6 6"/></svg></button>
+          <div class="scroll-row" id="mangaRowNew"><div class="skeleton-row"></div></div>
+        </div>
+      </div>
+    </section>
+
     <!-- Full browse / search grid with pagination -->
     <div class="catalog-body">
       <div class="catalog-results-head">
@@ -98,16 +141,54 @@
   <footer id="siteFooter"></footer>
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <script src="../js/config.js?v=20"></script>
-  <script src="../js/api.js?v=20"></script>
-  <script src="../js/app.js?v=20"></script>
+  <script src="../js/config.js?v=25"></script>
+  <script src="../js/api.js?v=25"></script>
+  <script src="../js/app.js?v=25"></script>
   <script>
     const params = new URLSearchParams(window.location.search);
+    let catType = params.get("type") || "anime";
     let state = {
       q: params.get("q") || "",
       genre: "",
       page: 1,
     };
+
+    // ── Anime / Manga toggle ──
+    function switchCatType(type) {
+      catType = type;
+      document.querySelectorAll(".cat-type-btn").forEach(b => b.classList.toggle("active", b.dataset.type === type));
+      state.page = 1;
+      document.getElementById("searchBox").placeholder = type === "manga" ? "Search manga..." : "Search anime...";
+      const animeHero = document.getElementById("catHero");
+      const animeRows = document.getElementById("catRows");
+      const mangaHero = document.getElementById("mangaHero");
+      const mangaRows = document.getElementById("mangaRows");
+      const animeRestore = document.getElementById("heroRestore");
+      const mangaRestore = document.getElementById("mangaHeroRestore");
+      if (type === "manga") {
+        animeHero.style.display = "none";
+        animeRows.style.display = "none";
+        if (animeRestore) animeRestore.hidden = true;
+        mangaHero.style.display = "";
+        mangaRows.style.display = "";
+        loadMangaHero();
+        loadMangaRows();
+      } else {
+        animeHero.style.display = "";
+        animeRows.style.display = "";
+        mangaHero.style.display = "none";
+        mangaRows.style.display = "none";
+        if (mangaRestore) mangaRestore.hidden = true;
+        loadHero();
+        loadRows();
+      }
+      loadCatalog();
+      try {
+        const newParams = new URLSearchParams(window.location.search);
+        newParams.set("type", type);
+        history.replaceState(null, "", window.location.pathname + "?" + newParams.toString());
+      } catch (_) {}
+    }
 
     function isFiltered() {
       return state.q || state.genre;
@@ -133,7 +214,6 @@
       state.genre = "";
       state.page = 1;
       showBrowse();
-      history.replaceState(null, "", "catalog");
     }
 
     function applyFilters(p) {
@@ -141,8 +221,10 @@
       state.genre = document.getElementById("genreSelect").value;
       state.page = p || 1;
       hideSuggest();
-      document.getElementById("catHero").style.display = "none";
-      document.getElementById("catRows").style.display = "none";
+      if (catType === "anime") {
+        document.getElementById("catHero").style.display = "none";
+        document.getElementById("catRows").style.display = "none";
+      }
       loadCatalog();
       scrollToBrowse();
     }
@@ -157,8 +239,13 @@
       if (q.length < 2) { hideSuggest(); return; }
       suggestTimer = setTimeout(async () => {
         try {
-          const items = await JIKAN.suggest(q);
-          renderSuggest(items, q);
+          if (catType === "manga") {
+            const items = await JIKAN.mangaSearch(q, 8);
+            renderMangaSuggest(items, q);
+          } else {
+            const items = await JIKAN.suggest(q);
+            renderSuggest(items, q);
+          }
         } catch (e) { hideSuggest(); }
       }, 220);
     }
@@ -181,6 +268,34 @@
       box.hidden = false;
       suggestIndex = -1;
       box.querySelectorAll(".suggest-item").forEach((el, i) =>
+        el.addEventListener("mousedown", (e) => {
+          e.preventDefault();
+          hideSuggest();
+          window.location.href = el.getAttribute("href");
+        }));
+      box.classList.add("show");
+    }
+
+    function renderMangaSuggest(items, q) {
+      const box = document.getElementById("searchSuggest");
+      if (!box) return;
+      if (!items.length) { hideSuggest(); return; }
+      box.innerHTML = items.map((m, i) => {
+        const href = pageHref("manga") + "?id=" + encodeURIComponent(m.id);
+        return `<a class="suggest-item" data-i="${i}" href="${href}">
+<img class="suggest-img" src="${JIKAN.esc(m.cover || JIKAN.PLACEHOLDER)}"
+                 alt="${JIKAN.esc(m.title)}" loading="lazy"
+                 onerror="this.onerror=null;this.src=JIKAN.PLACEHOLDER">
+          <span class="suggest-body">
+            <span class="suggest-title">${JIKAN.esc(m.title)}</span>
+            <span class="suggest-meta">${JIKAN.esc(m.status || "Manga")}${m.author ? " · " + JIKAN.esc(m.author) : ""}</span>
+          </span>
+          <span class="suggest-score">${m.genres.length ? JIKAN.esc(m.genres[0]) : ""}</span>
+        </a>`;
+      }).join("");
+      box.hidden = false;
+      suggestIndex = -1;
+      box.querySelectorAll(".suggest-item").forEach((el) =>
         el.addEventListener("mousedown", (e) => {
           e.preventDefault();
           hideSuggest();
@@ -232,6 +347,45 @@
       const grid = document.getElementById("catalogGrid");
       grid.innerHTML = skeletonGrid(20);
 
+      // ── Manga mode ──
+      if (catType === "manga") {
+        try {
+          const q = state.q || "";
+          let results;
+          if (q) {
+            results = await JIKAN.mangaSearch(q, 20);
+          } else {
+            results = await JIKAN.mangaPopular(state.page, 20);
+          }
+          grid.innerHTML = "";
+          if (!results.length) {
+            grid.innerHTML = q
+              ? '<div class="empty-state">No manga found for this search.</div>'
+              : '<div class="empty-state">Could not load manga catalog. <small>Try refreshing</small></div>';
+            return;
+          }
+          results.forEach((m, i) => {
+            const wrapper = document.createElement("div");
+            wrapper.innerHTML = mangaCard(m);
+            const el = wrapper.firstElementChild;
+            if (el) {
+              el.style.animationDelay = ((i % 24) * 40) + "ms";
+              grid.appendChild(el);
+            }
+          });
+          const rt = document.getElementById("resultsTitle");
+          if (rt) rt.textContent = q ? 'Manga results for "' + q + '"' : "Popular manga";
+          document.getElementById("pageInfo").textContent = "Page " + state.page;
+          document.getElementById("prevBtn").style.visibility = state.page > 1 ? "visible" : "hidden";
+          document.getElementById("nextBtn").style.visibility = results.length >= 20 ? "visible" : "hidden";
+          } catch (err) {
+          console.error("[Manga catalog]", err);
+          grid.innerHTML = '<div class="empty-state">Could not load manga. ' + (err.message ? '(' + JIKAN.esc(err.message) + ')' : '') + '</div>';
+        }
+        return;
+      }
+
+      // ── Anime mode (original) ──
       try {
         const PER_PAGE = 4;
         const firstPage = (state.page - 1) * PER_PAGE + 1;
@@ -289,6 +443,20 @@
       }
     }
 
+    function mangaCard(m) {
+      const href = pageHref("manga") + "?id=" + encodeURIComponent(m.id);
+      return '<a class="card stream-card manga-card" href="' + href + '">' +
+        '<div class="card-poster"><img src="' + JIKAN.esc(m.cover || JIKAN.PLACEHOLDER) + '" alt="' + JIKAN.esc(m.title) + '" loading="lazy" onerror="this.onerror=null;this.src=JIKAN.PLACEHOLDER">' +
+        (m.status ? '<span class="card-badge">' + JIKAN.esc(m.status) + '</span>' : '') +
+        '</div>' +
+        '<div class="card-body">' +
+          '<div class="card-title">' + JIKAN.esc(m.title) + '</div>' +
+          (m.genres.length ? '<div class="card-meta">' + m.genres.slice(0, 3).map(g => JIKAN.esc(g)).join(" · ") + '</div>' : '') +
+          (m.author ? '<div class="card-meta">' + JIKAN.esc(m.author) + '</div>' : '') +
+        '</div>' +
+      '</a>';
+    }
+
     async function loadGenres() {
       const sel = document.getElementById("genreSelect");
       try {
@@ -304,12 +472,19 @@
 
     // ---------- Streaming rows + hero ----------
     function showBrowse() {
-      document.getElementById("catHero").style.display = "";
-      document.getElementById("catRows").style.display = "";
-      loadHero();
-      loadRows();
+      if (catType === "anime") {
+        document.getElementById("catHero").style.display = "";
+        document.getElementById("catRows").style.display = "";
+        loadHero();
+        loadRows();
+      } else {
+        document.getElementById("mangaHero").style.display = "";
+        document.getElementById("mangaRows").style.display = "";
+        loadMangaHero();
+        loadMangaRows();
+      }
       loadCatalog();
-      history.replaceState(null, "", "catalog");
+      try { history.replaceState(null, "", "catalog?type=" + catType); } catch (_) {}
     }
 
     async function loadHero() {
@@ -449,6 +624,133 @@
       loadRow("rowPopular", () => JIKAN.aniBrowse({ sort: ["POPULARITY_DESC"] }));
     }
 
+    // ── Manga hero + rows ──
+    async function loadMangaHero() {
+      const track = document.getElementById("mangaHeroSlides");
+      if (!track) return;
+      try {
+        const res = await JIKAN.mangaTrending(1);
+        const list = (res.data || []).slice(0, 6);
+        if (!list.length) { track.innerHTML = ""; return; }
+        track.innerHTML = list.map((m, i) => mangaHeroSlide(m, i === 0)).join("");
+        initMangaHero(list.length);
+      } catch (e) { track.innerHTML = ""; }
+    }
+
+    function mangaHeroSlide(m, active) {
+      const img = m.cover || JIKAN.PLACEHOLDER;
+      const bgLayers = `url('${JIKAN.esc(img)}')`;
+      const genres = (m.genres || []).slice(0, 3).map((g) => `<span>${JIKAN.esc(g)}</span>`).join("");
+      let status = "";
+      if (m.status === "RELEASING") status = m.chapters ? `${m.chapters}+ ch` : "Ongoing";
+      else if (m.status === "FINISHED") status = m.chapters ? `${m.chapters} ch` : "Completed";
+      return `<div class="cat-hero-slide${active ? " active" : ""}" data-i="${m.id}">
+        <div class="cat-hero-bg" data-src="${JIKAN.esc(bgLayers)}"${active ? ` style="background-image:${bgLayers}"` : ""}></div>
+        <div class="cat-hero-overlay"></div>
+        <div class="cat-hero-content">
+          <div class="cat-hero-cover"><img data-src="${JIKAN.esc(img)}"${active ? ` src="${JIKAN.esc(img)}"` : ` src="${JIKAN.PLACEHOLDER}"`} alt="${JIKAN.esc(m.title)}" onerror="this.onerror=null;this.src=JIKAN.PLACEHOLDER"></div>
+          <div class="cat-hero-info">
+            <span class="cat-hero-badge">Manga</span>
+            <h2 class="cat-hero-title">${JIKAN.esc(m.title)}</h2>
+            <div class="cat-hero-tags">${genres}</div>
+            <div class="cat-hero-meta">${JIKAN.esc(status || m.format || "Manga")}</div>
+            <div class="cat-hero-actions">
+              <a class="btn btn-primary btn-glow" href="${pageHref("manga")}?id=${m.id}">View Details</a>
+              <a class="btn btn-outline" href="${pageHref("mangareader")}?id=${m.id}&title=${encodeURIComponent(m.title)}">📖 Read Now</a>
+            </div>
+          </div>
+        </div>
+      </div>`;
+    }
+
+    function initMangaHero(n) {
+      const track = document.getElementById("mangaHeroSlides");
+      const dotsEl = document.getElementById("mangaHeroDots");
+      let idx = 0, timer = null;
+      dotsEl.innerHTML = Array.from({ length: n }, (_, i) =>
+        `<button class="cat-hero-dot${i === 0 ? " active" : ""}" data-i="${i}" aria-label="Slide ${i + 1}"></button>`).join("");
+
+      const show = (i) => {
+        idx = (i + n) % n;
+        track.querySelectorAll(".cat-hero-slide").forEach((s, k) => {
+          const on = k === idx;
+          s.classList.toggle("active", on);
+          if (on) {
+            const bg = s.querySelector(".cat-hero-bg");
+            if (bg && bg.dataset.src && !bg.style.backgroundImage) bg.style.backgroundImage = bg.dataset.src;
+            const img = s.querySelector("img");
+            if (img && img.dataset.src && img.src !== img.dataset.src) img.src = img.dataset.src;
+          }
+        });
+        dotsEl.querySelectorAll(".cat-hero-dot").forEach((d, k) => d.classList.toggle("active", k === idx));
+      };
+
+      const start = () => { clearInterval(timer); if (!document.hidden && !collapsed) timer = setInterval(() => show(idx + 1), 5000); };
+      const stop = () => clearInterval(timer);
+
+      const hero = document.getElementById("mangaHero");
+      const collapseBtn = document.getElementById("mangaHeroCollapse");
+      const restoreBtn = document.getElementById("mangaHeroRestore");
+      let collapsed = localStorage.getItem("otk.mangaHeroCollapsed") === "1";
+      const applyCollapsed = () => {
+        hero.classList.toggle("collapsed", collapsed);
+        restoreBtn.hidden = !collapsed;
+        if (collapsed) {
+          hero.style.height = "0px";
+          hero.style.minHeight = "0px";
+          stop();
+        } else {
+          hero.style.height = "";
+          hero.style.minHeight = "";
+          start();
+        }
+      };
+      collapseBtn.addEventListener("click", () => {
+        collapsed = true;
+        localStorage.setItem("otk.mangaHeroCollapsed", "1");
+        applyCollapsed();
+      });
+      restoreBtn.addEventListener("click", () => {
+        collapsed = false;
+        localStorage.setItem("otk.mangaHeroCollapsed", "0");
+        applyCollapsed();
+      });
+      applyCollapsed();
+
+      document.getElementById("mangaHeroPrev").addEventListener("click", () => { show(idx - 1); start(); });
+      document.getElementById("mangaHeroNext").addEventListener("click", () => { show(idx + 1); start(); });
+      dotsEl.addEventListener("click", (e) => {
+        const b = e.target.closest(".cat-hero-dot");
+        if (b) { show(Number(b.dataset.i)); start(); }
+      });
+      hero.addEventListener("mouseenter", stop);
+      hero.addEventListener("mouseleave", start);
+      document.addEventListener("visibilitychange", () => { if (document.hidden) stop(); else start(); });
+      let tx = null;
+      hero.addEventListener("touchstart", (e) => { tx = e.changedTouches[0].clientX; stop(); }, { passive: true });
+      hero.addEventListener("touchend", (e) => {
+        if (tx === null) return;
+        const dx = e.changedTouches[0].clientX - tx;
+        tx = null;
+        if (Math.abs(dx) > 40) { show(idx + (dx < 0 ? 1 : -1)); start(); }
+      }, { passive: true });
+      start();
+    }
+
+    async function loadMangaRows() {
+      const loadMangaRow = (id, fetcher) => {
+        const row = document.getElementById(id);
+        if (!row) return;
+        fetcher(1).then((res) => {
+          row.innerHTML = "";
+          (res?.data || []).slice(0, 20).forEach((m) => row.appendChild(JIKAN.mangaStreamCard(m)));
+          row.dispatchEvent(new Event("scroll"));
+        }).catch(() => { row.innerHTML = `<div class="empty-state">Could not load.</div>`; });
+      };
+      loadMangaRow("mangaRowTrending", () => JIKAN.mangaTrending(1));
+      loadMangaRow("mangaRowNew", () => JIKAN.mangaNewReleases(1));
+    }
+
     function setupScrollRow(el) {
       if (!el || el.dataset.scwired) return;
       el.dataset.scwired = "1";
@@ -503,18 +805,26 @@ updateEdges();
     }
 
     document.addEventListener("DOMContentLoaded", () => {
+      // Initialize toggle state from URL
+      if (catType === "manga") {
+        document.querySelectorAll(".cat-type-btn").forEach(b => b.classList.toggle("active", b.dataset.type === "manga"));
+        document.getElementById("catHero").style.display = "none";
+        document.getElementById("catRows").style.display = "none";
+        document.getElementById("mangaHero").style.display = "";
+        document.getElementById("mangaRows").style.display = "";
+        document.getElementById("heroRestore").hidden = true;
+      }
       if (state.q) {
         document.getElementById("searchBox").value = state.q;
         document.getElementById("catHero").style.display = "none";
         document.getElementById("catRows").style.display = "none";
+        document.getElementById("mangaHero").style.display = "none";
+        document.getElementById("mangaRows").style.display = "none";
       }
       loadGenres();
       showBrowse();
       document.querySelectorAll(".scroll-row").forEach(setupScrollRow);
     });
   </script>
-
-  <footer id="siteFooter"></footer>
-</main>
 </body>
 </html>
