@@ -6,7 +6,7 @@
 
 const SEO = {
   BASE: "https://otakupier.2bd.net",
-  INDEXNOW_KEY: "fa7eb9705f644b66ab22d305ec3351b9",
+  INDEXNOW_KEY: "7a9a2a35d24b473c811ecd475c7bd970",
 
   // IndexNow: notify search engines (Bing, Yandex, Naver, etc.) about URL changes.
   // Can be called with a single URL string or an array of URLs.
