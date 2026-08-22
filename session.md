@@ -1,19 +1,34 @@
 # OtakuPier Manga Reader - Session State
 
 ## Current Status
-Manga feature is built and mostly working. One critical issue remains:
-1. Image loading: some chapters have images that fail to load from MangaDex CDN
+Manga feature is built and mostly working. SEO overhaul completed.
 
 ### Fixed Issues (Aug 22 2026)
 - **No English chapters found**: Added fallback to Japanese raws when no English chapters exist (e.g. Vagabond, Ultimate Shut-in)
 - **Image loading**: Improved error handling — retry logic tries both data/data-saver paths, shows visible error state when images fail
 - **Chapter ordering**: Was already working correctly; Vagabond starts at Ch.216 because early chapters were never scanlated in English
+- **Manga matching**: Improved `pickBestManga` scoring with romanization normalization ("ou"↔"o"), stronger spinoff penalties, prefix matching
+
+### SEO Overhaul (Aug 22 2026)
+- **IndexNow**: Implemented with key file at root, ping on every deploy via push_update.py
+- **Sitemap**: Fixed — removed noindex pages, added `<lastmod>`, `<changefreq>`
+- **Open Graph**: Added og:title, og:description, og:image, og:type to all indexable pages
+- **JSON-LD**: Added WebSite (SearchAction), CollectionPage (catalog), ItemList (rankings), TVSeries/Movie (anime detail)
+- **hreflang**: Added `en` + `x-default` to all indexable pages
+- **noindex**: Set on admin, login, signup, dms, friends, mylist, profile pages
+- **Google/Bing ping**: Added sitemap ping to push_update.py after deploy
 
 ## Files Modified
 - `otakupier/pages/mangareader.html` — Full manga reader (sidebar + top bar + page viewer)
 - `otakupier/pages/manga.html` — Manga detail page (removed external links, only "Read Now" button)
 - `otakupier/css/style.css` — Reader layout styles (lines ~5016-5220)
 - `otakupier/js/api.js` — AniList GraphQL manga queries (MANGA/Manhwa/Manhua)
+- `otakupier/js/seo.js` — IndexNow ping utility added
+- `otakupier/sitemap.xml` — Rebuilt with lastmod, changefreq, correct URLs
+- All pages in `otakupier/pages/` — OG tags, hreflang, JSON-LD, noindex fixes
+- `otakupier/index.html` — SearchAction JSON-LD, hreflang
+- `otakupier/fa7eb9705f644b66ab22d305ec3351b9.txt` — IndexNow key file
+- `/home/ac/push_update.py` — IndexNow + Google sitemap ping after deploy
 
 ## Architecture
 
