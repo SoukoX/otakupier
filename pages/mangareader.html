@@ -196,8 +196,8 @@
           allChapters.forEach(ch => {
             if (!ch.attributes || !ch.attributes.chapter) return;
             if (ch.attributes.externalUrl) return;
-            const num = String(ch.attributes.chapter).trim();
-            if (!seen.has(num)) seen.set(num, ch);
+            const key = normKey(ch.attributes.chapter);
+            if (!seen.has(key)) seen.set(key, ch);
           });
 
           // Sort numerically by parsed chapter number, then by volume
@@ -222,13 +222,19 @@
       }
 
       function parseNum(str) {
-        const s = String(str).toLowerCase();
+        const s = String(str).toLowerCase().trim();
         // "Vol.3 Ch.12" → prefer chapter number over volume number
         const chMatch = s.match(/(?:ch(?:apter)?\.?\s*)([\d.]+)/i);
         if (chMatch) return parseFloat(chMatch[1]);
-        // "Chapter 1", "Vol 1", plain "1" → first number found
+        // Plain "1", "1.5", "001" → first number found
         const m = s.match(/[\d.]+/);
         return m ? parseFloat(m[0]) : Infinity;
+      }
+
+      // Normalize chapter string for dedup: "1", "1.0", "001", "Ch.1" all map to same key
+      function normKey(str) {
+        const n = parseNum(str);
+        return n === Infinity ? String(str).trim().toLowerCase() : String(n);
       }
 
       function renderChapterList() {
