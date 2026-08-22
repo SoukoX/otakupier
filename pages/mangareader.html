@@ -75,8 +75,7 @@
 
       const API = "https://api.mangadex.org";
       const PROXIES = [
-        "https://api.allorigins.win/raw?url=",
-        "https://corsproxy.io/?",
+        "https://cors.sh/",
       ];
 
       const $ = (id) => document.getElementById(id);
@@ -100,48 +99,22 @@
       async function mdFetch(url) {
         const TIMEOUT = 12000;
 
-        // Build attempt promises with their index so we know the response shape
+        // Try direct first, then cors.sh proxy
         const tasks = [
           { idx: 0, promise: fetch(url) },
-          ...PROXIES.map((proxy, i) => ({
-            idx: i + 1,
-            promise: fetch(proxy + encodeURIComponent(url)),
-          })),
+          { idx: 1, promise: fetch(PROXIES[0] + url) },
         ];
 
-        // Race all attempts; use the first to resolve OK within TIMEOUT
         const winner = await Promise.any(
           tasks.map(({ idx, promise }) =>
             promise.then(async r => {
               if (!r.ok) throw new Error("not ok");
-              if (idx === 1) {
-                // allorigins/raw → raw text, parse ourselves
-                const text = await r.text();
-                return JSON.parse(text);
-              }
-              if (idx === 2) {
-                // allorigins/get wraps in {contents: "..."}
-                const json = await r.json();
-                return typeof json.contents === "string" ? JSON.parse(json.contents) : json;
-              }
               return r.json();
             })
           )
         ).catch(() => null);
 
         if (winner) return winner;
-
-        // Last resort: codetabs proxy (slower, but CORS-safe)
-        try {
-          const ctrl = new AbortController();
-          const t = setTimeout(() => ctrl.abort(), TIMEOUT);
-          const r = await fetch(
-            "https://api.codetabs.com/v1/proxy?quest=" + encodeURIComponent(url),
-            { signal: ctrl.signal }
-          );
-          clearTimeout(t);
-          if (r.ok) return r.json();
-        } catch (_) {}
 
         throw new Error("All fetch attempts failed");
       }
