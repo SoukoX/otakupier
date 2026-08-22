@@ -1047,6 +1047,239 @@ const JIKAN = {
     return `https://mangadex.org/search?q=${encodeURIComponent(title)}`;
   },
 
+  // ── Manga (AniList GraphQL) ──────────────────────────────────────────
+  // Uses the same AniList GraphQL API already proven for anime (CORS-open,
+  // no key). AniList has full manga data: titles, covers, descriptions,
+  // genres, status, chapters. Chapter reading links to MangaKatana.
+
+  _MANGA_SEARCH_Q: `query($s: String, $p: Int, $per: Int) {
+    Page(page: $p, perPage: $per) {
+      pageInfo { total }
+      media(search: $s, type: MANGA, isAdult: false, sort: SEARCH_MATCH) {
+        id title { romaji english native }
+        coverImage { large }
+        status format genres description(asHtml: false)
+        chapters volumes countryOfOrigin startDate { year }
+      }
+    }
+  }`,
+
+  _MANGA_DETAIL_Q: `query($id: Int!) {
+    Media(id: $id, type: MANGA) {
+      id title { romaji english native }
+      coverImage { large extraLarge }
+      bannerImage status format genres description(asHtml: false)
+      chapters volumes countryOfOrigin startDate { year }
+      staff { edges { node { name { full } } } }
+      relations { edges { node { id title { romaji english } type format } relationType } }
+    }
+  }`,
+
+  async _aniMangaQuery(query, variables) {
+    const res = await fetch(CONFIG.ANILIST_BASE, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Accept: "application/json" },
+      body: JSON.stringify({ query, variables }),
+    });
+    const body = await res.json();
+    if (body.errors) throw new Error(body.errors[0]?.message || "AniList error");
+    return body.data;
+  },
+
+  _aniMangaToList(data) {
+    const page = data?.Page;
+    if (!page) return [];
+    return (page.media || [])
+      .filter(m => {
+        const fmt = (m.format || "").toUpperCase();
+        return fmt === "MANGA" || fmt === "MANHWA" || !m.format;
+      })
+      .map(m => {
+        const title = m.title?.english || m.title?.romaji || "";
+        const staff = m.staff?.edges || [];
+        const author = staff[0]?.node?.name?.full || "";
+        return {
+          id: m.id,
+          title,
+          cover: m.coverImage?.large || "",
+          status: m.status || "",
+          summary: (m.description || "").replace(/<[^>]*>/g, "").slice(0, 250),
+          genres: m.genres || [],
+          author,
+          year: m.startDate?.year || null,
+          format: m.format || "",
+          chapters: m.chapters,
+          volumes: m.volumes,
+          altTitles: [m.title?.romaji, m.title?.native].filter(t => t && t !== title),
+        };
+      });
+  },
+
+  async mangaSearch(query, limit = 20) {
+    try {
+      const data = await this._aniMangaQuery(this._MANGA_SEARCH_Q, { s: query, p: 1, per: limit });
+      return this._aniMangaToList(data);
+    } catch (e) {
+      return [];
+    }
+  },
+
+  async mangaPopular(page = 1, limit = 20) {
+    try {
+      const q = `query($p: Int, $per: Int) {
+        Page(page: $p, perPage: $per) {
+          media(type: MANGA, isAdult: false, sort: POPULARITY_DESC) {
+            id title { romaji english native }
+            coverImage { large }
+            status format genres description(asHtml: false)
+            chapters volumes countryOfOrigin startDate { year }
+          }
+        }
+      }`;
+      const data = await this._aniMangaQuery(q, { p: page, per: limit });
+      return this._aniMangaToList(data);
+    } catch (e) {
+      return [];
+    }
+  },
+
+  async mangaDetail(anilistId) {
+    try {
+      const data = await this._aniMangaQuery(this._MANGA_DETAIL_Q, { id: Number(anilistId) });
+      const m = data?.Media;
+      if (!m) return null;
+      const title = m.title?.english || m.title?.romaji || "";
+      const staff = m.staff?.edges || [];
+      const author = staff[0]?.node?.name?.full || "";
+      return {
+        id: m.id,
+        title,
+        cover: m.coverImage?.extraLarge || m.coverImage?.large || "",
+        coverSm: m.coverImage?.large || "",
+        banner: m.bannerImage || "",
+        status: m.status || "",
+        summary: (m.description || "").replace(/<[^>]*>/g, ""),
+        genres: m.genres || [],
+        author,
+        year: m.startDate?.year || null,
+        format: m.format || "",
+        chapters: m.chapters,
+        volumes: m.volumes,
+        altTitles: [m.title?.romaji, m.title?.native].filter(t => t && t !== title),
+        relations: (m.relations?.edges || []).map(r => ({
+          id: r.node?.id,
+          title: r.node?.title?.english || r.node?.title?.romaji || "",
+          type: r.node?.type || "",
+          format: r.node?.format || "",
+          relation: r.relationType || "",
+        })),
+      };
+    } catch (e) {
+      return null;
+    }
+  },
+
+  // MangaKatana search URL for reading chapters (iframe-friendly).
+  mangakatanaSearch(title) {
+    return `https://mangakatana.com/?search=${encodeURIComponent(title)}&search_by=m_name`;
+  },
+
+  // MangaDex search URL (fallback reading).
+  mangadexSearchUrl(title) {
+    return `https://mangadex.org/search?q=${encodeURIComponent(title)}`;
+  },
+
+  // ── Manga catalog rows (AniList) ──────────────────────────────────────
+  async mangaTrending(page = 1) {
+    try {
+      const q = `query($p: Int, $per: Int) {
+        Page(page: $p, perPage: $per) {
+          media(type: MANGA, isAdult: false, sort: TRENDING_DESC) {
+            id title { romaji english native }
+            coverImage { large extraLarge }
+            status format genres description(asHtml: false)
+            chapters volumes countryOfOrigin startDate { year }
+            staff { edges { node { name { full } } } }
+          }
+        }
+      }`;
+      const data = await this._aniMangaQuery(q, { p: page, per: 20 });
+      return { data: this._aniMangaToList(data) };
+    } catch (e) {
+      return { data: [] };
+    }
+  },
+
+  async mangaNewReleases(page = 1) {
+    try {
+      const q = `query($p: Int, $per: Int) {
+        Page(page: $p, perPage: $per) {
+          media(type: MANGA, isAdult: false, sort: START_DATE_DESC) {
+            id title { romaji english native }
+            coverImage { large extraLarge }
+            status format genres description(asHtml: false)
+            chapters volumes countryOfOrigin startDate { year }
+            staff { edges { node { name { full } } } }
+          }
+        }
+      }`;
+      const data = await this._aniMangaQuery(q, { p: page, per: 20 });
+      return { data: this._aniMangaToList(data) };
+    } catch (e) {
+      return { data: [] };
+    }
+  },
+
+  async mangaPopularRow(page = 1) {
+    try {
+      const q = `query($p: Int, $per: Int) {
+        Page(page: $p, perPage: $per) {
+          media(type: MANGA, isAdult: false, sort: POPULARITY_DESC) {
+            id title { romaji english native }
+            coverImage { large extraLarge }
+            status format genres description(asHtml: false)
+            chapters volumes countryOfOrigin startDate { year }
+            staff { edges { node { name { full } } } }
+          }
+        }
+      }`;
+      const data = await this._aniMangaQuery(q, { p: page, per: 20 });
+      return { data: this._aniMangaToList(data) };
+    } catch (e) {
+      return { data: [] };
+    }
+  },
+
+  // Streaming-style card for manga scroll rows.
+  mangaStreamCard(m) {
+    const href = pageHref("manga") + "?id=" + encodeURIComponent(m.id);
+    const img = m.cover || JIKAN.PLACEHOLDER;
+    const fmt = (m.format || "Manga").replace(/_/g, " ");
+    let statusLine = "";
+    if (m.status === "RELEASING") {
+      statusLine = m.chapters ? `${m.chapters}+ chapters` : "Ongoing";
+    } else if (m.status === "FINISHED") {
+      statusLine = m.chapters ? `${m.chapters} chapters` : "Completed";
+    } else if (m.status === "NOT_YET_RELEASED") {
+      statusLine = "Coming soon";
+    }
+    const el = document.createElement("a");
+    el.className = "sc-card manga-sc-card";
+    el.href = href;
+    el.innerHTML = `
+      <div class="sc-poster">
+        <img src="${this.esc(img)}" alt="${this.esc(m.title)}" loading="lazy"
+             onerror="this.onerror=null;this.src=JIKAN.PLACEHOLDER">
+        <span class="sc-fmt">${this.esc(fmt)}</span>
+        <div class="sc-overlay">
+          <span class="sc-play">📖</span>
+          <span class="sc-overlay-title">${this.esc(m.title)}</span>
+          ${statusLine ? `<span class="sc-status">${this.esc(statusLine)}</span>` : ""}
+        </div>
+      </div>`;
+    return el;
+  },
+
   // Related manga from an anime's relations list. Prefers the main
   // "Adaptation" and dedupes so one MAL link is shown.
   relatedManga(animeData) {
