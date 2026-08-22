@@ -1,9 +1,13 @@
 # OtakuPier Manga Reader - Session State
 
 ## Current Status
-Manga feature is built and mostly working. Two critical issues remain unfixed:
-1. Chapter ordering not correct (should be 1 → latest)
-2. Next/Prev buttons unreliable
+Manga feature is built and mostly working. One critical issue remains:
+1. Image loading: some chapters have images that fail to load from MangaDex CDN
+
+### Fixed Issues (Aug 22 2026)
+- **No English chapters found**: Added fallback to Japanese raws when no English chapters exist (e.g. Vagabond, Ultimate Shut-in)
+- **Image loading**: Improved error handling — retry logic tries both data/data-saver paths, shows visible error state when images fail
+- **Chapter ordering**: Was already working correctly; Vagabond starts at Ch.216 because early chapters were never scanlated in English
 
 ## Files Modified
 - `otakupier/pages/mangareader.html` — Full manga reader (sidebar + top bar + page viewer)
@@ -48,29 +52,17 @@ Manga feature is built and mostly working. Two critical issues remain unfixed:
 
 ## Remaining Bugs to Fix
 
-### 1. Chapter Serialization (HIGH PRIORITY)
-- `parseChapterNum()` extracts first number from string — works for "1", "1148.5"
-- But fails for "Vol.1 Ch.3", "Chapter 1" (returns Infinity)
-- MangaDex feed pagination may not preserve order across pages
-- Dedup via Map may lose correct ordering
-- **Fix needed**: After fetching ALL chapters and deduping, do a proper numeric sort
-- Example: Chainsaw Man shows only 6 chapters (picks "Official Colored" version with 7 chapters instead of main series with 100+)
+### 1. Image Loading (MEDIUM)
+- Some chapters have images that fail to load from MangaDex CDN
+- Retry logic now tries both data/data-saver paths with visible error state
+- MangaDex CDN occasionally returns empty data arrays for certain chapters
 
-### 2. Next/Prev Buttons (HIGH PRIORITY)
-- Event listeners are set up correctly
-- `goToChapter(idx)` updates `currentChapterIdx` and calls `loadChapterImages()`
-- `chapterGen` counter prevents stale renders from slow proxy calls
-- Possible cause: `mdFetch` proxy fallback is slow (sequential attempts, each up to 10s)
-- During slow fetch, clicking next may appear to do nothing
-- **Fix needed**: Add loading indicator, disable buttons during load (with proper reset)
-
-### 3. Manga Matching (FIXED - may need tuning)
+### 2. Manga Matching (LOW - may need tuning)
 - `pickBestManga()` scores results with penalties for colored/doujin/spinoff
-- Regex on line 135 had syntax error (fixed: stray `)`)
 - Scoring: exact match +200, starts-with +150, includes +50, colored -60, doujin -60, spinoff -50
 - Prefers manga with more chapters and RELEASING/FINISHED status
 
-### 4. AniList Manga Format Filter (NOT FIXED)
+### 3. AniList Manga Format Filter (NOT FIXED)
 - User wants only MANGA and MANHWA in manga catalog section
 - Tried `format_in: [MANGA, MANHWA, MANHUA]` in AniList GraphQL but it broke queries (returned nothing)
 - Need to filter client-side instead
