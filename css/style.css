@@ -5243,6 +5243,23 @@ footer .footer-links {
   max-width: 800px;
   display: block;
 }
+.reader-page-wrapper {
+  width: 100%;
+  max-width: 800px;
+  position: relative;
+}
+.reader-page-error {
+  width: 100%;
+  min-height: 200px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-dim, #888);
+  font-size: 0.9rem;
+  background: var(--card-bg, #1a1a2e);
+  border: 1px dashed var(--border, #333);
+  border-radius: 6px;
+}
 .reader-placeholder {
   flex: 1;
   display: flex;
