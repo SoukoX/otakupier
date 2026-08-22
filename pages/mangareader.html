@@ -122,6 +122,9 @@
       // ── Pick best manga match ──
       function pickBestManga(results, targetTitle) {
         const lower = targetTitle.toLowerCase().trim();
+        // Normalize for romanization variants: "ou" ↔ "o", strip punctuation
+        const norm = s => s.toLowerCase().replace(/[^a-z0-9]/g, "").replace(/ou/g, "o");
+        const normLower = norm(lower);
         let best = results[0];
         let bestScore = -Infinity;
         for (const m of results) {
@@ -129,17 +132,34 @@
           const allTitles = [attrs.title?.en, attrs.title?.["ja-ro"], attrs.title?.romaji, attrs.title?.native]
             .filter(Boolean);
           const titles = allTitles.map(t => t.toLowerCase());
+          const normTitles = allTitles.map(t => norm(t));
           let score = 0;
           if (titles.some(t => t === lower)) score += 200;
+          else if (normTitles.some(t => t === normLower)) score += 190;
           else if (titles.some(t => t === lower + " master edition")) score += 180;
           else if (titles.some(t => t.startsWith(lower) && t.length < lower.length + 15)) score += 150;
+          else if (normTitles.some(t => t.startsWith(normLower) && t.length < normLower.length + 15)) score += 140;
           else if (titles.some(t => t.includes(lower))) score += 50;
+          else if (normTitles.some(t => t.includes(normLower))) score += 40;
           else if (lower.includes(titles[0] || "")) score += 20;
-          else score -= 200;
+          else {
+            // Partial matching: check if first word or normalized prefix matches
+            const targetWords = lower.split(/[\s:-]+/).filter(w => w.length > 2);
+            const firstWord = targetWords[0] || "";
+            const firstTwo = targetWords.slice(0, 2).join(" ");
+            // "kaguya-sama" should match "kaguya-sama wa kokurasetai"
+            const titleWords = titles.some(t => t.startsWith(firstWord));
+            const normPrefix = normTitles.some(t => t.startsWith(norm(firstWord)));
+            if (titleWords || normPrefix) score += 30;
+            else if (titles.some(t => t.includes(firstTwo))) score += 20;
+            else score -= 200;
+          }
           const name = (attrs.title?.en || attrs.title?.["ja-ro"] || "").toLowerCase();
           if (/\b(colored|colour|full.color)\b/.test(name)) score -= 60;
-          if (/\b(doujin|spin.?off|short story|prototype|one shot)\b/i.test(name)) score -= 60;
-          if (/\b(sequel|prequel|requiem|lost children|chapter of the wings|episode)\b/i.test(name)) score -= 50;
+          if (/\b(doujin|spin.?off|short story|prototype|one shot)\b/i.test(name)) score -= 100;
+          if (/\b(sequel|prequel|requiem|lost children|chapter of the wings|episode)\b/i.test(name)) score -= 80;
+          // Penalize spinoffs by subtitle suffix (e.g. ": JACK", ":re", "Junior", "Gaiden")
+          if (name.includes(":") && lower !== name) score -= 40;
           // Bonus: more chapters available (prefer the main series over spinoffs)
           const chapters = parseInt(attrs.lastChapter) || 0;
           score += Math.min(chapters, 200);
