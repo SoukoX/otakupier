@@ -6,6 +6,43 @@
 
 const SEO = {
   BASE: "https://otakupier.2bd.net",
+  INDEXNOW_KEY: "fa7eb9705f644b66ab22d305ec3351b9",
+
+  // IndexNow: notify search engines (Bing, Yandex, Naver, etc.) about URL changes.
+  // Can be called with a single URL string or an array of URLs.
+  // Uses the bundled key hosted at /fa7eb9705f644b66ab22d305ec3351b9.txt.
+  async pingIndexNow(urls) {
+    if (!urls) return;
+    const list = Array.isArray(urls) ? urls : [urls];
+    const fullUrls = list.map(u => u.startsWith("http") ? u : this.BASE + u);
+    const hosts = ["api.indexnow.org", "api.bing.com", "api.yandex.com", "search.naver.com"];
+    const payload = JSON.stringify({
+      host: "otakupier.2bd.net",
+      key: this.INDEXNOW_KEY,
+      keyLocation: `${this.BASE}/${this.INDEXNOW_KEY}.txt`,
+      urlList: fullUrls,
+    });
+    const results = [];
+    for (const host of hosts) {
+      try {
+        const r = await fetch(`https://${host}/indexnow`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json; charset=utf-8" },
+          body: payload,
+        });
+        results.push({ host, status: r.status });
+      } catch (e) {
+        results.push({ host, error: e.message });
+      }
+    }
+    console.log("[IndexNow]", results);
+    return results;
+  },
+
+  // Convenience: ping with the current page URL
+  pingCurrentPage() {
+    return this.pingIndexNow(window.location.href.split("#")[0]);
+  },
 
   _set(selector, value) {
     let el = document.head.querySelector(selector);
