@@ -1,0 +1,379 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="referrer" content="strict-origin-when-cross-origin">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="robots" content="noindex, nofollow">
+  <title>Read Manga - OtakuPier</title>
+  <link rel="icon" type="image/svg+xml" href="../favicon.svg?v=2">
+  <link rel="icon" type="image/x-icon" href="../favicon.ico">
+  <link rel="stylesheet" href="../css/style.css?v=25">
+  <link rel="preconnect" href="https://api.mangadex.org">
+  <link rel="preconnect" href="https://api.jikan.moe">
+  <link rel="preconnect" href="https://graphql.anilist.co">
+  <link rel="preconnect" href="https://cdn.jsdelivr.net">
+  <link rel="dns-prefetch" href="https://soukox.goatcounter.com">
+<script data-goatcounter="https://soukox.goatcounter.com/count"
+          async src="//gc.zgo.at/count.js"></script>
+</head>
+<body class="reader-body">
+  <nav class="navbar" id="navbar"></nav>
+
+  <div class="reader-page">
+    <div class="reader-top-bar">
+      <a class="reader-back" href="javascript:history.back()">← Back</a>
+      <button class="reader-sidebar-open-btn" id="sidebarOpenBtn" aria-label="Show chapters">☰</button>
+      <div class="reader-chapter-nav">
+        <button class="btn btn-outline btn-small" id="prevChapter" disabled>← Prev</button>
+        <span class="reader-chapter-label" id="chapterLabel">Select a chapter</span>
+        <button class="btn btn-outline btn-small" id="nextChapter" disabled>Next →</button>
+      </div>
+    </div>
+
+    <div class="reader-content">
+      <div class="reader-backdrop" id="readerBackdrop"></div>
+      <aside class="reader-sidebar" id="readerSidebar">
+        <div class="reader-sidebar-head">
+          <h2 class="reader-manga-title" id="mangaTitle">Loading...</h2>
+          <button class="reader-sidebar-close" id="sidebarClose" aria-label="Hide chapters">✕</button>
+        </div>
+        <div class="reader-chapter-list" id="chapterList">
+          <div class="loading"><div class="spinner"></div>Finding chapters...</div>
+        </div>
+      </aside>
+
+      <div class="reader-main">
+        <div class="reader-pages" id="readerPages">
+          <div class="reader-placeholder" id="readerPlaceholder">
+            <div class="empty-state">
+              <h3>📖 Manga Reader</h3>
+              <p>Select a chapter from the sidebar to start reading.</p>
+            </div>
+          </div>
+        </div>
+        <footer id="siteFooter"></footer>
+      </div>
+    </div>
+  </div>
+
+  <h1 style="display:none;">Read Manga - OtakuPier</h1>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="../js/config.js?v=25"></script>
+  <script src="../js/api.js?v=25"></script>
+  <script src="../js/seo.js?v=25"></script>
+  <script src="../js/app.js?v=25"></script>
+  <script>
+    (function() {
+      const params = new URLSearchParams(window.location.search);
+      const mangaTitle = params.get("title") || "Manga";
+      let mangadexId = null;
+      let chapters = [];
+      let currentChapterIdx = -1;
+      let sidebarOpen = true;
+
+      const API = "https://api.mangadex.org";
+      const PROXIES = [
+        "https://api.allorigins.win/raw?url=",
+        "https://corsproxy.io/?",
+      ];
+
+      const $ = (id) => document.getElementById(id);
+
+      $("mangaTitle").textContent = mangaTitle;
+      document.title = mangaTitle + " - Read Manga | OtakuPier";
+
+      // ── Sidebar ──
+      function updateSidebar() {
+        $("readerSidebar").classList.toggle("hidden", !sidebarOpen);
+        $("sidebarOpenBtn").style.display = sidebarOpen ? "none" : "inline-block";
+        $("sidebarClose").style.display = sidebarOpen ? "inline-block" : "none";
+        $("readerBackdrop").classList.toggle("show", sidebarOpen && window.innerWidth <= 768);
+      }
+      $("sidebarOpenBtn").onclick = () => { sidebarOpen = true; updateSidebar(); };
+      $("sidebarClose").onclick = () => { sidebarOpen = false; updateSidebar(); };
+      $("readerBackdrop").onclick = () => { sidebarOpen = false; updateSidebar(); };
+      window.addEventListener("resize", updateSidebar);
+
+      // ── Fetch with proxy fallback (parallel — first wins) ──
+      async function mdFetch(url) {
+        const TIMEOUT = 12000;
+
+        // Build attempt promises with their index so we know the response shape
+        const tasks = [
+          { idx: 0, promise: fetch(url) },
+          ...PROXIES.map((proxy, i) => ({
+            idx: i + 1,
+            promise: fetch(proxy + encodeURIComponent(url)),
+          })),
+        ];
+
+        // Race all attempts; use the first to resolve OK within TIMEOUT
+        const winner = await Promise.any(
+          tasks.map(({ idx, promise }) =>
+            promise.then(async r => {
+              if (!r.ok) throw new Error("not ok");
+              if (idx === 1) {
+                // allorigins/raw → raw text, parse ourselves
+                const text = await r.text();
+                return JSON.parse(text);
+              }
+              if (idx === 2) {
+                // allorigins/get wraps in {contents: "..."}
+                const json = await r.json();
+                return typeof json.contents === "string" ? JSON.parse(json.contents) : json;
+              }
+              return r.json();
+            })
+          )
+        ).catch(() => null);
+
+        if (winner) return winner;
+
+        // Last resort: codetabs proxy (slower, but CORS-safe)
+        try {
+          const ctrl = new AbortController();
+          const t = setTimeout(() => ctrl.abort(), TIMEOUT);
+          const r = await fetch(
+            "https://api.codetabs.com/v1/proxy?quest=" + encodeURIComponent(url),
+            { signal: ctrl.signal }
+          );
+          clearTimeout(t);
+          if (r.ok) return r.json();
+        } catch (_) {}
+
+        throw new Error("All fetch attempts failed");
+      }
+
+      // ── Pick best manga match ──
+      function pickBestManga(results, targetTitle) {
+        const lower = targetTitle.toLowerCase().trim();
+        let best = results[0];
+        let bestScore = -Infinity;
+        for (const m of results) {
+          const attrs = m.attributes;
+          const allTitles = [attrs.title?.en, attrs.title?.["ja-ro"], attrs.title?.romaji, attrs.title?.native]
+            .filter(Boolean);
+          const titles = allTitles.map(t => t.toLowerCase());
+          let score = 0;
+          if (titles.some(t => t === lower)) score += 200;
+          else if (titles.some(t => t === lower + " master edition")) score += 180;
+          else if (titles.some(t => t.startsWith(lower) && t.length < lower.length + 15)) score += 150;
+          else if (titles.some(t => t.includes(lower))) score += 50;
+          else if (lower.includes(titles[0] || "")) score += 20;
+          else score -= 200;
+          const name = (attrs.title?.en || attrs.title?.["ja-ro"] || "").toLowerCase();
+          if (/\b(colored|colour|full.color)\b/.test(name)) score -= 60;
+          if (/\b(doujin|spin.?off|short story|prototype|one shot)\b/i.test(name)) score -= 60;
+          if (/\b(sequel|prequel|requiem|lost children|chapter of the wings|episode)\b/i.test(name)) score -= 50;
+          // Bonus: more chapters available (prefer the main series over spinoffs)
+          const chapters = parseInt(attrs.lastChapter) || 0;
+          score += Math.min(chapters, 200);
+          // Penalty: very few chapters likely means all external / wrong match
+          if (chapters > 0 && chapters <= 3) score -= 40;
+          if (attrs.status === "RELEASING") score += 10;
+          if (attrs.status === "FINISHED") score += 5;
+          if (score > bestScore) { bestScore = score; best = m; }
+        }
+        return best;
+      }
+
+      // ── Step 1: Find manga ──
+      async function init() {
+        try {
+          const data = await mdFetch(`${API}/manga?title=${encodeURIComponent(mangaTitle)}&limit=10&includes[]=cover_art`);
+          if (!data.data || !data.data.length) {
+            $("chapterList").innerHTML = '<div class="empty-state">Manga not found on MangaDex.</div>';
+            return;
+          }
+          const best = pickBestManga(data.data, mangaTitle);
+          mangadexId = best.id;
+          $("mangaTitle").textContent =
+            best.attributes.title.en || best.attributes.title["ja-ro"] || mangaTitle;
+          await loadChapters();
+        } catch (e) {
+          console.error("[Reader init]", e);
+          $("chapterList").innerHTML = '<div class="empty-state">Could not connect to MangaDex.</div>';
+        }
+      }
+
+      // ── Step 2: Load chapters ──
+      async function loadChapters() {
+        const list = $("chapterList");
+        try {
+          let allChapters = [];
+          let offset = 0;
+          let total = Infinity;
+          list.innerHTML = '<div class="loading"><div class="spinner"></div>Loading chapters...</div>';
+
+          while (offset < total) {
+            const data = await mdFetch(
+              `${API}/manga/${mangadexId}/feed?translatedLanguage%5B%5D=en&limit=500&offset=${offset}&order%5Bchapter%5D=asc`
+            );
+            total = data.total || 0;
+            const batch = data.data || [];
+            allChapters = allChapters.concat(batch);
+            offset += batch.length;
+            if (batch.length === 0) break;
+          }
+
+          // Dedup: keep chapter with most data (skip external chapters)
+          const seen = new Map();
+          allChapters.forEach(ch => {
+            if (!ch.attributes || !ch.attributes.chapter) return;
+            // Skip chapters hosted externally (MangaPlus etc.) — no images on MangaDex
+            if (ch.attributes.externalUrl) return;
+            const num = ch.attributes.chapter;
+            const existing = seen.get(num);
+            if (!existing) {
+              seen.set(num, ch);
+            } else {
+              const eLen = (existing.attributes.data || existing.attributes.dataSaver || []).length;
+              const nLen = (ch.attributes.data || ch.attributes.dataSaver || []).length;
+              if (nLen > eLen) seen.set(num, ch);
+            }
+          });
+
+          // Sort numerically
+          chapters = Array.from(seen.values()).sort((a, b) => {
+            const na = parseNum(a.attributes.chapter);
+            const nb = parseNum(b.attributes.chapter);
+            if (na !== nb) return na - nb;
+            return (parseFloat(a.attributes.volume) || 0) - (parseFloat(b.attributes.volume) || 0);
+          });
+
+          if (!chapters.length) {
+            list.innerHTML = '<div class="empty-state">No English chapters found.</div>';
+            return;
+          }
+
+          renderChapterList();
+          goToChapter(0);
+        } catch (e) {
+          console.error("[Chapters]", e);
+          list.innerHTML = '<div class="empty-state">Failed to load chapters.</div>';
+        }
+      }
+
+      function parseNum(str) {
+        const s = String(str).toLowerCase();
+        // "Vol.3 Ch.12" → prefer chapter number over volume number
+        const chMatch = s.match(/(?:ch(?:apter)?\.?\s*)([\d.]+)/i);
+        if (chMatch) return parseFloat(chMatch[1]);
+        // "Chapter 1", "Vol 1", plain "1" → first number found
+        const m = s.match(/[\d.]+/);
+        return m ? parseFloat(m[0]) : Infinity;
+      }
+
+      function renderChapterList() {
+        const list = $("chapterList");
+        let html = `<div class="chapter-list-header">${chapters.length} chapters</div>`;
+        chapters.forEach((ch, i) => {
+          const a = ch.attributes;
+          html += `<button class="chapter-item" data-idx="${i}">
+            <span class="chapter-num">Ch. ${esc(a.chapter || "?")}</span>
+            <span class="chapter-name">${esc(a.title || "")}</span>
+          </button>`;
+        });
+        list.innerHTML = html;
+        list.querySelectorAll(".chapter-item").forEach(btn => {
+          btn.addEventListener("click", () => goToChapter(parseInt(btn.dataset.idx)));
+        });
+      }
+
+      // ── Step 3: Navigate to chapter ──
+      let chapterGen = 0;
+
+      function goToChapter(idx) {
+        if (idx < 0 || idx >= chapters.length) return;
+        currentChapterIdx = idx;
+        const gen = ++chapterGen;
+
+        const ch = chapters[idx];
+        $("chapterLabel").textContent = "Ch. " + (ch.attributes.chapter || "?");
+
+        $("chapterList").querySelectorAll(".chapter-item").forEach((el, i) => {
+          el.classList.toggle("active", i === idx);
+        });
+
+        $("readerPlaceholder") && ($("readerPlaceholder").style.display = "none");
+
+        if (ch.attributes.externalUrl) {
+          $("readerPages").innerHTML = `<div class="empty-state">
+            <h3>External Chapter</h3>
+            <p>This chapter is hosted externally and cannot be displayed on-site.</p>
+          </div>`;
+          updateNavButtons();
+          return;
+        }
+
+        $("readerPages").innerHTML = '<div class="reader-loading"><div class="spinner"></div><span>Loading chapter...</span></div>';
+
+        loadChapterImages(ch, gen)
+          .catch(() => {})
+          .finally(() => {
+            if (gen === chapterGen) updateNavButtons();
+          });
+      }
+
+      function updateNavButtons() {
+        $("prevChapter").disabled = currentChapterIdx <= 0;
+        $("nextChapter").disabled = currentChapterIdx >= chapters.length - 1;
+      }
+
+      async function loadChapterImages(ch, gen) {
+        const container = $("readerPages");
+        try {
+          const data = await mdFetch(`${API}/at-home/server/${ch.id}`);
+          if (gen !== chapterGen) return;
+          if (data && data.baseUrl && data.chapter) {
+            const full = data.chapter.data || [];
+            const saver = data.chapter.dataSaver || [];
+            const pages = full.length ? full : saver;
+            const path = full.length ? "data" : "data-saver";
+
+            if (pages.length) {
+              container.innerHTML = "";
+              pages.forEach((filename, pi) => {
+                const img = document.createElement("img");
+                img.className = "reader-page-img";
+                img.src = `${data.baseUrl}/${path}/${data.chapter.hash}/${filename}`;
+                img.alt = `Page ${pi + 1}`;
+                img.loading = pi < 3 ? "eager" : "lazy";
+                img.onerror = function() { this.style.minHeight = "200px"; };
+                container.appendChild(img);
+              });
+              window.scrollTo({ top: 0, behavior: "instant" });
+              return;
+            }
+          }
+        } catch (e) {
+          if (gen !== chapterGen) return;
+        }
+        if (gen !== chapterGen) return;
+        container.innerHTML = '<div class="empty-state"><h3>Chapter not available</h3><p>Images could not be loaded.</p></div>';
+      }
+
+      // ── Navigation buttons ──
+      $("prevChapter").addEventListener("click", () => goToChapter(currentChapterIdx - 1));
+      $("nextChapter").addEventListener("click", () => goToChapter(currentChapterIdx + 1));
+
+      document.addEventListener("keydown", (e) => {
+        if (e.target.tagName === "INPUT" || e.target.tagName === "TEXTAREA") return;
+        if (e.key === "ArrowLeft") goToChapter(currentChapterIdx - 1);
+        else if (e.key === "ArrowRight") goToChapter(currentChapterIdx + 1);
+      });
+
+      function esc(str) {
+        if (!str) return "";
+        const d = document.createElement("div");
+        d.textContent = str;
+        return d.innerHTML;
+      }
+
+      init();
+    })();
+  </script>
+</body>
+</html>
