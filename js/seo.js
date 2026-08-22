@@ -129,4 +129,28 @@ const SEO = {
       { label: "Copy link", href: "javascript:void(0)", copy: url },
     ];
   },
+
+  // Set meta tags for manga detail pages (MangaDex data).
+  setMangaMeta(manga, title, id) {
+    if (!manga) return;
+    const t = manga.title || title || "Manga";
+    const clean = this._clean(manga.summary, 200) || "Read manga chapters on OtakuPier.";
+    const url = `${this.BASE}/pages/manga.html?id=${encodeURIComponent(id)}`;
+    const img = manga.cover || `${this.BASE}/images/banner.svg`;
+
+    document.title = `${t} - Read Manga | OtakuPier`;
+    this._set('meta[name="description"]', clean);
+    this._set('meta[property="og:type"]', "article");
+    this._set('meta[property="og:site_name"]', "OtakuPier");
+    this._set('meta[property="og:title"]', t);
+    this._set('meta[property="og:description"]', clean);
+    this._set('meta[property="og:url"]', url);
+    this._set('meta[property="og:image"]', img);
+    this._set('meta[property="og:image:alt"]', t);
+    this._set('meta[name="twitter:card"]', "summary_large_image");
+    this._set('meta[name="twitter:title"]', t);
+    this._set('meta[name="twitter:description"]', clean);
+    this._set('meta[name="twitter:image"]', img);
+    this.setCanonical(url);
+  },
 };
