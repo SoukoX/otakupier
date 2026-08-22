@@ -23,7 +23,9 @@
   <meta name="twitter:card" content="summary_large_image">
   <link rel="preconnect" href="https://api.jikan.moe">
   <link rel="preconnect" href="https://cdn.jsdelivr.net">
-  <link rel="stylesheet" href="css/style.css?v=20">
+  <link rel="preconnect" href="https://graphql.anilist.co">
+  <link rel="preconnect" href="https://api.mangadex.org">
+  <link rel="stylesheet" href="css/style.css?v=25">
   <script type="application/ld+json">
   {
     "@context": "https://schema.org",
@@ -40,6 +42,7 @@
     }
   }
   </script>
+<link rel="dns-prefetch" href="https://soukox.goatcounter.com">
 <script data-goatcounter="https://soukox.goatcounter.com/count"
         async src="//gc.zgo.at/count.js"></script>
 </head>
@@ -140,9 +143,9 @@
   <footer id="siteFooter"></footer>
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <script src="js/config.js?v=20"></script>
-  <script src="js/api.js?v=20"></script>
-  <script src="js/app.js?v=20"></script>
+  <script src="js/config.js?v=25"></script>
+  <script src="js/api.js?v=25"></script>
+  <script src="js/app.js?v=25"></script>
   <script>
     async function loadHome() {
       const carousel = document.getElementById("topRatedCarousel");
@@ -219,16 +222,21 @@
         return Math.max(w, 320);
       };
 
+      let edgesRaf = null;
       const updateEdges = () => {
-        const max = el.scrollWidth - el.clientWidth;
-        const atStart = el.scrollLeft <= 2;
-        const atEnd = el.scrollLeft >= max - 2;
-        if (prev) prev.style.opacity = atStart ? "0" : "1";
-        if (next) next.style.opacity = atEnd ? "0" : "1";
-        const fadeL = wrap.querySelector(".carousel-fade.left");
-        const fadeR = wrap.querySelector(".carousel-fade.right");
-        if (fadeL) fadeL.style.opacity = atStart ? "0" : "1";
-        if (fadeR) fadeR.style.opacity = atEnd ? "0" : "1";
+        if (edgesRaf) return;
+        edgesRaf = requestAnimationFrame(() => {
+          edgesRaf = null;
+          const max = el.scrollWidth - el.clientWidth;
+          const atStart = el.scrollLeft <= 2;
+          const atEnd = el.scrollLeft >= max - 2;
+          if (prev) prev.style.opacity = atStart ? "0" : "1";
+          if (next) next.style.opacity = atEnd ? "0" : "1";
+          const fadeL = wrap.querySelector(".carousel-fade.left");
+          const fadeR = wrap.querySelector(".carousel-fade.right");
+          if (fadeL) fadeL.style.opacity = atStart ? "0" : "1";
+          if (fadeR) fadeR.style.opacity = atEnd ? "0" : "1";
+        });
       };
       el.addEventListener("scroll", updateEdges, { passive: true });
       updateEdges();
@@ -239,16 +247,16 @@
       // animation, which is what made the buttons appear to not work there.
       const boundary = (dir) => {
         const w = snapStep();
-        const max = el.scrollWidth - el.clientWidth;
+        const elMax = el.scrollWidth - el.clientWidth;
         const cur = el.scrollLeft;
         const cards = Math.max(1, Math.round((el.clientWidth * 0.8) / w));
         const n = dir > 0 ? Math.floor(cur / w) + cards : Math.ceil(cur / w) - cards;
-        return Math.max(0, Math.min(n * w, max));
+        return Math.max(0, Math.min(n * w, elMax));
       };
       let settleTimer = null;
       const animateTo = (target) => {
-        const max = el.scrollWidth - el.clientWidth;
-        const t = Math.max(0, Math.min(max, target));
+        const elMax = el.scrollWidth - el.clientWidth;
+        const t = Math.max(0, Math.min(elMax, target));
         if (Math.abs(t - el.scrollLeft) < 2) return;
         // Disable snap while the native smooth scroll runs — Chrome otherwise
         // re-snaps mid-animation and the row stops short of the target.
