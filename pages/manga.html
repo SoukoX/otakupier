@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="referrer" content="strict-origin-when-cross-origin">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="msvalidate.01" content="4F55345C289F9597335C55566F2B31F9" />
+
+  <title>Manga Details - OtakuPier</title>
+  <meta name="robots" content="index, follow">
+  <meta name="description" content="Read manga chapters on OtakuPier — browse manga details and read online.">
+  <link rel="canonical" href="https://otakupier.2bd.net/pages/manga.html">
+  <link rel="icon" type="image/svg+xml" href="../favicon.svg?v=2">
+  <link rel="icon" type="image/x-icon" href="../favicon.ico">
+  <link rel="preconnect" href="https://graphql.anilist.co">
+  <link rel="preconnect" href="https://mangakatana.com">
+  <link rel="preconnect" href="https://api.jikan.moe">
+  <link rel="preconnect" href="https://api.mangadex.org">
+  <link rel="preconnect" href="https://cdn.jsdelivr.net">
+  <link rel="stylesheet" href="../css/style.css?v=25">
+<link rel="dns-prefetch" href="https://soukox.goatcounter.com">
+<script data-goatcounter="https://soukox.goatcounter.com/count"
+        async src="//gc.zgo.at/count.js"></script>
+</head>
+<body>
+  <nav class="navbar" id="navbar"></nav>
+
+  <main class="container" id="main">
+    <div class="loading"><div class="spinner"></div>Loading manga...</div>
+  </main>
+
+  <h1 style="display:none;">Manga Details - OtakuPier</h1>
+
+  <footer id="siteFooter"></footer>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="../js/config.js?v=25"></script>
+  <script src="../js/api.js?v=25"></script>
+  <script src="../js/seo.js?v=25"></script>
+  <script src="../js/app.js?v=25"></script>
+  <script>
+    const params = new URLSearchParams(window.location.search);
+    const anilistId = params.get("id");
+    const main = document.getElementById("main");
+
+    if (!anilistId) {
+      main.innerHTML = '<div class="empty-state">No manga specified. <a href="' + pageHref("catalog") + '">Browse catalog</a></div>';
+    } else {
+      loadManga();
+    }
+
+    async function loadManga() {
+      try {
+        const data = await JIKAN.mangaDetail(anilistId);
+        if (!data) {
+          main.innerHTML = '<div class="empty-state">Could not load manga. <a href="' + pageHref("catalog") + '">Browse catalog</a></div>';
+          return;
+        }
+        renderManga(data);
+        SEO.setMangaMeta(data, data.title, anilistId);
+      } catch (err) {
+        console.error("[Manga detail]", err);
+        main.innerHTML = '<div class="empty-state">Error loading manga. <small>' + (err.message || '') + '</small></div>';
+      }
+    }
+
+    function renderManga(m) {
+      const genres = m.genres.map(g => '<span class="genre-tag">' + JIKAN.esc(g) + '</span>').join("");
+      const altTitles = m.altTitles.length ? m.altTitles.slice(0, 5).join("; ") : "";
+      const readerUrl = pageHref("mangareader") + "?id=" + encodeURIComponent(m.id) + "&title=" + encodeURIComponent(m.title);
+      const img = m.cover || JIKAN.PLACEHOLDER;
+
+      // Related manga (all manga-type relations)
+      const related = (m.relations || []).filter(r =>
+        /manga/i.test(r.type)
+      ).slice(0, 8);
+      const relatedHtml = related.length
+        ? '<div class="manga-related"><h3>Related</h3><div class="related-list">' +
+          related.map(r => {
+            const href = pageHref("manga") + "?id=" + r.id;
+            return '<a class="related-item" href="' + href + '">' + JIKAN.esc(r.title) + ' <span class="related-type">' + JIKAN.esc(r.relation) + '</span></a>';
+          }).join("") + '</div></div>'
+        : "";
+
+      main.innerHTML =
+        '<a class="manga-back-btn" href="javascript:history.back()">← Back</a>' +
+        '<div class="manga-detail">' +
+          '<div class="manga-hero">' +
+            '<div class="manga-cover">' +
+              '<img src="' + JIKAN.esc(img) + '" alt="' + JIKAN.esc(m.title) + '" onerror="this.onerror=null;this.src=JIKAN.PLACEHOLDER">' +
+            '</div>' +
+            '<div class="manga-info">' +
+              '<h1 class="manga-title">' + JIKAN.esc(m.title) + '</h1>' +
+              (altTitles ? '<div class="manga-alt">' + JIKAN.esc(altTitles) + '</div>' : '') +
+              '<div class="manga-meta-row">' +
+                (m.author ? '<span class="manga-author">✍ ' + JIKAN.esc(m.author) + '</span>' : '') +
+                (m.status ? '<span class="manga-status badge-' + m.status.toLowerCase() + '">' + JIKAN.esc(m.status) + '</span>' : '') +
+                (m.year ? '<span class="manga-chapters-count">' + m.year + '</span>' : '') +
+                (m.chapters ? '<span class="manga-chapters-count">' + m.chapters + ' chapters</span>' : '') +
+                (m.volumes ? '<span class="manga-chapters-count">' + m.volumes + ' vols</span>' : '') +
+              '</div>' +
+              '<div class="manga-genres">' + genres + '</div>' +
+              (m.summary ? '<div class="manga-synopsis">' + JIKAN.esc(m.summary).replace(/\n/g, "<br>") + '</div>' : '') +
+              '<div class="manga-actions">' +
+                '<a class="btn btn-primary btn-glow" href="' + JIKAN.esc(readerUrl) + '">📖 Read Now</a>' +
+              '</div>' +
+            '</div>' +
+          '</div>' +
+          relatedHtml +
+        '</div>';
+    }
+  </script>
+</body>
+</html>
