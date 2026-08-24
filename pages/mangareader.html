@@ -212,13 +212,26 @@
             if (batch.length === 0) break;
           }
 
-          // Dedup: keep first non-external chapter per normalized number
+          // Dedup: keep the BEST entry per chapter number
+          // Prefer: hosted (no externalUrl) > external; most pages > fewer pages
           const seen = new Map();
           allChapters.forEach(ch => {
             if (!ch.attributes || !ch.attributes.chapter) return;
-            if (ch.attributes.externalUrl) return;
             const key = normKey(ch.attributes.chapter);
-            if (!seen.has(key)) seen.set(key, ch);
+            const existing = seen.get(key);
+            if (!existing) {
+              seen.set(key, ch);
+              return;
+            }
+            // Prefer hosted over external
+            const aExt = !!existing.attributes.externalUrl;
+            const bExt = !!ch.attributes.externalUrl;
+            if (aExt && !bExt) { seen.set(key, ch); return; }
+            if (!aExt && bExt) return;
+            // Same type: prefer more pages
+            const aPages = existing.attributes.pages || 0;
+            const bPages = ch.attributes.pages || 0;
+            if (bPages > aPages) seen.set(key, ch);
           });
 
           // Sort numerically by parsed chapter number, then by volume
@@ -246,9 +259,16 @@
             const seenFb = new Map();
             fallbackChapters.forEach(ch => {
               if (!ch.attributes || !ch.attributes.chapter) return;
-              if (ch.attributes.externalUrl) return;
               const key = normKey(ch.attributes.chapter);
-              if (!seenFb.has(key)) seenFb.set(key, ch);
+              const existing = seenFb.get(key);
+              if (!existing) { seenFb.set(key, ch); return; }
+              const aExt = !!existing.attributes.externalUrl;
+              const bExt = !!ch.attributes.externalUrl;
+              if (aExt && !bExt) { seenFb.set(key, ch); return; }
+              if (!aExt && bExt) return;
+              const aPages = existing.attributes.pages || 0;
+              const bPages = ch.attributes.pages || 0;
+              if (bPages > aPages) seenFb.set(key, ch);
             });
             chapters = Array.from(seenFb.values()).sort((a, b) => {
               const na = parseNum(a.attributes.chapter);
@@ -295,12 +315,17 @@
 
       function renderChapterList() {
         const list = $("chapterList");
-        let html = `<div class="chapter-list-header">${chapters.length} chapters</div>`;
+        const hosted = chapters.filter(ch => !ch.attributes.externalUrl).length;
+        const external = chapters.length - hosted;
+        let html = `<div class="chapter-list-header">${hosted} chapters` +
+          (external ? ` + ${external} external` : '') + `</div>`;
         chapters.forEach((ch, i) => {
           const a = ch.attributes;
-          html += `<button class="chapter-item" data-idx="${i}">
+          const ext = a.externalUrl ? ' style="opacity:0.5"' : '';
+          const extLabel = a.externalUrl ? ' <span style="font-size:11px;color:var(--text-dim)">(external)</span>' : '';
+          html += `<button class="chapter-item" data-idx="${i}"${ext}>
             <span class="chapter-num">Ch. ${esc(a.chapter || "?")}</span>
-            <span class="chapter-name">${esc(a.title || "")}</span>
+            <span class="chapter-name">${esc(a.title || "")}${extLabel}</span>
           </button>`;
         });
         list.innerHTML = html;
