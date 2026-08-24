@@ -1047,6 +1047,55 @@ const JIKAN = {
     return `https://mangadex.org/search?q=${encodeURIComponent(title)}`;
   },
 
+  // ── ComicK API (search + metadata) ───────────────────────────────────
+  // ComicK (api.comick.dev) has both manga AND manhwa with ratings,
+  // descriptions, genres, and cover art. CORS-open for search.
+  // Chapters endpoint is behind Cloudflare — use MangaDex for reading.
+  _COMICK_BASE: "https://api.comick.dev/v1.0",
+
+  async comickSearch(title, limit = 5) {
+    try {
+      const ctrl = new AbortController();
+      const timer = setTimeout(() => ctrl.abort(), 10000);
+      const res = await fetch(
+        `${this._COMICK_BASE}/search?q=${encodeURIComponent(title)}&type=comic&limit=${limit}`,
+        { signal: ctrl.signal }
+      );
+      clearTimeout(timer);
+      if (!res.ok) return [];
+      const data = await res.json();
+      if (!Array.isArray(data)) return [];
+      const q = title.trim().toLowerCase();
+      const matchScore = (t) => {
+        const s = (t || "").toLowerCase();
+        if (s === q) return 100;
+        if (s.startsWith(q) || q.startsWith(s)) return 60;
+        if (s.includes(q) || q.includes(s)) return 30;
+        return 0;
+      };
+      return data
+        .map((m) => ({
+          hid: m.hid,
+          slug: m.slug,
+          title: m.title || "Unknown",
+          rating: m.rating || "0",
+          desc: (m.desc || "").slice(0, 300),
+          lastChapter: m.last_chapter || 0,
+          status: m.status === 1 ? "Ongoing" : m.status === 2 ? "Completed" : "Unknown",
+          contentRating: m.content_rating || "safe",
+        }))
+        .sort((a, b) => matchScore(b.title) - matchScore(a.title));
+    } catch (e) {
+      return [];
+    }
+  },
+
+  // Find the best ComicK match for a title
+  async comickBestMatch(title) {
+    const results = await this.comickSearch(title, 5);
+    return results[0] || null;
+  },
+
   // ── Manga (AniList GraphQL) ──────────────────────────────────────────
   // Uses the same AniList GraphQL API already proven for anime (CORS-open,
   // no key). AniList has full manga data: titles, covers, descriptions,
