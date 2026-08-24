@@ -159,7 +159,7 @@
         try {
           const data = await mdFetch(`${API}/manga?title=${encodeURIComponent(mangaTitle)}&limit=10&includes[]=cover_art`);
           if (!data.data || !data.data.length) {
-            $("chapterList").innerHTML = '<div class="empty-state">Manga not found on MangaDex. <a href="https://mangadex.org/search?q=' + encodeURIComponent(mangaTitle) + '" target="_blank" style="color:var(--accent)">Search MangaDex ↗</a></div>';
+            $("chapterList").innerHTML = '<div class="empty-state">Manga not found.</div>';
             return;
           }
           const best = pickBestManga(data.data, mangaTitle);
@@ -169,7 +169,7 @@
           await loadChapters();
         } catch (e) {
           console.error("[Reader init]", e);
-          $("chapterList").innerHTML = '<div class="empty-state">Could not connect to MangaDex. <a href="https://mangadex.org/search?q=' + encodeURIComponent(mangaTitle) + '" target="_blank" style="color:var(--accent)">Search MangaDex ↗</a></div>';
+          $("chapterList").innerHTML = '<div class="empty-state">Could not connect to the manga service.</div>';
         }
       }
 
@@ -257,7 +257,7 @@
           }
 
           if (!chapters.length) {
-            list.innerHTML = '<div class="empty-state">No chapters available. <a href="https://mangadex.org/title/' + mangadexId + '" target="_blank" style="color:var(--accent)">View on MangaDex ↗</a></div>';
+            list.innerHTML = '<div class="empty-state">No chapters available for this manga.</div>';
             return;
           }
 
@@ -298,8 +298,7 @@
         });
         if (!hosted && external) {
           html += `<div style="padding:12px;text-align:center;color:var(--text-dim);font-size:13px">
-            All chapters are hosted externally on MangaPlus.<br>
-            <a href="https://mangadex.org/title/${mangadexId}" target="_blank" style="color:var(--accent,#e535ab)">Read on MangaDex ↗</a>
+            All chapters are hosted externally and cannot be read on-site.
           </div>`;
         }
         list.innerHTML = html;
@@ -328,8 +327,7 @@
         if (ch.attributes.externalUrl) {
           $("readerPages").innerHTML = `<div class="empty-state">
             <h3>External Chapter</h3>
-            <p>This chapter is hosted on MangaPlus and can't be read here.</p>
-            <a href="https://mangadex.org/chapter/${ch.id}" target="_blank" rel="noopener" style="color:var(--accent,#e535ab);margin-top:8px;display:inline-block">Read on MangaDex ↗</a>
+            <p>This chapter is hosted externally and cannot be displayed on-site.</p>
           </div>`;
           updateNavButtons();
           return;
