@@ -10,6 +10,7 @@
   <link rel="icon" type="image/x-icon" href="../favicon.ico">
   <link rel="stylesheet" href="../css/style.css?v=25">
   <link rel="preconnect" href="https://api.mangadex.org">
+  <link rel="preconnect" href="https://api.comick.dev">
   <link rel="preconnect" href="https://api.jikan.moe">
   <link rel="preconnect" href="https://graphql.anilist.co">
   <link rel="preconnect" href="https://cdn.jsdelivr.net">
@@ -172,22 +173,57 @@
         return best;
       }
 
-      // ── Step 1: Find manga ──
+      // ── Step 1: Find manga (ComicK metadata + MangaDex chapters) ──
       async function init() {
+        // Try ComicK first for better metadata (ratings, descriptions, both manga+manhwa)
+        let comickData = null;
+        try {
+          comickData = await JIKAN.comickBestMatch(mangaTitle);
+        } catch (e) {}
+
+        // Use MangaDex for chapters (only CORS-open source for reading)
         try {
           const data = await mdFetch(`${API}/manga?title=${encodeURIComponent(mangaTitle)}&limit=10&includes[]=cover_art`);
           if (!data.data || !data.data.length) {
-            $("chapterList").innerHTML = '<div class="empty-state">Manga not found on MangaDex.</div>';
+            // If MangaDex fails, show ComicK link as fallback
+            if (comickData) {
+              $("chapterList").innerHTML = `<div class="empty-state">
+                <h3>${esc(comickData.title)}</h3>
+                <p style="margin:8px 0;">${comickData.desc ? esc(comickData.desc.slice(0, 200)) + '...' : 'Found on ComicK.'}</p>
+                <p>Rating: ${comickData.rating}/10 | ${comickData.status}</p>
+                <a href="https://comick.dev/comic/${comickData.slug}" target="_blank" rel="noopener" class="btn btn-primary" style="margin-top:12px;">Read on ComicK ↗</a>
+              </div>`;
+            } else {
+              $("chapterList").innerHTML = '<div class="empty-state">Manga not found on MangaDex or ComicK.</div>';
+            }
             return;
           }
           const best = pickBestManga(data.data, mangaTitle);
           mangadexId = best.id;
           $("mangaTitle").textContent =
             best.attributes.title.en || best.attributes.title["ja-ro"] || mangaTitle;
+
+          // Show ComicK metadata if available (better ratings/descriptions)
+          if (comickData && comickData.desc) {
+            const metaDiv = document.createElement("div");
+            metaDiv.className = "chapter-list-header";
+            metaDiv.style.cssText = "font-size:13px; padding:8px 12px; border-bottom:1px solid var(--border,#333);";
+            metaDiv.innerHTML = `Rating: <strong>${comickData.rating}/10</strong> | ${comickData.status}`;
+            $("chapterList").prepend(metaDiv);
+          }
+
           await loadChapters();
         } catch (e) {
           console.error("[Reader init]", e);
-          $("chapterList").innerHTML = '<div class="empty-state">Could not connect to MangaDex.</div>';
+          if (comickData) {
+            $("chapterList").innerHTML = `<div class="empty-state">
+              <h3>${esc(comickData.title)}</h3>
+              <p>Could not connect to MangaDex.</p>
+              <a href="https://comick.dev/comic/${comickData.slug}" target="_blank" rel="noopener" class="btn btn-primary" style="margin-top:12px;">Read on ComicK ↗</a>
+            </div>`;
+          } else {
+            $("chapterList").innerHTML = '<div class="empty-state">Could not connect to MangaDex.</div>';
+          }
         }
       }
 
@@ -265,7 +301,16 @@
           }
 
           if (!chapters.length) {
-            list.innerHTML = '<div class="empty-state"><h3>No chapters available</h3><p>This manga has no readable chapters on MangaDex (all chapters may be hosted externally or only available in other languages).</p></div>';
+            // Try to find a ComicK link as fallback
+            let comickSlug = "";
+            try {
+              const cm = await JIKAN.comickBestMatch(mangaTitle);
+              if (cm) comickSlug = cm.slug;
+            } catch (e) {}
+            const comickLink = comickSlug
+              ? `<a href="https://comick.dev/comic/${comickSlug}" target="_blank" rel="noopener" class="btn btn-outline" style="margin-top:12px;">Read on ComicK ↗</a>`
+              : `<a href="${JIKAN.mangadexSearchUrl(mangaTitle)}" target="_blank" rel="noopener" class="btn btn-outline" style="margin-top:12px;">Search MangaDex ↗</a>`;
+            list.innerHTML = `<div class="empty-state"><h3>No chapters available</h3><p>This manga has no readable chapters on MangaDex (all chapters may be hosted externally or only available in other languages).</p>${comickLink}</div>`;
             return;
           }
 
@@ -329,7 +374,8 @@
         if (ch.attributes.externalUrl) {
           $("readerPages").innerHTML = `<div class="empty-state">
             <h3>External Chapter</h3>
-            <p>This chapter is hosted externally and cannot be displayed on-site.</p>
+            <p>This chapter is hosted externally on MangaDex (e.g. MangaPlus) and cannot be displayed on-site.</p>
+            <a href="${ch.attributes.externalUrl}" target="_blank" rel="noopener" class="btn btn-primary" style="margin-top:12px;">Read on MangaDex ↗</a>
           </div>`;
           updateNavButtons();
           return;
