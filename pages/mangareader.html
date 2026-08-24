@@ -92,18 +92,31 @@
       $("readerBackdrop").onclick = () => { sidebarOpen = false; updateSidebar(); };
       window.addEventListener("resize", updateSidebar);
 
-      // ── Fast fetch with timeout ──
+      // ── MangaDex fetch (API blocks CORS for non-mangadex.org) ──
+      const CORS_PROXY = "https://api.cors.lol/?url=";
       async function mdFetch(url) {
-        const ctrl = new AbortController();
-        const timer = setTimeout(() => ctrl.abort(), 8000);
+        // Try direct first
         try {
+          const ctrl = new AbortController();
+          const timer = setTimeout(() => ctrl.abort(), 8000);
           const res = await fetch(url, { signal: ctrl.signal });
           clearTimeout(timer);
           if (!res.ok) throw new Error("HTTP " + res.status);
-          return await res.json();
+          const data = await res.json();
+          if (data && (data.result === "ok" || data.data || data.baseUrl)) return data;
+          throw new Error("Invalid response");
         } catch (e) {
-          clearTimeout(timer);
-          throw e;
+          // CORS blocked or error — try proxy
+          try {
+            const ctrl2 = new AbortController();
+            const timer2 = setTimeout(() => ctrl2.abort(), 12000);
+            const res = await fetch(CORS_PROXY + encodeURIComponent(url), { signal: ctrl2.signal });
+            clearTimeout(timer2);
+            if (!res.ok) throw new Error("Proxy HTTP " + res.status);
+            return await res.json();
+          } catch (e2) {
+            throw e2;
+          }
         }
       }
 
