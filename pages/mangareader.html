@@ -112,35 +112,48 @@
         return String(s || "").toLowerCase().replace(/[^a-z0-9]/g, "").replace(/ou/g, "o");
       }
 
-      function pickBestManga(results, targetTitle) {
-        const lower = targetTitle.toLowerCase().trim();
-        const normLower = norm(lower);
-        let best = results[0];
-        let bestScore = -Infinity;
-        for (const m of results) {
-          const attrs = m.attributes;
-          const allTitles = [attrs.title?.en, attrs.title?.["ja-ro"], attrs.title?.romaji, attrs.title?.native]
-            .filter(Boolean);
-          let score = 0;
-          for (const t of allTitles) {
-            const tn = t.toLowerCase();
-            const nn = norm(t);
-            if (tn === lower) score = Math.max(score, 200);
-            else if (nn === normLower) score = Math.max(score, 190);
-            else if (tn.startsWith(lower)) score = Math.max(score, 150);
-            else if (nn.startsWith(normLower)) score = Math.max(score, 140);
-            else if (tn.includes(lower)) score = Math.max(score, 50);
-            else if (nn.includes(normLower)) score = Math.max(score, 40);
-          }
-          const name = (attrs.title?.en || attrs.title?.["ja-ro"] || "").toLowerCase();
-          if (/\b(colored|colour|full.color)\b/.test(name)) score -= 60;
-          if (/\b(doujin|spin.?off|short story|prototype|one shot)\b/i.test(name)) score -= 100;
-          if (score > bestScore) { bestScore = score; best = m; }
-        }
-        return best;
+      function getDisplayTitle(attrs) {
+        return attrs.title?.en || attrs.title?.["ja-ro"] || attrs.title?.romaji || "";
       }
 
-      // ── Step 1: Find manga ──
+      function scoreManga(m, targetTitle) {
+        const attrs = m.attributes;
+        const lower = targetTitle.toLowerCase().trim();
+        const normLower = norm(lower);
+        const allTitles = [attrs.title?.en, attrs.title?.["ja-ro"], attrs.title?.romaji, attrs.title?.native]
+          .filter(Boolean);
+        let score = 0;
+        for (const t of allTitles) {
+          const tn = t.toLowerCase();
+          const nn = norm(t);
+          if (tn === lower) score = Math.max(score, 200);
+          else if (nn === normLower) score = Math.max(score, 190);
+          else if (tn.startsWith(lower)) score = Math.max(score, 150);
+          else if (nn.startsWith(normLower)) score = Math.max(score, 140);
+          else if (tn.includes(lower)) score = Math.max(score, 50);
+          else if (nn.includes(normLower)) score = Math.max(score, 40);
+        }
+        const name = getDisplayTitle(attrs).toLowerCase();
+        if (/\b(colored|colour|full.color)\b/.test(name)) score -= 60;
+        if (/\b(doujin|spin.?off|short story|prototype|one shot)\b/i.test(name)) score -= 100;
+        return score;
+      }
+
+      // ── Check if manga has hosted English chapters ──
+      async function hasHostedEnglishChapters(mangaId) {
+        try {
+          const data = await mdFetch(
+            `${API}/manga/${mangaId}/feed?translatedLanguage%5B%5D=en&limit=50&order%5Bchapter%5D=desc`
+          );
+          return (data.data || []).some(ch =>
+            ch.attributes && ch.attributes.chapter && !ch.attributes.externalUrl
+          );
+        } catch (e) {
+          return false;
+        }
+      }
+
+      // ── Step 1: Find manga with English chapters ──
       async function init() {
         $("chapterList").innerHTML = '<div class="loading"><div class="spinner"></div>Searching...</div>';
         try {
@@ -149,10 +162,35 @@
             $("chapterList").innerHTML = '<div class="empty-state">Manga not found.</div>';
             return;
           }
-          const best = pickBestManga(data.data, mangaTitle);
-          mangadexId = best.id;
-          $("mangaTitle").textContent =
-            best.attributes.title.en || best.attributes.title["ja-ro"] || mangaTitle;
+
+          // Sort by title match score
+          const scored = data.data
+            .map(m => ({ manga: m, score: scoreManga(m, mangaTitle) }))
+            .filter(x => x.score > 0)
+            .sort((a, b) => b.score - a.score);
+
+          if (!scored.length) {
+            $("chapterList").innerHTML = '<div class="empty-state">Manga not found.</div>';
+            return;
+          }
+
+          // Find first manga that has hosted English chapters
+          let found = false;
+          for (const { manga } of scored) {
+            const ok = await hasHostedEnglishChapters(manga.id);
+            if (ok) {
+              mangadexId = manga.id;
+              $("mangaTitle").textContent = getDisplayTitle(manga.attributes) || mangaTitle;
+              found = true;
+              break;
+            }
+          }
+
+          if (!found) {
+            $("chapterList").innerHTML = '<div class="empty-state">No English chapters available for this manga.</div>';
+            return;
+          }
+
           await loadChapters();
         } catch (e) {
           console.error("[Reader init]", e);
@@ -180,7 +218,7 @@
           const seen = new Map();
           allChapters.forEach(ch => {
             if (!ch.attributes || !ch.attributes.chapter) return;
-            if (ch.attributes.externalUrl) return; // skip external entirely
+            if (ch.attributes.externalUrl) return;
             const key = normKey(ch.attributes.chapter);
             const existing = seen.get(key);
             if (!existing) { seen.set(key, ch); return; }
@@ -210,9 +248,9 @@
       }
 
       function parseNum(str) {
-        const s = String(str).toLowerCase().trim();
-        const chMatch = s.match(/(?:ch(?:apter)?\.?\s*)([\d.]+)/i);
-        if (chMatch) return parseFloat(chMatch[1]);
+        const s = String(str).trim();
+        const n = parseFloat(s);
+        if (!isNaN(n)) return n;
         const m = s.match(/[\d.]+/);
         return m ? parseFloat(m[0]) : Infinity;
       }
@@ -227,9 +265,11 @@
         let html = `<div class="chapter-list-header">${chapters.length} chapters</div>`;
         chapters.forEach((ch, i) => {
           const a = ch.attributes;
+          const vol = a.volume ? ` Vol.${a.volume}` : "";
+          const chTitle = a.title ? ` - ${a.title}` : "";
           html += `<button class="chapter-item" data-idx="${i}">
-            <span class="chapter-num">Ch. ${esc(a.chapter || "?")}</span>
-            <span class="chapter-name">${esc(a.title || "")}</span>
+            <span class="chapter-num">Ch. ${esc(a.chapter || "?")}${vol}</span>
+            <span class="chapter-name">${esc(chTitle)}</span>
           </button>`;
         });
         list.innerHTML = html;
@@ -247,7 +287,8 @@
         const gen = ++chapterGen;
 
         const ch = chapters[idx];
-        $("chapterLabel").textContent = "Ch. " + (ch.attributes.chapter || "?");
+        const vol = ch.attributes.volume ? ` Vol.${ch.attributes.volume}` : "";
+        $("chapterLabel").textContent = "Ch. " + (ch.attributes.chapter || "?") + vol;
 
         $("chapterList").querySelectorAll(".chapter-item").forEach((el, i) => {
           el.classList.toggle("active", i === idx);
