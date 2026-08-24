@@ -10,13 +10,15 @@ Manga feature is built and mostly working. SEO overhaul completed.
 - **Manga matching**: Improved `pickBestManga` scoring with romanization normalization ("ou"↔"o"), stronger spinoff penalties, prefix matching
 
 ### SEO Overhaul (Aug 22 2026)
-- **IndexNow**: Implemented with key file at root, ping on every deploy via push_update.py
+- **IndexNow**: Implemented with Bing-generated key `7a9a2a35d24b473c811ecd475c7bd970`, ping on every deploy
 - **Sitemap**: Fixed — removed noindex pages, added `<lastmod>`, `<changefreq>`
 - **Open Graph**: Added og:title, og:description, og:image, og:type to all indexable pages
-- **JSON-LD**: Added WebSite (SearchAction), CollectionPage (catalog), ItemList (rankings), TVSeries/Movie (anime detail)
+- **JSON-LD**: Added WebSite (SearchAction), CollectionPage (catalog), ItemList (rankings), TVSeries (anime detail)
 - **hreflang**: Added `en` + `x-default` to all indexable pages
 - **noindex**: Set on admin, login, signup, dms, friends, mylist, profile pages
 - **Google/Bing ping**: Added sitemap ping to push_update.py after deploy
+- **Bing Webmaster Tools**: Site added, IndexNow key verified, sitemap submitted
+- **Bing Status**: URLs showing "Blocked" — normal for new sites, need 24-48 hours for indexing
 
 ## Files Modified
 - `otakupier/pages/mangareader.html` — Full manga reader (sidebar + top bar + page viewer)
