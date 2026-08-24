@@ -74,9 +74,6 @@
       let sidebarOpen = true;
 
       const API = "https://api.mangadex.org";
-      const PROXIES = [
-        "https://cors.sh/",
-      ];
 
       const $ = (id) => document.getElementById(id);
 
@@ -95,34 +92,24 @@
       $("readerBackdrop").onclick = () => { sidebarOpen = false; updateSidebar(); };
       window.addEventListener("resize", updateSidebar);
 
-      // ── Fetch with proxy fallback (parallel — first wins) ──
+      // ── Fast fetch with 6s timeout ──
       async function mdFetch(url) {
-        const TIMEOUT = 12000;
-
-        // Try direct first, then cors.sh proxy
-        const tasks = [
-          { idx: 0, promise: fetch(url) },
-          { idx: 1, promise: fetch(PROXIES[0] + url) },
-        ];
-
-        const winner = await Promise.any(
-          tasks.map(({ idx, promise }) =>
-            promise.then(async r => {
-              if (!r.ok) throw new Error("not ok");
-              return r.json();
-            })
-          )
-        ).catch(() => null);
-
-        if (winner) return winner;
-
-        throw new Error("All fetch attempts failed");
+        const ctrl = new AbortController();
+        const timer = setTimeout(() => ctrl.abort(), 6000);
+        try {
+          const res = await fetch(url, { signal: ctrl.signal });
+          clearTimeout(timer);
+          if (!res.ok) throw new Error("HTTP " + res.status);
+          return await res.json();
+        } catch (e) {
+          clearTimeout(timer);
+          throw e;
+        }
       }
 
       // ── Pick best manga match ──
       function pickBestManga(results, targetTitle) {
         const lower = targetTitle.toLowerCase().trim();
-        // Normalize for romanization variants: "ou" ↔ "o", strip punctuation
         const norm = s => s.toLowerCase().replace(/[^a-z0-9]/g, "").replace(/ou/g, "o");
         const normLower = norm(lower);
         let best = results[0];
@@ -143,11 +130,9 @@
           else if (normTitles.some(t => t.includes(normLower))) score += 40;
           else if (lower.includes(titles[0] || "")) score += 20;
           else {
-            // Partial matching: check if first word or normalized prefix matches
             const targetWords = lower.split(/[\s:-]+/).filter(w => w.length > 2);
             const firstWord = targetWords[0] || "";
             const firstTwo = targetWords.slice(0, 2).join(" ");
-            // "kaguya-sama" should match "kaguya-sama wa kokurasetai"
             const titleWords = titles.some(t => t.startsWith(firstWord));
             const normPrefix = normTitles.some(t => t.startsWith(norm(firstWord)));
             if (titleWords || normPrefix) score += 30;
@@ -158,12 +143,9 @@
           if (/\b(colored|colour|full.color)\b/.test(name)) score -= 60;
           if (/\b(doujin|spin.?off|short story|prototype|one shot)\b/i.test(name)) score -= 100;
           if (/\b(sequel|prequel|requiem|lost children|chapter of the wings|episode)\b/i.test(name)) score -= 80;
-          // Penalize spinoffs by subtitle suffix (e.g. ": JACK", ":re", "Junior", "Gaiden")
           if (name.includes(":") && lower !== name) score -= 40;
-          // Bonus: more chapters available (prefer the main series over spinoffs)
           const chapters = parseInt(attrs.lastChapter) || 0;
           score += Math.min(chapters, 200);
-          // Penalty: very few chapters likely means all external / wrong match
           if (chapters > 0 && chapters <= 3) score -= 40;
           if (attrs.status === "RELEASING") score += 10;
           if (attrs.status === "FINISHED") score += 5;
@@ -172,12 +154,12 @@
         return best;
       }
 
-      // ── Step 1: Find manga ──
+      // ── Step 1: Find manga on MangaDex ──
       async function init() {
         try {
           const data = await mdFetch(`${API}/manga?title=${encodeURIComponent(mangaTitle)}&limit=10&includes[]=cover_art`);
           if (!data.data || !data.data.length) {
-            $("chapterList").innerHTML = '<div class="empty-state">Manga not found.</div>';
+            $("chapterList").innerHTML = '<div class="empty-state">Manga not found on MangaDex. <a href="https://mangadex.org/search?q=' + encodeURIComponent(mangaTitle) + '" target="_blank" style="color:var(--accent)">Search MangaDex ↗</a></div>';
             return;
           }
           const best = pickBestManga(data.data, mangaTitle);
@@ -187,7 +169,7 @@
           await loadChapters();
         } catch (e) {
           console.error("[Reader init]", e);
-          $("chapterList").innerHTML = '<div class="empty-state">Could not connect to the manga service.</div>';
+          $("chapterList").innerHTML = '<div class="empty-state">Could not connect to MangaDex. <a href="https://mangadex.org/search?q=' + encodeURIComponent(mangaTitle) + '" target="_blank" style="color:var(--accent)">Search MangaDex ↗</a></div>';
         }
       }
 
@@ -197,22 +179,18 @@
         try {
           list.innerHTML = '<div class="loading"><div class="spinner"></div>Loading chapters...</div>';
 
-          // Fetch all English chapters
-          let allChapters = [];
-          let offset = 0;
-          let total = Infinity;
-          while (offset < total) {
-            const data = await mdFetch(
-              `${API}/manga/${mangadexId}/feed?translatedLanguage%5B%5D=en&limit=500&offset=${offset}&order%5Bchapter%5D=asc`
+          // Fetch English chapters (single request, fast)
+          let data;
+          try {
+            data = await mdFetch(
+              `${API}/manga/${mangadexId}/feed?translatedLanguage%5B%5D=en&limit=500&order%5Bchapter%5D=asc`
             );
-            total = data.total || 0;
-            const batch = data.data || [];
-            allChapters = allChapters.concat(batch);
-            offset += batch.length;
-            if (batch.length === 0) break;
+          } catch (e) {
+            data = { data: [], total: 0 };
           }
+          const allChapters = data.data || [];
 
-          // Dedup: keep the BEST entry per chapter number
+          // Dedup: keep BEST entry per chapter number
           // Prefer: hosted (no externalUrl) > external; most pages > fewer pages
           const seen = new Map();
           allChapters.forEach(ch => {
@@ -223,18 +201,15 @@
               seen.set(key, ch);
               return;
             }
-            // Prefer hosted over external
             const aExt = !!existing.attributes.externalUrl;
             const bExt = !!ch.attributes.externalUrl;
             if (aExt && !bExt) { seen.set(key, ch); return; }
             if (!aExt && bExt) return;
-            // Same type: prefer more pages
             const aPages = existing.attributes.pages || 0;
             const bPages = ch.attributes.pages || 0;
             if (bPages > aPages) seen.set(key, ch);
           });
 
-          // Sort numerically by parsed chapter number, then by volume
           chapters = Array.from(seen.values()).sort((a, b) => {
             const na = parseNum(a.attributes.chapter);
             const nb = parseNum(b.attributes.chapter);
@@ -244,18 +219,15 @@
 
           // Fallback: if no English chapters, try Japanese raws
           if (!chapters.length) {
-            let fallbackChapters = [];
-            offset = 0; total = Infinity;
-            while (offset < total) {
-              const data = await mdFetch(
-                `${API}/manga/${mangadexId}/feed?translatedLanguage%5B%5D=ja-ro&limit=500&offset=${offset}&order%5Bchapter%5D=asc`
+            let fbData;
+            try {
+              fbData = await mdFetch(
+                `${API}/manga/${mangadexId}/feed?translatedLanguage%5B%5D=ja-ro&limit=500&order%5Bchapter%5D=asc`
               );
-              total = data.total || 0;
-              const batch = data.data || [];
-              fallbackChapters = fallbackChapters.concat(batch);
-              offset += batch.length;
-              if (batch.length === 0) break;
+            } catch (e) {
+              fbData = { data: [] };
             }
+            const fallbackChapters = fbData.data || [];
             const seenFb = new Map();
             fallbackChapters.forEach(ch => {
               if (!ch.attributes || !ch.attributes.chapter) return;
@@ -285,7 +257,7 @@
           }
 
           if (!chapters.length) {
-            list.innerHTML = '<div class="empty-state">No chapters available for this manga.</div>';
+            list.innerHTML = '<div class="empty-state">No chapters available. <a href="https://mangadex.org/title/' + mangadexId + '" target="_blank" style="color:var(--accent)">View on MangaDex ↗</a></div>';
             return;
           }
 
@@ -299,15 +271,12 @@
 
       function parseNum(str) {
         const s = String(str).toLowerCase().trim();
-        // "Vol.3 Ch.12" → prefer chapter number over volume number
         const chMatch = s.match(/(?:ch(?:apter)?\.?\s*)([\d.]+)/i);
         if (chMatch) return parseFloat(chMatch[1]);
-        // Plain "1", "1.5", "001" → first number found
         const m = s.match(/[\d.]+/);
         return m ? parseFloat(m[0]) : Infinity;
       }
 
-      // Normalize chapter string for dedup: "1", "1.0", "001", "Ch.1" all map to same key
       function normKey(str) {
         const n = parseNum(str);
         return n === Infinity ? String(str).trim().toLowerCase() : String(n);
@@ -317,17 +286,22 @@
         const list = $("chapterList");
         const hosted = chapters.filter(ch => !ch.attributes.externalUrl).length;
         const external = chapters.length - hosted;
-        let html = `<div class="chapter-list-header">${hosted} chapters` +
-          (external ? ` + ${external} external` : '') + `</div>`;
+        let html = `<div class="chapter-list-header">${hosted} readable` +
+          (external ? ` · ${external} external` : '') + `</div>`;
         chapters.forEach((ch, i) => {
           const a = ch.attributes;
-          const ext = a.externalUrl ? ' style="opacity:0.5"' : '';
-          const extLabel = a.externalUrl ? ' <span style="font-size:11px;color:var(--text-dim)">(external)</span>' : '';
-          html += `<button class="chapter-item" data-idx="${i}"${ext}>
+          if (a.externalUrl) return; // skip external in list — they can't be read here
+          html += `<button class="chapter-item" data-idx="${i}">
             <span class="chapter-num">Ch. ${esc(a.chapter || "?")}</span>
-            <span class="chapter-name">${esc(a.title || "")}${extLabel}</span>
+            <span class="chapter-name">${esc(a.title || "")}</span>
           </button>`;
         });
+        if (!hosted && external) {
+          html += `<div style="padding:12px;text-align:center;color:var(--text-dim);font-size:13px">
+            All chapters are hosted externally on MangaPlus.<br>
+            <a href="https://mangadex.org/title/${mangadexId}" target="_blank" style="color:var(--accent,#e535ab)">Read on MangaDex ↗</a>
+          </div>`;
+        }
         list.innerHTML = html;
         list.querySelectorAll(".chapter-item").forEach(btn => {
           btn.addEventListener("click", () => goToChapter(parseInt(btn.dataset.idx)));
@@ -354,7 +328,8 @@
         if (ch.attributes.externalUrl) {
           $("readerPages").innerHTML = `<div class="empty-state">
             <h3>External Chapter</h3>
-            <p>This chapter is hosted externally and cannot be displayed on-site.</p>
+            <p>This chapter is hosted on MangaPlus and can't be read here.</p>
+            <a href="https://mangadex.org/chapter/${ch.id}" target="_blank" rel="noopener" style="color:var(--accent,#e535ab);margin-top:8px;display:inline-block">Read on MangaDex ↗</a>
           </div>`;
           updateNavButtons();
           return;
@@ -405,12 +380,11 @@
 
                 img.onerror = function() {
                   if (this.dataset.retried === "2") {
-                    // Both paths failed — show error label
                     this.style.display = "none";
                     errLabel.style.display = "block";
                     failedCount++;
                     if (failedCount >= pages.length) {
-                      container.innerHTML = '<div class="empty-state"><h3>Images unavailable</h3><p>MangaDex could not serve images for this chapter. Try a different chapter or provider.</p></div>';
+                      container.innerHTML = '<div class="empty-state"><h3>Images unavailable</h3><p>MangaDex could not serve images for this chapter. Try a different chapter.</p></div>';
                     }
                     return;
                   }
@@ -432,7 +406,7 @@
           if (gen !== chapterGen) return;
         }
         if (gen !== chapterGen) return;
-        container.innerHTML = '<div class="empty-state"><h3>Chapter not available</h3><p>Images could not be loaded from MangaDex. The chapter may be hosted externally.</p></div>';
+        container.innerHTML = '<div class="empty-state"><h3>Chapter not available</h3><p>Images could not be loaded from MangaDex.</p></div>';
       }
 
       // ── Navigation buttons ──
