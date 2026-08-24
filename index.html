@@ -12,6 +12,7 @@
   <meta name="robots" content="index, follow">
   <meta name="theme-color" content="#e6465c">
   <link rel="canonical" href="https://otakupier.2bd.net/">
+  <meta name="googlebot" content="index, follow">
   <link rel="alternate" hreflang="en" href="https://otakupier.2bd.net/">
   <link rel="alternate" hreflang="x-default" href="https://otakupier.2bd.net/">
   <link rel="icon" type="image/svg+xml" href="../favicon.svg?v=2">
@@ -46,7 +47,7 @@
       "@type": "SearchAction",
       "target": {
         "@type": "EntryPoint",
-        "urlTemplate": "https://otakupier.2bd.net/pages/catalog.html?q={search_term_string}"
+        "urlTemplate": "https://otakupier.2bd.net/pages/catalog?q={search_term_string}"
       },
       "query-input": "required name=search_term_string"
     }
@@ -58,6 +59,24 @@
 </head>
 <body>
   <nav class="navbar" id="navbar"></nav>
+
+  <noscript>
+    <main class="container" style="padding:40px 20px; max-width:900px; margin:0 auto;">
+      <h1>OtakuPier - Anime Catalog, Rankings & Reviews</h1>
+      <p style="color:var(--text-dim); margin:16px 0;">OtakuPier is a community-run anime and manga catalog. Browse the full catalog, find watch links for every title, compare community rankings, and leave reviews. Earn Reward Points for participating.</p>
+      <h2 style="margin-top:28px;">Explore</h2>
+      <ul style="margin:12px 0; line-height:2;">
+        <li><a href="pages/catalog">Browse Anime & Manga Catalog</a> — Search, filter by genre, discover trending series</li>
+        <li><a href="pages/rankings">Community Rankings</a> — Top rated anime voted by fans</li>
+        <li><a href="pages/forums">Forums</a> — Discuss anime with the community</li>
+        <li><a href="pages/clubs">Clubs</a> — Join fan clubs for your favorite series</li>
+        <li><a href="pages/leaderboard">Leaderboard</a> — Top contributors and reviewers</li>
+        <li><a href="pages/chat">Live Chat</a> — Chat with other anime fans in real time</li>
+      </ul>
+      <h2 style="margin-top:28px;">About</h2>
+      <p style="color:var(--text-dim); margin:12px 0;">Every title links to where you can watch it. Members vote on community rankings, leave reviews, keep watchlists, and chat. Earned Reward Points let you customize your profile with name colors, titles, and more.</p>
+    </main>
+  </noscript>
 
   <header class="hero">
     <div class="hero-bg" aria-hidden="true">
@@ -77,7 +96,7 @@
         <h1 class="anim-rise anim-delay-1">Everything docks at <span class="shimmer">OtakuPier</span></h1>
         <p class="hero-sub anim-rise anim-delay-2">OtakuPier is a community-run port for the shows you love. Browse the catalog, find watch links for each title, compare community rankings, and leave the review you've been sitting on.</p>
         <div class="hero-cta anim-rise anim-delay-3">
-          <a href="pages/catalog.html" class="btn btn-primary btn-glow">Browse the catalog</a>
+          <a href="pages/catalog" class="btn btn-primary btn-glow">Browse the catalog</a>
           <a href="#about" class="btn btn-outline">What is this place?</a>
         </div>
       </div>
@@ -128,7 +147,7 @@
     <section id="toprated">
       <div class="section-head">
         <h2>Top of the pier</h2>
-        <a class="link" href="pages/rankings.html">See community rankings</a>
+        <a class="link" href="pages/rankings">See community rankings</a>
       </div>
       <div class="carousel-wrap">
         <div class="carousel-fade left"></div>
