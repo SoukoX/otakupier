@@ -1356,6 +1356,44 @@ const JIKAN = {
     return `https://mangadex.org/search?q=${encodeURIComponent(title)}`;
   },
 
+  // ── Manga by genre (MAL genre id → AniList genre name) ──
+  _MANGA_GENRE_MAP: {
+    1: "Action", 2: "Adventure", 4: "Comedy", 8: "Drama",
+    10: "Fantasy", 14: "Horror", 7: "Mystery", 22: "Romance",
+    24: "Sci-Fi", 36: "Slice of Life", 30: "Sports",
+    37: "Supernatural", 41: "Suspense", 9: "Ecchi",
+    18: "Mecha", 19: "Music", 13: "Historical",
+    17: "Martial Arts", 31: "Super Power", 32: "Vampire",
+    6: "Mythology", 40: "Psychological", 38: "Military",
+    23: "School", 35: "Harem", 11: "Strategy Game",
+    43: "Josei", 42: "Seinen", 25: "Shoujo", 27: "Shounen",
+    3: "Cars", 46: "Award Winning", 28: "Boys Love",
+    47: "Gourmet", 26: "Girls Love", 15: "Kids",
+    20: "Parody", 21: "Samurai", 29: "Space",
+  },
+
+  async mangaByGenre(genreId, page = 1, limit = 20) {
+    const genreName = this._MANGA_GENRE_MAP[Number(genreId)];
+    if (!genreName) return { data: [] };
+
+    try {
+      const data = await this._aniMangaQuery(`query($genre: String, $p: Int, $per: Int) {
+        Page(page: $p, perPage: $per) {
+          media(genre: $genre, type: MANGA, isAdult: false, sort: POPULARITY_DESC) {
+            id title { romaji english native }
+            coverImage { large }
+            status format genres description(asHtml: false)
+            chapters volumes countryOfOrigin startDate { year }
+            staff { edges { node { name { full } } } }
+          }
+        }
+      }`, { genre: genreName, p: page, per: limit });
+      return { data: this._aniMangaToList(data) };
+    } catch (e) {
+      return { data: [] };
+    }
+  },
+
   // ── Manga catalog rows (merged AniList + ComicK) ─────────────────────
   async mangaTrending(page = 1) {
     const aniPromise = this._aniMangaQuery(`query($p: Int, $per: Int) {
