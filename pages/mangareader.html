@@ -155,8 +155,19 @@
               const lower = mangaTitle.toLowerCase();
               const scored = data.data
                 .map(m => {
-                  const t = (m.attributes?.title?.en || m.attributes?.title?.["ja-ro"] || "").toLowerCase();
-                  return { manga: m, score: t === lower ? 200 : t.includes(lower) || lower.includes(t) ? 50 : 0 };
+                  const attrs = m.attributes || {};
+                  const en = (attrs.title?.en || "").toLowerCase();
+                  const jar = (attrs.title?.["ja-ro"] || "").toLowerCase();
+                  // Also check altTitles
+                  const alts = (attrs.altTitles || []).map(a => (a.en || a["ja-ro"] || a.ko || "")).filter(Boolean).map(s => s.toLowerCase());
+                  const allTitles = [en, jar, ...alts].filter(Boolean);
+                  let best = 0;
+                  for (const t of allTitles) {
+                    if (t === lower) { best = 200; break; }
+                    if (best < 100 && (t.includes(lower) || lower.includes(t))) best = 100;
+                    if (best < 80 && (t.endsWith(lower) || t.startsWith(lower))) best = 80;
+                  }
+                  return { manga: m, score: best };
                 })
                 .filter(x => x.score > 0)
                 .sort((a, b) => b.score - a.score);
@@ -201,12 +212,30 @@
         const wcResults = Array.isArray(wcData) ? wcData : (wcData.results || wcData.data || []);
         const cleanTitle = (t) => (t || "").replace(/\s+/g, " ").trim();
         const lower = mangaTitle.toLowerCase();
-        const wcManga = wcResults.find(r => {
-          const t = cleanTitle(r.title).toLowerCase();
-          return t === lower || t.includes(lower) || lower.includes(t);
-        }) || wcResults[0];
 
-        if (!wcManga) return null;
+        // Score each result — prefer exact match, then closest length match
+        let bestMatch = null;
+        let bestScore = -1;
+        for (const r of wcResults) {
+          const t = cleanTitle(r.title).toLowerCase();
+          if (!t) continue;
+          let score = 0;
+          if (t === lower) score = 200;
+          else if (lower === t.replace(/^official\s+/, "").trim()) score = 180;
+          else if (t.endsWith(lower) || t.startsWith(lower)) score = 100;
+          else if (t.includes(lower)) score = 80;
+          else if (lower.includes(t) && t.length > 3) score = 40;
+          // Penalize if the result title is much longer (extra words = wrong match)
+          if (score > 0 && t.length > lower.length * 2) score -= 50;
+          if (score > bestScore) {
+            bestScore = score;
+            bestMatch = r;
+          }
+        }
+
+        if (!bestMatch || bestScore < 40) return null;
+
+        const wcManga = bestMatch;
 
         const chData = await proxyFetch(
           `https://manga-scrape-api.vercel.app/api/scrape/chapters?id=${wcManga.id}&provider=weebcentral`
