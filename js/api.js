@@ -1364,7 +1364,7 @@ const JIKAN = {
     7: { name: "Mystery", type: "genre" }, 22: { name: "Romance", type: "genre" },
     24: { name: "Sci-Fi", type: "genre" }, 36: { name: "Slice of Life", type: "genre" },
     30: { name: "Sports", type: "genre" }, 37: { name: "Supernatural", type: "genre" },
-    41: { name: "Suspense", type: "genre" }, 9: { name: "Ecchi", type: "genre" },
+    41: { name: "Thriller", type: "genre" }, 9: { name: "Ecchi", type: "genre" },
     18: { name: "Mecha", type: "genre" }, 19: { name: "Music", type: "genre" },
     40: { name: "Psychological", type: "genre" },
     6: { name: "Mythology", type: "tag" }, 13: { name: "Historical", type: "tag" },
@@ -1374,8 +1374,8 @@ const JIKAN = {
     11: { name: "Strategy Game", type: "tag" }, 21: { name: "Samurai", type: "tag" },
     29: { name: "Space", type: "tag" }, 28: { name: "Boys Love", type: "tag" },
     26: { name: "Girls Love", type: "tag" },
-    42: { name: "SEINEN", type: "format" }, 43: { name: "JOSEI", type: "format" },
-    25: { name: "SHOUJO", type: "format" }, 27: { name: "SHOUNEN", type: "format" },
+    42: { name: "Seinen", type: "tag" }, 43: { name: "Josei", type: "tag" },
+    25: { name: "Shoujo", type: "tag" }, 27: { name: "Shounen", type: "tag" },
     3: { name: "Cars", type: "tag" }, 46: { name: "Award Winning", type: "genre" },
     47: { name: "Gourmet", type: "tag" }, 15: { name: "Kids", type: "tag" },
     20: { name: "Parody", type: "tag" },
@@ -1387,20 +1387,7 @@ const JIKAN = {
 
     try {
       let query, variables;
-      if (entry.type === "format") {
-        query = `query($fmt: MediaFormat, $p: Int, $per: Int) {
-          Page(page: $p, perPage: $per) {
-            media(format: $fmt, type: MANGA, isAdult: false, sort: POPULARITY_DESC) {
-              id title { romaji english native }
-              coverImage { large }
-              status format genres description(asHtml: false)
-              chapters volumes countryOfOrigin startDate { year }
-              staff { edges { node { name { full } } } }
-            }
-          }
-        }`;
-        variables = { fmt: entry.name, p: page, per: limit };
-      } else if (entry.type === "tag") {
+      if (entry.type === "tag") {
         query = `query($tag: String, $p: Int, $per: Int) {
           Page(page: $p, perPage: $per) {
             media(tag: $tag, type: MANGA, isAdult: false, sort: POPULARITY_DESC) {
