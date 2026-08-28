@@ -2101,6 +2101,24 @@ const JIKAN = {
   // Used as fallback when MangaDex has no hosted chapters.
   WEEBCENTRAL_API: "https://manga-scrape-api.vercel.app",
 
+  // MangaDex search via CORS proxy (MangaDex API has no CORS headers)
+  async mangadexSearch(query) {
+    try {
+      const res = await fetch(`${this.WEEBCENTRAL_API}/api/scrape/search?query=${encodeURIComponent(query)}&provider=mangadex`);
+      if (!res.ok) return [];
+      const data = await res.json();
+      const results = Array.isArray(data) ? data : (data.data || data.results || []);
+      return results.filter(r => r && r.id && r.title).map(r => ({
+        id: r.id,
+        title: (typeof r.title === "string" ? r.title : r.title?.en || "").replace(/\s+/g, " ").trim(),
+        provider: "mangadex"
+      }));
+    } catch (e) {
+      console.warn("[MangaDex] Search failed:", e);
+      return [];
+    }
+  },
+
   async weebcentralSearch(query) {
     try {
       const res = await fetch(`${this.WEEBCENTRAL_API}/api/scrape/search?query=${encodeURIComponent(query)}&provider=weebcentral`);
