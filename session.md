@@ -1,88 +1,75 @@
-# OtakuPier Manga Reader - Session State
+# OtakuPier Session State
 
 ## Current Status
-Manga feature is built and mostly working. SEO overhaul completed.
+Manga section overhauled with multi-source architecture. SEO overhaul completed.
+
+### Manga Multi-Source System (Aug 28 2026)
+- **ComicK API added** as primary manga catalog source (better coverage than AniList)
+- **AniList kept** as fallback/secondary source
+- **MangaDex** used for chapter reading (with multiple proxy fallbacks)
+- **Merged results** — deduped by title so the grid has best coverage
+
+#### Changes Made
+1. **api.js** — Added:
+   - `comickMangaSearch()` — ComicK search with cover art detail fetches
+   - `comickPopular()` — Popular manga from ComicK (sorted by views/rating)
+   - `comickMangaDetail()` — Full manga detail from ComicK
+   - `_comickToManga()` — Converts ComicK results to unified format
+   - Updated `mangaSearch()` — Merges AniList + ComicK results
+   - Updated `mangaPopular()` — Merges AniList + ComicK popular
+   - Updated `mangaTrending()` — Merges AniList trending + ComicK popular
+   - Updated `mangaNewReleases()` — Merges AniList new + ComicK popular
+   - Updated `mangaDetail()` — Supports both AniList IDs and ComicK hids
+
+2. **pages/mangareader.html** — Improved:
+   - Multiple CORS proxy fallbacks (direct → cors.lol → allorigins)
+   - Better title matching with alternative title variations
+   - Improved error messages with external reading links
+   - Support for MangaDex UUID direct access
+
+3. **pages/manga.html** — Updated:
+   - Handles both AniList and ComicK manga formats
+   - Genre objects now handled safely (string or object)
+   - Added MangaDex external reading link for ComicK manga
+
+4. **pages/catalog.html** — Updated:
+   - `mangaCard()` handles both formats, shows status labels
+   - `mangaHeroSlide()` handles genre objects safely
+   - `renderMangaSuggest()` handles genre objects safely
+   - `loadCatalog()` handles merged data format
+   - `loadMangaRows()` handles merged data format
 
 ### Fixed Issues (Aug 22 2026)
-- **No English chapters found**: Added fallback to Japanese raws when no English chapters exist (e.g. Vagabond, Ultimate Shut-in)
-- **Image loading**: Improved error handling — retry logic tries both data/data-saver paths, shows visible error state when images fail
-- **Chapter ordering**: Was already working correctly; Vagabond starts at Ch.216 because early chapters were never scanlated in English
-- **Manga matching**: Improved `pickBestManga` scoring with romanization normalization ("ou"↔"o"), stronger spinoff penalties, prefix matching
+- **No English chapters found**: Added fallback to Japanese raws when no English chapters exist
+- **Image loading**: Improved error handling — retry logic tries both data/data-saver paths
+- **Chapter ordering**: Fixed with proper numeric sort
+- **Manga matching**: Improved `pickBestManga` scoring
 
 ### SEO Overhaul (Aug 22 2026)
-- **IndexNow**: Implemented with Bing-generated key `7a9a2a35d24b473c811ecd475c7bd970`, ping on every deploy
-- **Sitemap**: Fixed — removed noindex pages, added `<lastmod>`, `<changefreq>`
-- **Open Graph**: Added og:title, og:description, og:image, og:type to all indexable pages
-- **JSON-LD**: Added WebSite (SearchAction), CollectionPage (catalog), ItemList (rankings), TVSeries (anime detail)
-- **hreflang**: Added `en` + `x-default` to all indexable pages
-- **noindex**: Set on admin, login, signup, dms, friends, mylist, profile pages
-- **Google/Bing ping**: Added sitemap ping to push_update.py after deploy
-- **Bing Webmaster Tools**: Site added, IndexNow key verified, sitemap submitted
-- **Bing Status**: URLs showing "Blocked" — normal for new sites, need 24-48 hours for indexing
-
-## Files Modified
-- `otakupier/pages/mangareader.html` — Full manga reader (sidebar + top bar + page viewer)
-- `otakupier/pages/manga.html` — Manga detail page (removed external links, only "Read Now" button)
-- `otakupier/css/style.css` — Reader layout styles (lines ~5016-5220)
-- `otakupier/js/api.js` — AniList GraphQL manga queries (MANGA/Manhwa/Manhua)
-- `otakupier/js/seo.js` — IndexNow ping utility added
-- `otakupier/sitemap.xml` — Rebuilt with lastmod, changefreq, correct URLs
-- All pages in `otakupier/pages/` — OG tags, hreflang, JSON-LD, noindex fixes
-- `otakupier/index.html` — SearchAction JSON-LD, hreflang
-- `otakupier/fa7eb9705f644b66ab22d305ec3351b9.txt` — IndexNow key file
-- `/home/ac/push_update.py` — IndexNow + Google sitemap ping after deploy
+- IndexNow, sitemap, OG tags, JSON-LD, hreflang on all pages
+- Bing Webmaster Tools verified
 
 ## Architecture
 
-### MangaDex API Flow
-1. Search manga by title → `GET /manga?title=X&limit=10`
-2. Pick best match via `pickBestManga()` scoring
-3. Fetch all chapters → `GET /manga/{id}/feed?translatedLanguage[]=en&limit=500&order[chapter]=asc` (paginated)
-4. Dedup by chapter number, keep entry with most pages
-5. Sort by `parseChapterNum()` (extracts first number from string)
-6. Load images → `GET /at-home/server/{chapterId}` → `baseUrl/data/{hash}/{filename}`
-
-### CORS Handling
-- Direct fetch to `api.mangadex.org` works from browser (CORS-enabled)
-- at-home CDN (`*.mangadex.network`) also CORS-enabled
-- Proxies: `allorigins.win`, `corsproxy.io` (backup, but unreliable)
-
-### Key Issue: Some manga have ALL chapters as MangaPlus external links
-- One Piece: ALL chapters have `externalUrl` pointing to `mangaplus.shueisha.co.jp`
-- MangaDex doesn't host images for these — `at-home/server` returns 404
-- `data` and `dataSaver` arrays are empty
-- We detect this via `ch.attributes.externalUrl` and show "External Chapter" message
-
-### Reader UI Structure
+### Manga Data Flow
 ```
-┌────────────────────────────────────┐
-│ ← Back  ☰  ← Prev | Ch.X | Next→ │  top bar
-├────────────┬───────────────────────┤
-│ Chapters   │  Manga Pages          │  content area
-│ (sidebar)  │                       │
-└────────────┴───────────────────────┘
+Catalog Search → AniList (fast) + ComicK (fallback) → merged + deduped
+Catalog Browse → AniList popular + ComicK popular → merged + deduped
+Manga Detail   → AniList (by ID) or ComicK (by hid)
+Manga Reading  → MangaDex API (with proxy fallbacks)
 ```
-- Sidebar: always visible on desktop, overlays on mobile (≤768px)
-- Toggle buttons: ☰ in top bar (opens sidebar), ✕ in sidebar head (closes)
-- Smooth CSS width transition on hide/show
-- Back button: `history.back()`
 
-## Remaining Bugs to Fix
+### API Sources
+1. **AniList GraphQL** — CORS-open, good manga metadata, MANGA/MANHWA formats
+2. **ComicK (api.comick.dev)** — CORS-open search, ratings, views, cover art
+3. **MangaDex** — Chapter reading, English translations, cover images
 
-### 1. Image Loading (MEDIUM)
-- Some chapters have images that fail to load from MangaDex CDN
-- Retry logic now tries both data/data-saver paths with visible error state
-- MangaDex CDN occasionally returns empty data arrays for certain chapters
-
-### 2. Manga Matching (LOW - may need tuning)
-- `pickBestManga()` scores results with penalties for colored/doujin/spinoff
-- Scoring: exact match +200, starts-with +150, includes +50, colored -60, doujin -60, spinoff -50
-- Prefers manga with more chapters and RELEASING/FINISHED status
-
-### 3. AniList Manga Format Filter (NOT FIXED)
-- User wants only MANGA and MANHWA in manga catalog section
-- Tried `format_in: [MANGA, MANHWA, MANHUA]` in AniList GraphQL but it broke queries (returned nothing)
-- Need to filter client-side instead
+### Key Functions
+- `JIKAN.mangaSearch(query)` → merged AniList + ComicK results
+- `JIKAN.mangaPopular(page)` → merged popular manga
+- `JIKAN.mangaDetail(id)` → detail from AniList or ComicK
+- `JIKAN.comickMangaSearch(query)` → ComicK-only search
+- `JIKAN.comickMangaDetail(hid)` → ComicK detail by hid
 
 ## User Preferences
 - No external links/buttons to MangaDex, MangaPlus, MangaKatana in UI
@@ -91,28 +78,13 @@ Manga feature is built and mostly working. SEO overhaul completed.
 - Verify before pushing
 - Run `push_update.py` from `/home/ac/` for deployment
 
-## Debug Commands
-```bash
-# Start local server
-cd /home/ac/otakupier && python3 -m http.server 8080
-
-# Test MangaDex API
-curl -s "https://api.mangadex.org/manga?title=Chainsaw+Man&limit=5" | python3 -m json.tool
-
-# Test at-home server
-curl -s "https://api.mangadex.org/at-home/server/{chapter-id}" | python3 -m json.tool
-
-# Test chapter feed
-curl -s "https://api.mangadex.org/manga/{manga-id}/feed?translatedLanguage[]=en&limit=10&order[chapter]=asc" | python3 -m json.tool
-```
-
 ## Other Site Features (Already Working)
 - Anime catalog with hero slider, scroll rows, genre filter, pagination
 - Anime detail pages with relations, characters, recommendations
-- Anime streaming (multi-provider: VidCloud, StreamTape, etc.)
-- Manga detail pages (AniList GraphQL)
+- Anime streaming (multi-provider: AniKoto, AniPub, AniXo, etc.)
+- Manga reader (MangaDex chapters, retry logic, sidebar navigation)
 - Dark/light theme toggle
 - Search with live suggestions
 - Responsive design (mobile/tablet/desktop)
 - GoatCounter analytics
-- Supabase backend for tracking
+- Supabase backend for accounts, reviews, rankings, chat, forums, clubs
