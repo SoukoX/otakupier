@@ -158,9 +158,10 @@
                   const attrs = m.attributes || {};
                   const en = (attrs.title?.en || "").toLowerCase();
                   const jar = (attrs.title?.["ja-ro"] || "").toLowerCase();
-                  // Also check altTitles
+                  const ko = (attrs.title?.ko || "").toLowerCase();
+                  // Also check altTitles (Korean, English, etc.)
                   const alts = (attrs.altTitles || []).map(a => (a.en || a["ja-ro"] || a.ko || "")).filter(Boolean).map(s => s.toLowerCase());
-                  const allTitles = [en, jar, ...alts].filter(Boolean);
+                  const allTitles = [en, jar, ko, ...alts].filter(Boolean);
                   let best = 0;
                   for (const t of allTitles) {
                     if (t === lower) { best = 200; break; }
@@ -210,7 +211,7 @@
           `https://manga-scrape-api.vercel.app/api/scrape/search?query=${encodeURIComponent(mangaTitle)}&provider=weebcentral`
         );
         const wcResults = Array.isArray(wcData) ? wcData : (wcData.results || wcData.data || []);
-        const cleanTitle = (t) => (t || "").replace(/\s+/g, " ").trim();
+        const cleanTitle = (t) => (t || "").replace(/^Official\s+/, "").replace(/\s+/g, " ").trim();
         const lower = mangaTitle.toLowerCase();
 
         // Score each result — prefer exact match, then closest length match
