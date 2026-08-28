@@ -22,6 +22,9 @@
   <meta property="og:url" content="https://otakupier.2bd.net/pages/club">
   <meta property="og:image" content="https://otakupier.2bd.net/images/banner.svg">
   <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="Anime Club - OtakuPier">
+  <meta name="twitter:description" content="Anime club page on OtakuPier — members, posts and club discussions.">
+  <meta name="twitter:image" content="https://otakupier.2bd.net/images/banner.svg">
   <link rel="preconnect" href="https://api.jikan.moe">
   <link rel="preconnect" href="https://cdn.jsdelivr.net">
   <link rel="preconnect" href="https://graphql.anilist.co">
@@ -43,6 +46,7 @@
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="../js/config.js?v=25"></script>
   <script src="../js/api.js?v=25"></script>
+  <script src="../js/seo.js?v=25"></script>
   <script src="../js/app.js?v=25"></script>
   <script>
     const clubId = new URLSearchParams(window.location.search).get("id");
@@ -57,6 +61,10 @@
         if (error || !c) { main.innerHTML = `<div class="empty-state">Club not found.</div>`; return; }
         club = c;
         document.title = `${c.name} - OtakuPier`;
+        SEO.setDefaultMeta(`${c.name} - Club | OtakuPier`, (c.description || "Join this community club on OtakuPier.").slice(0,200));
+        SEO.setCanonical(`${window.location.origin}/pages/club?id=${clubId}`);
+        SEO._set('meta[property="og:title"]', `${c.name} - OtakuPier`);
+        SEO._set('meta[property="og:description"]`, (c.description || "Join this community club on OtakuPier.").slice(0,200));
         const owner = await fetchProfile(c.created_by);
         if (owner) {
           const perks = await spendingsMap([c.created_by]);
