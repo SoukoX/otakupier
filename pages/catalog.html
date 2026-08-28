@@ -710,11 +710,48 @@
       if (!track) return;
       try {
         const res = await JIKAN.mangaTrending(1);
-        const list = (res.data || []).slice(0, 6);
-        if (!list.length) { track.innerHTML = ""; return; }
-        track.innerHTML = list.map((m, i) => mangaHeroSlide(m, i === 0)).join("");
-        initMangaHero(list.length);
+        const newList = (res.data || []).slice(0, 6);
+        if (!newList.length) { track.innerHTML = ""; return; }
+
+        // Compare with cached hero entries — only update if new entries are genuinely better
+        let cached = [];
+        try { cached = JSON.parse(localStorage.getItem("otk.mangaHero") || "[]"); } catch(e) {}
+
+        const merged = mergeHeroEntries(cached, newList);
+        try { localStorage.setItem("otk.mangaHero", JSON.stringify(merged)); } catch(e) {}
+
+        track.innerHTML = merged.map((m, i) => mangaHeroSlide(m, i === 0)).join("");
+        initMangaHero(merged.length);
       } catch (e) { track.innerHTML = ""; }
+    }
+
+    // Merge cached hero entries with new trending: keep existing unless new entry is better
+    function mergeHeroEntries(cached, newList) {
+      if (!cached.length) return newList;
+      const merged = [...cached];
+      for (const newItem of newList) {
+        const existingIdx = merged.findIndex(e => e.id === newItem.id);
+        if (existingIdx >= 0) {
+          // Already in hero — update with fresh data
+          merged[existingIdx] = newItem;
+        } else if (merged.length < 6) {
+          // Slot available — add new entry
+          merged.push(newItem);
+        } else {
+          // Full — find lowest-scored entry and replace if new is better
+          const worstIdx = merged.reduce((worst, m, i) => {
+            const score = (m.chapters || 0) + (m.score || 0) * 10;
+            const worstScore = (merged[worst].chapters || 0) + (merged[worst].score || 0) * 10;
+            return score < worstScore ? i : worst;
+          }, 0);
+          const newScore = (newItem.chapters || 0) + (newItem.score || 0) * 10;
+          const worstScore = (merged[worstIdx].chapters || 0) + (merged[worstIdx].score || 0) * 10;
+          if (newScore > worstScore) {
+            merged[worstIdx] = newItem;
+          }
+        }
+      }
+      return merged.slice(0, 6);
     }
 
     function mangaHeroSlide(m, active) {
@@ -768,7 +805,7 @@
         dotsEl.querySelectorAll(".cat-hero-dot").forEach((d, k) => d.classList.toggle("active", k === idx));
       };
 
-      const start = () => { clearInterval(timer); if (!document.hidden && !collapsed) timer = setInterval(() => show(idx + 1), 5000); };
+      const start = () => { clearInterval(timer); if (!document.hidden && !collapsed) timer = setInterval(() => show(idx + 1), 8000); };
       const stop = () => clearInterval(timer);
 
       const hero = document.getElementById("mangaHero");
