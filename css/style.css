@@ -5009,6 +5009,15 @@ footer .footer-links {
 .chapter-item:hover {
   background: rgba(255,255,255,0.06);
 }
+.chapter-item.external-chapter {
+  border-style: dashed;
+  border-color: var(--accent);
+  opacity: 0.85;
+}
+.chapter-item.external-chapter:hover {
+  opacity: 1;
+  background: rgba(230, 70, 92, 0.08);
+}
 .chapter-num {
   font-size: 0.9rem;
 }
