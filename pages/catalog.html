@@ -348,15 +348,16 @@
       if (!items.length) { hideSuggest(); return; }
       box.innerHTML = items.map((m, i) => {
         const href = pageHref("manga") + "?id=" + encodeURIComponent(m.id);
+        const cover = m.cover || JIKAN.PLACEHOLDER;
         return `<a class="suggest-item" data-i="${i}" href="${href}">
-<img class="suggest-img" src="${JIKAN.esc(m.cover || JIKAN.PLACEHOLDER)}"
+<img class="suggest-img" src="${JIKAN.esc(cover)}"
                  alt="${JIKAN.esc(m.title)}" loading="lazy"
                  onerror="this.onerror=null;this.src=JIKAN.PLACEHOLDER">
           <span class="suggest-body">
             <span class="suggest-title">${JIKAN.esc(m.title)}</span>
             <span class="suggest-meta">${JIKAN.esc(m.status || "Manga")}${m.author ? " · " + JIKAN.esc(m.author) : ""}</span>
           </span>
-          <span class="suggest-score">${m.genres.length ? JIKAN.esc(m.genres[0]) : ""}</span>
+          <span class="suggest-score">${m.genres && m.genres.length ? JIKAN.esc(typeof m.genres[0] === "string" ? m.genres[0] : m.genres[0].name || "") : ""}</span>
         </a>`;
       }).join("");
       box.hidden = false;
@@ -419,9 +420,11 @@
           const q = state.q || "";
           let results;
           if (q) {
-            results = await JIKAN.mangaSearch(q, 20);
+            const searchRes = await JIKAN.mangaSearch(q, 20);
+            results = Array.isArray(searchRes) ? searchRes : (searchRes.data || []);
           } else {
-            results = await JIKAN.mangaPopular(state.page, 20);
+            const popRes = await JIKAN.mangaPopular(state.page, 20);
+            results = Array.isArray(popRes) ? popRes : (popRes.data || []);
           }
           grid.innerHTML = "";
           if (!results.length) {
@@ -511,14 +514,21 @@
 
     function mangaCard(m) {
       const href = pageHref("manga") + "?id=" + encodeURIComponent(m.id);
+      const cover = m.cover || JIKAN.PLACEHOLDER;
+      const fmt = (m.format || "Manga").replace(/_/g, " ");
+      const statusLabel = m.status === "RELEASING" ? "Ongoing"
+        : m.status === "FINISHED" ? "Completed"
+        : m.status === "NOT_YET_RELEASED" ? "Coming Soon"
+        : m.status || "";
       return '<a class="card stream-card manga-card" href="' + href + '">' +
-        '<div class="card-poster"><img src="' + JIKAN.esc(m.cover || JIKAN.PLACEHOLDER) + '" alt="' + JIKAN.esc(m.title) + '" loading="lazy" onerror="this.onerror=null;this.src=JIKAN.PLACEHOLDER">' +
-        (m.status ? '<span class="card-badge">' + JIKAN.esc(m.status) + '</span>' : '') +
+        '<div class="card-poster"><img src="' + JIKAN.esc(cover) + '" alt="' + JIKAN.esc(m.title) + '" loading="lazy" onerror="this.onerror=null;this.src=JIKAN.PLACEHOLDER">' +
+        (statusLabel ? '<span class="card-badge">' + JIKAN.esc(statusLabel) + '</span>' : '') +
         '</div>' +
         '<div class="card-body">' +
           '<div class="card-title">' + JIKAN.esc(m.title) + '</div>' +
-          (m.genres.length ? '<div class="card-meta">' + m.genres.slice(0, 3).map(g => JIKAN.esc(g)).join(" · ") + '</div>' : '') +
+          (m.genres && m.genres.length ? '<div class="card-meta">' + m.genres.slice(0, 3).map(g => JIKAN.esc(typeof g === "string" ? g : g.name || "")).join(" · ") + '</div>' : '') +
           (m.author ? '<div class="card-meta">' + JIKAN.esc(m.author) + '</div>' : '') +
+          (m.chapters ? '<div class="card-meta">' + m.chapters + ' chapters</div>' : '') +
         '</div>' +
       '</a>';
     }
@@ -706,7 +716,10 @@
     function mangaHeroSlide(m, active) {
       const img = m.cover || JIKAN.PLACEHOLDER;
       const bgLayers = `url('${JIKAN.esc(img)}')`;
-      const genres = (m.genres || []).slice(0, 3).map((g) => `<span>${JIKAN.esc(g)}</span>`).join("");
+      const genres = (m.genres || []).slice(0, 3).map((g) => {
+        const name = typeof g === "string" ? g : (g.name || "");
+        return `<span>${JIKAN.esc(name)}</span>`;
+      }).join("");
       let status = "";
       if (m.status === "RELEASING") status = m.chapters ? `${m.chapters}+ ch` : "Ongoing";
       else if (m.status === "FINISHED") status = m.chapters ? `${m.chapters} ch` : "Completed";
@@ -809,7 +822,8 @@
         if (!row) return;
         fetcher(1).then((res) => {
           row.innerHTML = "";
-          (res?.data || []).slice(0, 20).forEach((m) => row.appendChild(JIKAN.mangaStreamCard(m)));
+          const list = Array.isArray(res) ? res : (res?.data || []);
+          list.slice(0, 20).forEach((m) => row.appendChild(JIKAN.mangaStreamCard(m)));
           row.dispatchEvent(new Event("scroll"));
         }).catch(() => { row.innerHTML = `<div class="empty-state">Could not load.</div>`; });
       };
