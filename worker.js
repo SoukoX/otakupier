@@ -1,5 +1,5 @@
 export default {
-  async fetch(request) {
+  async fetch(request, env, ctx) {
     const url = new URL(request.url);
     const corsHeaders = {
       "Access-Control-Allow-Origin": "*",
@@ -80,7 +80,9 @@ export default {
         const respToCache = resp.clone();
         // Set cacheable headers on the clone
         respToCache.headers.set("Cache-Control", "public, max-age=120");
-        ctx.waitUntil(cache.put(cacheReq, respToCache));
+        if (ctx && ctx.waitUntil) {
+          ctx.waitUntil(cache.put(cacheReq, respToCache));
+        }
       }
 
       return resp;
