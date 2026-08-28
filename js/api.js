@@ -986,62 +986,6 @@ const JIKAN = {
     return res.data;
   },
 
-  // MangaDex search by title. The MangaDex API only returns
-  // Access-Control-Allow-Origin for its own domains, so browsers can't read
-  // it directly — we try the API straight, then via public CORS proxies, and
-  // return the first successful result. Returns [] if all attempts fail
-  // (callers should fall back to a plain MangaDex search link).
-  async mangadexSearch(title, limit = 3) {
-    const url = `https://api.mangadex.org/manga?title=${encodeURIComponent(title)}&limit=${limit}`;
-    const attempts = [
-      url,
-      `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`,
-      `https://api.allorigins.win/get?url=${encodeURIComponent(url)}`,
-      `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(url)}`,
-    ];
-    for (const target of attempts) {
-      let json = null;
-      try {
-        const ctrl = new AbortController();
-        const timer = setTimeout(() => ctrl.abort(), 12000);
-        const res = await fetch(target, { signal: ctrl.signal });
-        clearTimeout(timer);
-        if (!res.ok) continue;
-        const raw = await res.text();
-        // allorigins /get wraps the body as {contents: "..."}
-        let body = raw;
-        try {
-          const wrap = JSON.parse(raw);
-          if (wrap && typeof wrap === "object" && wrap.contents !== undefined) {
-            body = wrap.contents;
-          }
-        } catch (e) {}
-        json = JSON.parse(body);
-      } catch (err) {
-        continue;
-      }
-      const q = title.trim().toLowerCase();
-      const matchScore = (t) => {
-        const s = (t || "").toLowerCase();
-        if (s === q) return 100;
-        if (s.startsWith(q) || q.startsWith(s)) return 60;
-        if (s.includes(q) || q.includes(s)) return 30;
-        return 0;
-      };
-      const list = (json.data || [])
-        .filter((m) => m.attributes?.title)
-        .map((m) => {
-          const t = m.attributes.title;
-          const title = t.en || t["ja-ro"] || Object.values(t)[0] || "";
-          return { id: m.id, title, url: `https://mangadex.org/title/${m.id}` };
-        })
-        // Best title match first so we don't link to a random spinoff.
-        .sort((a, b) => matchScore(b.title) - matchScore(a.title));
-      if (list.length) return list;
-    }
-    return [];
-  },
-
   // MangaDex search link that always works (no API / CORS involved).
   mangadexSearchLink(title) {
     return `https://mangadex.org/search?q=${encodeURIComponent(title)}`;
