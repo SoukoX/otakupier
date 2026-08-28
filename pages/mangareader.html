@@ -95,11 +95,19 @@
         return String(s || "").toLowerCase().replace(/[^a-z0-9]/g, "").replace(/ou/g, "o");
       }
 
+      // CORS proxy for APIs without CORS headers
+      const PROXY_BASE = "https://otakupier.vercel.app/api/proxy?url=";
+      async function proxyFetch(url) {
+        const target = PROXY_BASE + encodeURIComponent(url);
+        const res = await fetch(target, { signal: AbortSignal.timeout(15000) });
+        if (!res.ok) throw new Error("Proxy HTTP " + res.status);
+        return res.json();
+      }
+
       // ── Step 1: Find manga ──
       async function init() {
         $("chapterList").innerHTML = '<div class="loading"><div class="spinner"></div>Searching...</div>';
 
-        // Search MangaDex via CORS proxy (MangaDex API has no CORS headers)
         const titles = [
           mangaTitle,
           mangaTitle.replace(/[:\-!]/g, " ").replace(/\s+/g, " ").trim(),
@@ -107,28 +115,32 @@
           mangaTitle.split(":")[0].trim(),
         ].filter(Boolean);
 
-        if (typeof JIKAN !== "undefined" && JIKAN.mangadexSearch) {
-          for (const title of titles) {
-            try {
-              const results = await JIKAN.mangadexSearch(title);
-              if (results.length) {
-                // Find best match
-                const best = results.find(r => {
-                  const t = r.title.toLowerCase();
-                  const target = mangaTitle.toLowerCase();
-                  return t === target || t.includes(target) || target.includes(t);
-                }) || results[0];
+        // Search MangaDex via CORS proxy
+        for (const title of titles) {
+          try {
+            const data = await proxyFetch(`https://api.mangadex.org/manga?title=${encodeURIComponent(title)}&limit=10&includes[]=cover_art`);
+            if (data && data.data && data.data.length) {
+              // Pick best title match
+              const lower = mangaTitle.toLowerCase();
+              const scored = data.data
+                .map(m => {
+                  const t = (m.attributes?.title?.en || m.attributes?.title?.["ja-ro"] || "").toLowerCase();
+                  return { manga: m, score: t === lower ? 200 : t.includes(lower) || lower.includes(t) ? 50 : 0 };
+                })
+                .filter(x => x.score > 0)
+                .sort((a, b) => b.score - a.score);
 
-                mangadexId = best.id;
-                $("mangaTitle").textContent = best.title || mangaTitle;
+              if (scored.length) {
+                mangadexId = scored[0].manga.id;
+                $("mangaTitle").textContent = scored[0].manga.attributes?.title?.en || mangaTitle;
                 await loadChaptersFromMangaDex();
                 return;
               }
-            } catch (e) { continue; }
-          }
+            }
+          } catch (e) { continue; }
         }
 
-        // MangaDex search failed — try WeebCentral directly
+        // MangaDex failed — try WeebCentral
         await loadWeebCentralChapters();
       }
 
@@ -140,31 +152,20 @@
         const list = $("chapterList");
         list.innerHTML = '<div class="loading"><div class="spinner"></div>Loading chapters...</div>';
         try {
-          // Fetch chapters via manga-scrape-api CORS proxy
-          const res = await fetch(`${JIKAN.WEEBCENTRAL_API}/api/scrape/chapters?id=${mangadexId}&provider=mangadex`);
-          if (!res.ok) throw new Error("HTTP " + res.status);
-          const data = await res.json();
-          const allChapters = Array.isArray(data) ? data : (data.data || data.chapters || []);
+          const data = await proxyFetch(
+            `https://api.mangadex.org/manga/${mangadexId}/feed?translatedLanguage%5B%5D=en&limit=500&order%5Bchapter%5D=asc`
+          );
+          const allChapters = (data.data || []).filter(ch => ch.attributes && ch.attributes.chapter && !ch.attributes.externalUrl);
 
-          // Filter to hosted chapters only and dedup by chapter number
+          // Dedup by chapter number, keep best
           const seen = new Map();
           allChapters.forEach(ch => {
-            if (!ch || !ch.id) return;
-            const chapNum = ch.number || ch.chapter || ch.attributes?.chapter;
-            if (chapNum == null) return;
+            const chapNum = ch.attributes.chapter;
+            if (!chapNum) return;
             const key = normKey(chapNum);
             const existing = seen.get(key);
-            if (!existing) {
-              seen.set(key, {
-                id: ch.id,
-                attributes: {
-                  chapter: chapNum,
-                  title: ch.title || "",
-                  volume: ch.volume || null,
-                  pages: ch.pages || 0,
-                  provider: "mangadex"
-                }
-              });
+            if (!existing || (ch.attributes.pages || 0) > (existing.attributes.pages || 0)) {
+              seen.set(key, ch);
             }
           });
 
@@ -187,9 +188,12 @@
         const list = $("chapterList");
         list.innerHTML = '<div class="loading"><div class="spinner"></div>Trying WeebCentral...</div>';
         try {
-          const wcResults = await JIKAN.weebcentralSearch(mangaTitle);
+          const wcData = await proxyFetch(
+            `https://manga-scrape-api.vercel.app/api/scrape/search?query=${encodeURIComponent(mangaTitle)}&provider=weebcentral`
+          );
+          const wcResults = Array.isArray(wcData) ? wcData : (wcData.results || wcData.data || []);
           const wcManga = wcResults.find(r => {
-            const t = r.title.toLowerCase();
+            const t = (r.title || "").toLowerCase().replace(/\s+/g, " ").trim();
             const target = mangaTitle.toLowerCase();
             return t === target || t.includes(target) || target.includes(t);
           }) || wcResults[0];
@@ -197,8 +201,11 @@
           if (wcManga) {
             weebcentralMangaId = wcManga.id;
             currentProvider = "weebcentral";
-            $("mangaTitle").textContent = wcManga.title || mangaTitle;
-            const wcChapters = await JIKAN.weebcentralChapters(wcManga.id);
+            $("mangaTitle").textContent = (wcManga.title || "").replace(/\s+/g, " ").trim() || mangaTitle;
+            const chData = await proxyFetch(
+              `https://manga-scrape-api.vercel.app/api/scrape/chapters?id=${wcManga.id}&provider=weebcentral`
+            );
+            const wcChapters = Array.isArray(chData) ? chData : (chData.chapters || chData.data || []);
             if (wcChapters.length) {
               chapters = wcChapters.map(ch => ({
                 id: ch.id,
@@ -206,7 +213,7 @@
                   chapter: ch.number || ch.title?.match(/[\d.]+/)?.[0] || "?",
                   title: ch.title || "",
                   volume: null,
-                  pages: 0,
+                  pages: ch.pages || 0,
                   provider: "weebcentral"
                 }
               }));
@@ -345,50 +352,53 @@
         // MangaDex: fetch pages via CORS proxy
         try {
           const chapNum = ch.attributes.chapter;
-          const res = await fetch(`${JIKAN.WEEBCENTRAL_API}/api/scrape/pages?id=${mangadexId}&chapterNumber=${chapNum}&provider=mangadex`);
-          if (!res.ok) throw new Error("HTTP " + res.status);
-          const data = await res.json();
-          const pages = Array.isArray(data) ? data : (data.data || data.pages || []);
-          const sorted = pages
-            .sort((a, b) => (a.order || 0) - (b.order || 0))
-            .map(p => p.url || p.originalUrl || p)
-            .filter(url => typeof url === "string" && url.startsWith("http"));
-
+          const data = await proxyFetch(
+            `https://api.mangadex.org/at-home/server/${ch.id}`
+          );
           if (gen !== chapterGen) return;
-          if (sorted.length) {
-            container.innerHTML = "";
-            let failedCount = 0;
-            sorted.forEach((url, pi) => {
-              const wrapper = document.createElement("div");
-              wrapper.className = "reader-page-wrapper";
-              const img = document.createElement("img");
-              img.className = "reader-page-img";
-              img.src = url;
-              img.alt = `Page ${pi + 1}`;
-              img.loading = pi < 3 ? "eager" : "lazy";
-              const errLabel = document.createElement("div");
-              errLabel.className = "reader-page-error";
-              errLabel.style.display = "none";
-              errLabel.textContent = "Failed to load";
-              img.onerror = function() {
-                if (this.dataset.retried === "1") {
-                  this.style.display = "none";
-                  errLabel.style.display = "block";
-                  failedCount++;
-                  if (failedCount >= sorted.length) {
-                    container.innerHTML = '<div class="empty-state">Images unavailable.</div>';
+          if (data && data.baseUrl && data.chapter) {
+            const full = data.chapter.data || [];
+            const saver = data.chapter.dataSaver || [];
+            const pages = full.length ? full : saver;
+            const basePath = full.length ? "data" : "data-saver";
+            if (pages.length) {
+              container.innerHTML = "";
+              let failedCount = 0;
+              pages.forEach((filename, pi) => {
+                const wrapper = document.createElement("div");
+                wrapper.className = "reader-page-wrapper";
+                const img = document.createElement("img");
+                img.className = "reader-page-img";
+                img.src = `${data.baseUrl}/${basePath}/${data.chapter.hash}/${filename}`;
+                img.alt = `Page ${pi + 1}`;
+                img.loading = pi < 3 ? "eager" : "lazy";
+                const errLabel = document.createElement("div");
+                errLabel.className = "reader-page-error";
+                errLabel.style.display = "none";
+                errLabel.textContent = "Failed to load";
+                img.onerror = function() {
+                  if (this.dataset.retried === "2") {
+                    this.style.display = "none";
+                    errLabel.style.display = "block";
+                    failedCount++;
+                    if (failedCount >= pages.length) {
+                      container.innerHTML = '<div class="empty-state">Images unavailable.</div>';
+                    }
+                    return;
                   }
-                  return;
-                }
-                this.dataset.retried = "1";
-              };
-              wrapper.appendChild(img);
-              wrapper.appendChild(errLabel);
-              container.appendChild(wrapper);
-            });
-            window.scrollTo({ top: 0, behavior: "instant" });
-            updateNavButtons();
-            return;
+                  this.dataset.retried = String(parseInt(this.dataset.retried || "0") + 1);
+                  const tryPaths = ["data", "data-saver"];
+                  const nextPath = tryPaths[parseInt(this.dataset.retried) - 1];
+                  this.src = `${data.baseUrl}/${nextPath}/${data.chapter.hash}/${filename}`;
+                };
+                wrapper.appendChild(img);
+                wrapper.appendChild(errLabel);
+                container.appendChild(wrapper);
+              });
+              window.scrollTo({ top: 0, behavior: "instant" });
+              updateNavButtons();
+              return;
+            }
           }
         } catch (e) {
           if (gen !== chapterGen) return;
