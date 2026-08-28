@@ -2095,4 +2095,63 @@ const JIKAN = {
     }
     return null;
   },
+
+  // ── WeebCentral (via manga-scrape-api.vercel.app) ──
+  // Free CORS-enabled API, hosts chapter images directly.
+  // Used as fallback when MangaDex has no hosted chapters.
+  WEEBCENTRAL_API: "https://manga-scrape-api.vercel.app",
+
+  async weebcentralSearch(query) {
+    try {
+      const res = await fetch(`${this.WEEBCENTRAL_API}/api/scrape/search?query=${encodeURIComponent(query)}&provider=weebcentral`);
+      if (!res.ok) return [];
+      const data = await res.json();
+      const results = Array.isArray(data) ? data : (data.data || data.results || []);
+      return results.filter(r => r && r.id && r.title).map(r => ({
+        id: r.id,
+        title: (typeof r.title === "string" ? r.title : r.title?.en || "").replace(/\s+/g, " ").trim(),
+        slug: r.slug || r.id,
+        provider: "weebcentral"
+      }));
+    } catch (e) {
+      console.warn("[WeebCentral] Search failed:", e);
+      return [];
+    }
+  },
+
+  async weebcentralChapters(mangaId) {
+    try {
+      const res = await fetch(`${this.WEEBCENTRAL_API}/api/scrape/chapters?id=${encodeURIComponent(mangaId)}&provider=weebcentral`);
+      if (!res.ok) return [];
+      const data = await res.json();
+      const chapters = Array.isArray(data) ? data : (data.data || data.chapters || []);
+      return chapters
+        .filter(ch => ch && ch.id && (ch.title || ch.number))
+        .map(ch => ({
+          id: ch.id,
+          title: ch.title || `Chapter ${ch.number || "?"}`,
+          number: ch.number || ch.title?.match(/[\d.]+/)?.[0] || null,
+          provider: "weebcentral"
+        }));
+    } catch (e) {
+      console.warn("[WeebCentral] Chapters failed:", e);
+      return [];
+    }
+  },
+
+  async weebcentralPages(mangaId, chapterNumber) {
+    try {
+      const res = await fetch(`${this.WEEBCENTRAL_API}/api/scrape/pages?id=${encodeURIComponent(mangaId)}&chapterNumber=${chapterNumber}&provider=weebcentral`);
+      if (!res.ok) return [];
+      const data = await res.json();
+      const pages = Array.isArray(data) ? data : (data.data || data.pages || []);
+      return pages
+        .sort((a, b) => (a.order || 0) - (b.order || 0))
+        .map(p => p.url || p.originalUrl || p)
+        .filter(url => typeof url === "string" && url.startsWith("http"));
+    } catch (e) {
+      console.warn("[WeebCentral] Pages failed:", e);
+      return [];
+    }
+  }
 };
