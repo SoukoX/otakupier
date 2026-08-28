@@ -105,7 +105,7 @@
         return res.json();
       }
 
-      // ── Step 1: Find manga — search MangaDex + WeebCentral in parallel ──
+      // ── Step 1: Find manga — search MangaDex + WeebCentral in parallel, pick most chapters ──
       async function init() {
         $("chapterList").innerHTML = '<div class="loading"><div class="spinner"></div>Searching...</div>';
 
@@ -116,24 +116,35 @@
           mangaTitle.split(":")[0].trim(),
         ].filter(Boolean);
 
-        // Launch both providers simultaneously
-        const results = await Promise.allSettled([
+        // Launch both providers, wait for both to finish
+        const [mdResult, wcResult] = await Promise.allSettled([
           searchMangaDex(titles),
           searchWeebCentral(),
         ]);
 
-        // Use whichever succeeded with chapters
-        for (const r of results) {
-          if (r.status === "fulfilled" && r.value) return;
-        }
+        // Pick the provider with more chapters
+        const mdOk = mdResult.status === "fulfilled" && mdResult.value;
+        const wcOk = wcResult.status === "fulfilled" && wcResult.value;
 
-        // Nothing found
-        $("chapterList").innerHTML = '<div class="empty-state">' +
-          '<p>No chapters found.</p>' +
-          '<p style="margin-top:8px;font-size:0.85em;">This manga may not have readable chapters available yet.</p></div>';
+        if (mdOk && wcOk) {
+          // Both succeeded — keep whichever has more chapters
+          if (wcResult.value > mdResult.value) {
+            // WeebCentral had more — it already set chapters, switch provider
+            currentProvider = "weebcentral";
+          }
+          // MangaDex already set chapters if it had more
+        }
+        // If only one succeeded, it already set chapters
+
+        if (!mdOk && !wcOk) {
+          $("chapterList").innerHTML = '<div class="empty-state">' +
+            '<p>No chapters found.</p>' +
+            '<p style="margin-top:8px;font-size:0.85em;">This manga may not have readable chapters available yet.</p></div>';
+        }
       }
 
       async function searchMangaDex(titles) {
+        let bestCount = 0;
         for (const title of titles) {
           try {
             const data = await proxyFetch(`https://api.mangadex.org/manga?title=${encodeURIComponent(title)}&limit=10&includes[]=cover_art`);
@@ -149,7 +160,6 @@
 
               if (scored.length) {
                 mangadexId = scored[0].manga.id;
-                $("mangaTitle").textContent = scored[0].manga.attributes?.title?.en || mangaTitle;
                 const chData = await proxyFetch(
                   `https://api.mangadex.org/manga/${mangadexId}/feed?translatedLanguage%5B%5D=en&limit=500&order%5Bchapter%5D=asc`
                 );
@@ -165,20 +175,22 @@
                   }
                 });
                 const hostedChapters = Array.from(seen.values());
-                if (hostedChapters.length) {
+                if (hostedChapters.length > bestCount) {
+                  bestCount = hostedChapters.length;
                   chapters = sortChapters(hostedChapters);
                   currentProvider = "mangadex";
-                  renderChapterList();
-                  return true;
+                  $("mangaTitle").textContent = scored[0].manga.attributes?.title?.en || mangaTitle;
                 }
               }
             }
           } catch (e) { continue; }
         }
-        return false;
+        if (bestCount > 0) renderChapterList();
+        return bestCount;
       }
 
       async function searchWeebCentral() {
+        let bestCount = 0;
         try {
           const wcData = await proxyFetch(
             `https://manga-scrape-api.vercel.app/api/scrape/search?query=${encodeURIComponent(mangaTitle)}&provider=weebcentral`
@@ -197,7 +209,8 @@
               `https://manga-scrape-api.vercel.app/api/scrape/chapters?id=${wcManga.id}&provider=weebcentral`
             );
             const wcChapters = Array.isArray(chData) ? chData : (chData.chapters || chData.data || []);
-            if (wcChapters.length) {
+            if (wcChapters.length > bestCount) {
+              bestCount = wcChapters.length;
               currentProvider = "weebcentral";
               $("mangaTitle").textContent = cleanTitle(wcManga.title) || mangaTitle;
               chapters = wcChapters.map(ch => ({
@@ -212,13 +225,12 @@
               }));
               chapters = sortChapters(chapters);
               renderChapterList();
-              return true;
             }
           }
         } catch (e) {
           console.warn("[WeebCentral] Search failed:", e);
         }
-        return false;
+        return bestCount;
       }
 
       function sortChapters(arr) {
