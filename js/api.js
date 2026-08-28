@@ -1356,38 +1356,78 @@ const JIKAN = {
     return `https://mangadex.org/search?q=${encodeURIComponent(title)}`;
   },
 
-  // ── Manga by genre (MAL genre id → AniList genre name) ──
+  // ── Manga by genre (MAL genre id → AniList genre/tag/format) ──
   _MANGA_GENRE_MAP: {
-    1: "Action", 2: "Adventure", 4: "Comedy", 8: "Drama",
-    10: "Fantasy", 14: "Horror", 7: "Mystery", 22: "Romance",
-    24: "Sci-Fi", 36: "Slice of Life", 30: "Sports",
-    37: "Supernatural", 41: "Suspense", 9: "Ecchi",
-    18: "Mecha", 19: "Music", 13: "Historical",
-    17: "Martial Arts", 31: "Super Power", 32: "Vampire",
-    6: "Mythology", 40: "Psychological", 38: "Military",
-    23: "School", 35: "Harem", 11: "Strategy Game",
-    43: "Josei", 42: "Seinen", 25: "Shoujo", 27: "Shounen",
-    3: "Cars", 46: "Award Winning", 28: "Boys Love",
-    47: "Gourmet", 26: "Girls Love", 15: "Kids",
-    20: "Parody", 21: "Samurai", 29: "Space",
+    1: { name: "Action", type: "genre" }, 2: { name: "Adventure", type: "genre" },
+    4: { name: "Comedy", type: "genre" }, 8: { name: "Drama", type: "genre" },
+    10: { name: "Fantasy", type: "genre" }, 14: { name: "Horror", type: "genre" },
+    7: { name: "Mystery", type: "genre" }, 22: { name: "Romance", type: "genre" },
+    24: { name: "Sci-Fi", type: "genre" }, 36: { name: "Slice of Life", type: "genre" },
+    30: { name: "Sports", type: "genre" }, 37: { name: "Supernatural", type: "genre" },
+    41: { name: "Suspense", type: "genre" }, 9: { name: "Ecchi", type: "genre" },
+    18: { name: "Mecha", type: "genre" }, 19: { name: "Music", type: "genre" },
+    40: { name: "Psychological", type: "genre" },
+    6: { name: "Mythology", type: "tag" }, 13: { name: "Historical", type: "tag" },
+    17: { name: "Martial Arts", type: "tag" }, 31: { name: "Super Power", type: "tag" },
+    32: { name: "Vampire", type: "tag" }, 38: { name: "Military", type: "tag" },
+    23: { name: "School", type: "tag" }, 35: { name: "Harem", type: "tag" },
+    11: { name: "Strategy Game", type: "tag" }, 21: { name: "Samurai", type: "tag" },
+    29: { name: "Space", type: "tag" }, 28: { name: "Boys Love", type: "tag" },
+    26: { name: "Girls Love", type: "tag" },
+    42: { name: "SEINEN", type: "format" }, 43: { name: "JOSEI", type: "format" },
+    25: { name: "SHOUJO", type: "format" }, 27: { name: "SHOUNEN", type: "format" },
+    3: { name: "Cars", type: "tag" }, 46: { name: "Award Winning", type: "genre" },
+    47: { name: "Gourmet", type: "tag" }, 15: { name: "Kids", type: "tag" },
+    20: { name: "Parody", type: "tag" },
   },
 
   async mangaByGenre(genreId, page = 1, limit = 20) {
-    const genreName = this._MANGA_GENRE_MAP[Number(genreId)];
-    if (!genreName) return { data: [] };
+    const entry = this._MANGA_GENRE_MAP[Number(genreId)];
+    if (!entry) return { data: [] };
 
     try {
-      const data = await this._aniMangaQuery(`query($genre: String, $p: Int, $per: Int) {
-        Page(page: $p, perPage: $per) {
-          media(genre: $genre, type: MANGA, isAdult: false, sort: POPULARITY_DESC) {
-            id title { romaji english native }
-            coverImage { large }
-            status format genres description(asHtml: false)
-            chapters volumes countryOfOrigin startDate { year }
-            staff { edges { node { name { full } } } }
+      let query, variables;
+      if (entry.type === "format") {
+        query = `query($fmt: MediaFormat, $p: Int, $per: Int) {
+          Page(page: $p, perPage: $per) {
+            media(format: $fmt, type: MANGA, isAdult: false, sort: POPULARITY_DESC) {
+              id title { romaji english native }
+              coverImage { large }
+              status format genres description(asHtml: false)
+              chapters volumes countryOfOrigin startDate { year }
+              staff { edges { node { name { full } } } }
+            }
           }
-        }
-      }`, { genre: genreName, p: page, per: limit });
+        }`;
+        variables = { fmt: entry.name, p: page, per: limit };
+      } else if (entry.type === "tag") {
+        query = `query($tag: String, $p: Int, $per: Int) {
+          Page(page: $p, perPage: $per) {
+            media(tag: $tag, type: MANGA, isAdult: false, sort: POPULARITY_DESC) {
+              id title { romaji english native }
+              coverImage { large }
+              status format genres description(asHtml: false)
+              chapters volumes countryOfOrigin startDate { year }
+              staff { edges { node { name { full } } } }
+            }
+          }
+        }`;
+        variables = { tag: entry.name, p: page, per: limit };
+      } else {
+        query = `query($genre: String, $p: Int, $per: Int) {
+          Page(page: $p, perPage: $per) {
+            media(genre: $genre, type: MANGA, isAdult: false, sort: POPULARITY_DESC) {
+              id title { romaji english native }
+              coverImage { large }
+              status format genres description(asHtml: false)
+              chapters volumes countryOfOrigin startDate { year }
+              staff { edges { node { name { full } } } }
+            }
+          }
+        }`;
+        variables = { genre: entry.name, p: page, per: limit };
+      }
+      const data = await this._aniMangaQuery(query, variables);
       return { data: this._aniMangaToList(data) };
     } catch (e) {
       return { data: [] };
