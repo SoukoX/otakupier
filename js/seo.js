@@ -85,7 +85,7 @@ const SEO = {
     const title = anime.title_english || anime.title || "Anime";
     const clean = this._clean(anime.synopsis, 200) || "View anime details, rankings and community reviews on OtakuPier.";
     const id = anime.mal_id || "";
-    const url = id ? `${this.BASE}/pages/anime.html?id=${encodeURIComponent(id)}` : this.BASE + "/";
+    const url = id ? `${this.BASE}/pages/anime?id=${encodeURIComponent(id)}` : this.BASE + "/";
     const img = anime.images?.jpg?.large_image_url || anime.images?.jpg?.image_url || `${this.BASE}/images/banner.svg`;
 
     document.title = `${title} - Reviews, Ranking & Where to Watch | OtakuPier`;
@@ -157,7 +157,7 @@ const SEO = {
   shareLinks(anime) {
     const title = anime?.title_english || anime?.title || "OtakuPier";
     const id = anime?.mal_id || "";
-    const url = id ? `${this.BASE}/pages/anime.html?id=${encodeURIComponent(id)}` : this.BASE + "/";
+    const url = id ? `${this.BASE}/pages/anime?id=${encodeURIComponent(id)}` : this.BASE + "/";
     const text = encodeURIComponent(`Check out "${title}" on OtakuPier - reviews, ranking & where to watch`);
     const encUrl = encodeURIComponent(url);
     return [
@@ -172,7 +172,7 @@ const SEO = {
     if (!manga) return;
     const t = manga.title || title || "Manga";
     const clean = this._clean(manga.summary, 200) || "Read manga chapters on OtakuPier.";
-    const url = `${this.BASE}/pages/manga.html?id=${encodeURIComponent(id)}`;
+    const url = `${this.BASE}/pages/manga?id=${encodeURIComponent(id)}`;
     const img = manga.cover || `${this.BASE}/images/banner.svg`;
 
     document.title = `${t} - Read Manga | OtakuPier`;
@@ -189,5 +189,31 @@ const SEO = {
     this._set('meta[name="twitter:description"]', clean);
     this._set('meta[name="twitter:image"]', img);
     this.setCanonical(url);
+    this._injectMangaJsonLd(manga, url, t);
+  },
+
+  _injectMangaJsonLd(manga, url, title) {
+    const existing = document.getElementById("seo-jsonld");
+    if (existing) existing.remove();
+    const img = manga.cover || "";
+    const genre = (manga.genres || []).map(g => typeof g === "string" ? g : g.name || "").filter(Boolean).slice(0, 5);
+    const obj = {
+      "@context": "https://schema.org",
+      "@type": "ComicSeries",
+      "name": title,
+      "url": url,
+      "image": img || undefined,
+      "description": this._clean(manga.summary, 500) || undefined,
+      "genre": genre.length ? genre : undefined,
+      "author": manga.author ? { "@type": "Person", "name": manga.author } : undefined,
+      "datePublished": manga.year ? String(manga.year) : undefined,
+      "publisher": { "@type": "Organization", "name": "OtakuPier" },
+    };
+    Object.keys(obj).forEach((k) => obj[k] === undefined && delete obj[k]);
+    const script = document.createElement("script");
+    script.type = "application/ld+json";
+    script.id = "seo-jsonld";
+    script.textContent = JSON.stringify(obj).replace(/</g, "\\u003c");
+    document.head.appendChild(script);
   },
 };
