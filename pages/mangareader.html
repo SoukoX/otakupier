@@ -59,7 +59,6 @@
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="../js/config.js?v=27"></script>
   <script src="../js/api.js?v=27"></script>
-  <script src="../js/seo.js?v=27"></script>
   <script src="../js/app.js?v=27"></script>
   <script>
     (function() {
@@ -67,6 +66,8 @@
       const mangaTitle = params.get("title") || "Manga";
       const mangaId = params.get("id") || "";
       let mangadexId = null;
+      let currentProvider = "mangadex";
+      let weebcentralMangaId = null;
       let chapters = [];
       let currentChapterIdx = -1;
       let sidebarOpen = true;
@@ -104,7 +105,7 @@
         return res.json();
       }
 
-      // ── Step 1: Find manga ──
+      // ── Step 1: Find manga — search MangaDex + WeebCentral in parallel ──
       async function init() {
         $("chapterList").innerHTML = '<div class="loading"><div class="spinner"></div>Searching...</div>';
 
@@ -115,7 +116,24 @@
           mangaTitle.split(":")[0].trim(),
         ].filter(Boolean);
 
-        // 1) Search MangaDex via CORS proxy
+        // Launch both providers simultaneously
+        const results = await Promise.allSettled([
+          searchMangaDex(titles),
+          searchWeebCentral(),
+        ]);
+
+        // Use whichever succeeded with chapters
+        for (const r of results) {
+          if (r.status === "fulfilled" && r.value) return;
+        }
+
+        // Nothing found
+        $("chapterList").innerHTML = '<div class="empty-state">' +
+          '<p>No chapters found.</p>' +
+          '<p style="margin-top:8px;font-size:0.85em;">This manga may not have readable chapters available yet.</p></div>';
+      }
+
+      async function searchMangaDex(titles) {
         for (const title of titles) {
           try {
             const data = await proxyFetch(`https://api.mangadex.org/manga?title=${encodeURIComponent(title)}&limit=10&includes[]=cover_art`);
@@ -132,74 +150,40 @@
               if (scored.length) {
                 mangadexId = scored[0].manga.id;
                 $("mangaTitle").textContent = scored[0].manga.attributes?.title?.en || mangaTitle;
-                await loadChaptersFromMangaDex();
-                return;
+                const chData = await proxyFetch(
+                  `https://api.mangadex.org/manga/${mangadexId}/feed?translatedLanguage%5B%5D=en&limit=500&order%5Bchapter%5D=asc`
+                );
+                const allChapters = (chData.data || []).filter(ch => ch.attributes && ch.attributes.chapter && !ch.attributes.externalUrl);
+                const seen = new Map();
+                allChapters.forEach(ch => {
+                  const chapNum = ch.attributes.chapter;
+                  if (!chapNum) return;
+                  const key = normKey(chapNum);
+                  const existing = seen.get(key);
+                  if (!existing || (ch.attributes.pages || 0) > (existing.attributes.pages || 0)) {
+                    seen.set(key, ch);
+                  }
+                });
+                const hostedChapters = Array.from(seen.values());
+                if (hostedChapters.length) {
+                  chapters = sortChapters(hostedChapters);
+                  currentProvider = "mangadex";
+                  renderChapterList();
+                  return true;
+                }
               }
             }
           } catch (e) { continue; }
         }
-
-        // 2) MangaDex search failed — try WeebCentral directly
-        if (await loadWeebCentralChapters()) return;
-
-        // 3) Nothing found
-        $("chapterList").innerHTML = '<div class="empty-state">' +
-          '<p>No chapters found.</p>' +
-          '<p style="margin-top:8px;font-size:0.85em;">This manga may not have readable chapters available yet.</p></div>';
-      }
-
-      // ── Step 2a: Load chapters from MangaDex (via CORS proxy) ──
-      let currentProvider = "mangadex";
-      let weebcentralMangaId = null;
-
-      async function loadChaptersFromMangaDex() {
-        const list = $("chapterList");
-        list.innerHTML = '<div class="loading"><div class="spinner"></div>Loading chapters...</div>';
-        try {
-          const data = await proxyFetch(
-            `https://api.mangadex.org/manga/${mangadexId}/feed?translatedLanguage%5B%5D=en&limit=500&order%5Bchapter%5D=asc`
-          );
-          const allChapters = (data.data || []).filter(ch => ch.attributes && ch.attributes.chapter && !ch.attributes.externalUrl);
-
-          // Dedup by chapter number, keep best
-          const seen = new Map();
-          allChapters.forEach(ch => {
-            const chapNum = ch.attributes.chapter;
-            if (!chapNum) return;
-            const key = normKey(chapNum);
-            const existing = seen.get(key);
-            if (!existing || (ch.attributes.pages || 0) > (existing.attributes.pages || 0)) {
-              seen.set(key, ch);
-            }
-          });
-
-          const hostedChapters = Array.from(seen.values());
-          if (hostedChapters.length) {
-            chapters = sortChapters(hostedChapters);
-            renderChapterList();
-            return true;
-          }
-        } catch (e) {
-          console.warn("[MangaDex] Chapter fetch failed:", e);
-        }
-
-        // MangaDex had no hosted chapters — try WeebCentral
-        if (await loadWeebCentralChapters()) return true;
-
         return false;
       }
 
-      // ── Step 2b: Load chapters from WeebCentral ──
-      async function loadWeebCentralChapters() {
-        const list = $("chapterList");
-        list.innerHTML = '<div class="loading"><div class="spinner"></div>Trying WeebCentral...</div>';
+      async function searchWeebCentral() {
         try {
           const wcData = await proxyFetch(
             `https://manga-scrape-api.vercel.app/api/scrape/search?query=${encodeURIComponent(mangaTitle)}&provider=weebcentral`
           );
           const wcResults = Array.isArray(wcData) ? wcData : (wcData.results || wcData.data || []);
-
-          // Clean titles and find best match
           const cleanTitle = (t) => (t || "").replace(/\s+/g, " ").trim();
           const lower = mangaTitle.toLowerCase();
           const wcManga = wcResults.find(r => {
@@ -209,13 +193,13 @@
 
           if (wcManga) {
             weebcentralMangaId = wcManga.id;
-            currentProvider = "weebcentral";
-            $("mangaTitle").textContent = cleanTitle(wcManga.title) || mangaTitle;
             const chData = await proxyFetch(
               `https://manga-scrape-api.vercel.app/api/scrape/chapters?id=${wcManga.id}&provider=weebcentral`
             );
             const wcChapters = Array.isArray(chData) ? chData : (chData.chapters || chData.data || []);
             if (wcChapters.length) {
+              currentProvider = "weebcentral";
+              $("mangaTitle").textContent = cleanTitle(wcManga.title) || mangaTitle;
               chapters = wcChapters.map(ch => ({
                 id: ch.id,
                 attributes: {
@@ -232,7 +216,7 @@
             }
           }
         } catch (e) {
-          console.warn("[WeebCentral] Fallback failed:", e);
+          console.warn("[WeebCentral] Search failed:", e);
         }
         return false;
       }
