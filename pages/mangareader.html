@@ -214,7 +214,7 @@
           encodeURIComponent(mangaTitle) + '" target="_blank" rel="noopener">Search MangaDex →</a></p></div>';
       }
 
-      // ── Step 2: Load ALL chapters (hosted + external) ──
+      // ── Step 2: Load chapters (hosted only — no external links) ──
       async function loadChapters() {
         const list = $("chapterList");
         try {
@@ -230,22 +230,18 @@
           }
           const allChapters = data.data || [];
 
-          // Dedup: keep BEST entry per chapter number (hosted preferred over external)
+          // Dedup: keep BEST hosted entry per chapter number
+          // External chapters (MangaPlus links) are excluded entirely
           const seen = new Map();
           allChapters.forEach(ch => {
             if (!ch.attributes || !ch.attributes.chapter) return;
+            if (ch.attributes.externalUrl) return;
             const key = normKey(ch.attributes.chapter);
             const existing = seen.get(key);
             if (!existing) { seen.set(key, ch); return; }
-            // Prefer hosted over external, and more pages over fewer
-            const existingExternal = !!existing.attributes.externalUrl;
-            const chExternal = !!ch.attributes.externalUrl;
-            if (existingExternal && !chExternal) { seen.set(key, ch); return; }
-            if (existingExternal === chExternal) {
-              const aPages = existing.attributes.pages || 0;
-              const bPages = ch.attributes.pages || 0;
-              if (bPages > aPages) seen.set(key, ch);
-            }
+            const aPages = existing.attributes.pages || 0;
+            const bPages = ch.attributes.pages || 0;
+            if (bPages > aPages) seen.set(key, ch);
           });
 
           chapters = Array.from(seen.values()).sort((a, b) => {
@@ -257,9 +253,9 @@
 
           if (!chapters.length) {
             list.innerHTML = '<div class="empty-state">' +
-              '<p>No chapters found.</p>' +
-              '<p style="margin-top:8px;font-size:0.85em;"><a href="https://mangadex.org/title/' +
-              mangadexId + '" target="_blank" rel="noopener">View on MangaDex →</a></p></div>';
+              '<p>No readable chapters available on-site.</p>' +
+              '<p style="margin-top:8px;font-size:0.85em;">This manga is available on <a href="https://mangadex.org/title/' +
+              mangadexId + '" target="_blank" rel="noopener">MangaDex</a></p></div>';
             return;
           }
 
@@ -286,32 +282,18 @@
 
       function renderChapterList() {
         const list = $("chapterList");
-        const hosted = chapters.filter(ch => !ch.attributes.externalUrl);
-        const external = chapters.filter(ch => !!ch.attributes.externalUrl);
-        let html = `<div class="chapter-list-header">${hosted.length} hosted · ${external.length} external</div>`;
-
+        let html = `<div class="chapter-list-header">${chapters.length} chapters</div>`;
         chapters.forEach((ch, i) => {
           const a = ch.attributes;
           const vol = a.volume ? ` Vol.${a.volume}` : "";
           const chTitle = a.title ? ` - ${a.title}` : "";
-          const isExternal = !!a.externalUrl;
-          const icon = isExternal ? "🔗 " : "";
-          const cls = isExternal ? "chapter-item external-chapter" : "chapter-item";
-          if (isExternal) {
-            html += `<a class="${esc(cls)}" href="${esc(a.externalUrl)}" target="_blank" rel="noopener" data-idx="${i}">
-              <span class="chapter-num">${icon}Ch. ${esc(a.chapter || "?")}${vol}</span>
-              <span class="chapter-name">${esc(chTitle)}</span>
-            </a>`;
-          } else {
-            html += `<button class="${esc(cls)}" data-idx="${i}">
-              <span class="chapter-num">${icon}Ch. ${esc(a.chapter || "?")}${vol}</span>
-              <span class="chapter-name">${esc(chTitle)}</span>
-            </button>`;
-          }
+          html += `<button class="chapter-item" data-idx="${i}">
+            <span class="chapter-num">Ch. ${esc(a.chapter || "?")}${vol}</span>
+            <span class="chapter-name">${esc(chTitle)}</span>
+          </button>`;
         });
         list.innerHTML = html;
-        // Hosted chapters: click to load inline
-        list.querySelectorAll(".chapter-item:not(.external-chapter)").forEach(btn => {
+        list.querySelectorAll(".chapter-item").forEach(btn => {
           btn.addEventListener("click", () => goToChapter(parseInt(btn.dataset.idx)));
         });
       }
@@ -325,17 +307,10 @@
         const gen = ++chapterGen;
 
         const ch = chapters[idx];
-
-        // External chapter: open in new tab
-        if (ch.attributes.externalUrl) {
-          window.open(ch.attributes.externalUrl, "_blank", "noopener");
-          return;
-        }
-
         const vol = ch.attributes.volume ? ` Vol.${ch.attributes.volume}` : "";
         $("chapterLabel").textContent = "Ch. " + (ch.attributes.chapter || "?") + vol;
 
-        $("chapterList").querySelectorAll(".chapter-item:not(.external-chapter)").forEach((el, i) => {
+        $("chapterList").querySelectorAll(".chapter-item").forEach((el, i) => {
           el.classList.toggle("active", i === idx);
         });
 
