@@ -21,14 +21,13 @@ export default {
     try {
       const decoded = decodeURIComponent(target);
 
-      // Cache key: hash of the target URL + method
       const method = request.method;
-      const cacheKey = `proxy:${method}:${decoded}`;
       const cache = caches.default;
 
-      // Only cache GET requests, skip cache for POST
+      // Check cache for GET requests
       if (method === "GET") {
-        const cached = await cache.match(cacheKey);
+        const cacheReq = new Request(url.toString(), request);
+        const cached = await cache.match(cacheReq);
         if (cached) {
           const resp = new Response(cached.body, cached);
           resp.headers.set("X-Cache", "HIT");
@@ -75,17 +74,13 @@ export default {
         },
       });
 
-      // Cache successful GET responses (non-error)
+      // Cache successful GET responses
       if (method === "GET" && upstream.status >= 200 && upstream.status < 400) {
-        const respToCache = new Response(body, {
-          status: upstream.status,
-          headers: {
-            ...corsHeaders,
-            "Content-Type": contentType,
-            "Cache-Control": "public, max-age=120",
-          },
-        });
-        ctx.waitUntil(cache.put(cacheKey, respToCache));
+        const cacheReq = new Request(url.toString(), request);
+        const respToCache = resp.clone();
+        // Set cacheable headers on the clone
+        respToCache.headers.set("Cache-Control", "public, max-age=120");
+        ctx.waitUntil(cache.put(cacheReq, respToCache));
       }
 
       return resp;
