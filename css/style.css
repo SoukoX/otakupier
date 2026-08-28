@@ -5009,14 +5009,6 @@ footer .footer-links {
 .chapter-item:hover {
   background: rgba(255,255,255,0.06);
 }
-.chapter-item.external-chapter {
-  border-left: 2px solid var(--accent);
-  opacity: 0.8;
-}
-.chapter-item.external-chapter:hover {
-  opacity: 1;
-  background: rgba(230, 70, 92, 0.08);
-}
 .chapter-num {
   font-size: 0.9rem;
 }
@@ -5246,13 +5238,6 @@ footer .footer-links {
   flex-direction: column;
   align-items: center;
   min-height: 0;
-}
-.reader-pages iframe {
-  width: 100%;
-  height: 100%;
-  min-height: 70vh;
-  border: none;
-  border-radius: 8px;
 }
 .reader-page-img {
   width: 100%;
