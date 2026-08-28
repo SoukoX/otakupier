@@ -1052,6 +1052,7 @@ const JIKAN = {
   // descriptions, genres, and cover art. CORS-open for search.
   // Chapters endpoint is behind Cloudflare — use MangaDex for reading.
   _COMICK_BASE: "https://api.comick.dev/v1.0",
+  _comickCache: new Map(),
 
   async comickSearch(title, limit = 5) {
     try {
@@ -1083,6 +1084,8 @@ const JIKAN = {
           lastChapter: m.last_chapter || 0,
           status: m.status === 1 ? "Ongoing" : m.status === 2 ? "Completed" : "Unknown",
           contentRating: m.content_rating || "safe",
+          genres: m.genres || [],
+          viewCount: m.view_count || 0,
         }))
         .sort((a, b) => matchScore(b.title) - matchScore(a.title));
     } catch (e) {
@@ -1094,6 +1097,139 @@ const JIKAN = {
   async comickBestMatch(title) {
     const results = await this.comickSearch(title, 5);
     return results[0] || null;
+  },
+
+  // ── ComicK → unified manga card format ──────────────────────────────
+  // Converts a ComicK search result into the same shape as AniList manga
+  // results so the catalog/grid/card rendering works unchanged.
+  _comickToManga(m) {
+    const statusMap = { 1: "RELEASING", 2: "FINISHED", 3: "NOT_YET_RELEASED" };
+    return {
+      id: "comick-" + m.hid,
+      title: m.title || "Unknown",
+      cover: "", // ComicK search doesn't return covers; detail does
+      status: statusMap[m.status] || m.status || "",
+      summary: m.desc || "",
+      genres: (m.genres || []).map(String),
+      author: "",
+      year: null,
+      format: "MANGA",
+      chapters: m.lastChapter || null,
+      volumes: null,
+      altTitles: [],
+      _comickHid: m.hid,
+      _comickSlug: m.slug,
+      _comickRating: m.rating,
+      _comickViews: m.viewCount,
+      _source: "comick",
+    };
+  },
+
+  // ComicK manga search with full details (cover art from individual lookups).
+  // Returns unified manga objects. Used as primary source when AniList fails.
+  async comickMangaSearch(query, limit = 20) {
+    try {
+      const results = await this.comickSearch(query, Math.min(limit, 20));
+      if (!results.length) return [];
+      // Fetch cover art in parallel (up to 10 at a time to avoid hammering)
+      const fetchDetail = async (m) => {
+        try {
+          const ctrl = new AbortController();
+          const timer = setTimeout(() => ctrl.abort(), 6000);
+          const res = await fetch(`${this._COMICK_BASE}/comic/${m.hid}`, { signal: ctrl.signal });
+          clearTimeout(timer);
+          if (!res.ok) return m;
+          const detail = await res.json();
+          if (detail) {
+            const cover = detail.md_covers?.[0]?.b2key || detail.cover || "";
+            m.cover = cover ? `https://mangadex.org/covers/${m._comickHid}/${cover}.256.jpg` : "";
+            m.summary = detail.desc || m.desc || "";
+            m.chapters = detail.last_chapter || m.lastChapter || null;
+            m.year = detail.year || null;
+            m.author = detail.author || "";
+          }
+          return m;
+        } catch (e) {
+          return m;
+        }
+      };
+      const detailed = await Promise.all(results.slice(0, 10).map(fetchDetail));
+      return detailed.map(m => this._comickToManga(m));
+    } catch (e) {
+      return [];
+    }
+  },
+
+  // ComicK popular/trending (sorted by view count or rating).
+  // Since ComicK has no "popular" endpoint, search for well-known manga
+  // and sort by views/rating.
+  async comickPopular(page = 1, limit = 20) {
+    const cacheKey = `comick-pop-${page}`;
+    const cached = this._comickCache.get(cacheKey);
+    if (cached && Date.now() - cached.at < 15 * 60 * 1000) return cached.val;
+
+    // Well-known manga titles to populate a "popular" grid
+    const popularQueries = [
+      "One Piece", "Naruto", "Bleach", "Attack on Titan", "Demon Slayer",
+      "Jujutsu Kaisen", "Chainsaw Man", "My Hero Academia", "Death Note",
+      "Fullmetal Alchemist", "Hunter x Hunter", "Dragon Ball",
+      "Solo Leveling", "Tower of God", "The God of High School",
+      "Spy x Family", "Chihayafuru", "Vinland Saga", "Berserk", "Vagabond",
+    ];
+    const startIdx = ((page - 1) * limit) % popularQueries.length;
+    const batch = [];
+    for (let i = 0; i < limit && i < popularQueries.length; i++) {
+      batch.push(popularQueries[(startIdx + i) % popularQueries.length]);
+    }
+    try {
+      const results = await Promise.allSettled(
+        batch.map(q => this.comickSearch(q, 1).then(r => r[0]))
+      );
+      const manga = results
+        .filter(s => s.status === "fulfilled" && s.value)
+        .map(s => this._comickToManga(s.value))
+        .filter((m, i, arr) => arr.findIndex(x => x._comickHid === m._comickHid) === i);
+      const val = { data: manga, pagination: { last_visible_page: 5, items: { total: 100, per_page: limit, count: manga.length } } };
+      this._comickCache.set(cacheKey, { at: Date.now(), val });
+      return val;
+    } catch (e) {
+      return { data: [], pagination: { last_visible_page: 1, items: { total: 0, per_page: limit, count: 0 } } };
+    }
+  },
+
+  // ComicK manga detail by hid
+  async comickMangaDetail(hid) {
+    try {
+      const ctrl = new AbortController();
+      const timer = setTimeout(() => ctrl.abort(), 10000);
+      const res = await fetch(`${this._COMICK_BASE}/comic/${hid}`, { signal: ctrl.signal });
+      clearTimeout(timer);
+      if (!res.ok) return null;
+      const d = await res.json();
+      if (!d) return null;
+      const cover = d.md_covers?.[0]?.b2key || d.cover || "";
+      const statusMap = { 1: "RELEASING", 2: "FINISHED", 3: "NOT_YET_RELEASED" };
+      return {
+        id: "comick-" + hid,
+        title: d.title || "Unknown",
+        cover: cover ? `https://mangadex.org/covers/${hid}/${cover}.256.jpg` : "",
+        coverLg: cover ? `https://mangadex.org/covers/${hid}/${cover}.512.jpg` : "",
+        status: statusMap[d.status] || "",
+        summary: d.desc || "",
+        genres: (d.md_genres || []).map(g => g.name || g.slug || ""),
+        author: d.author || "",
+        artist: d.artist || "",
+        year: d.year || null,
+        format: d.type === 1 ? "MANGA" : d.type === 2 ? "MANHWA" : "MANGA",
+        chapters: d.last_chapter || null,
+        volumes: d.last_volume || null,
+        altTitles: d.md_titles?.map(t => t.title).filter(Boolean) || [],
+        _comickHid: hid,
+        _comickSlug: d.slug,
+      };
+    } catch (e) {
+      return null;
+    }
   },
 
   // ── Manga (AniList GraphQL) ──────────────────────────────────────────
@@ -1164,37 +1300,75 @@ const JIKAN = {
       });
   },
 
+  // Manga search: try AniList first (fast, CORS-open), fall back to ComicK.
+  // Results are merged + deduped by title so the grid has the best coverage.
   async mangaSearch(query, limit = 20) {
-    try {
-      const data = await this._aniMangaQuery(this._MANGA_SEARCH_Q, { s: query, p: 1, per: limit });
-      return this._aniMangaToList(data);
-    } catch (e) {
-      return [];
+    const sources = await Promise.allSettled([
+      this._aniMangaQuery(this._MANGA_SEARCH_Q, { s: query, p: 1, per: limit })
+        .then(d => this._aniMangaToList(d)),
+      this.comickMangaSearch(query, Math.min(limit, 10)).catch(() => []),
+    ]);
+    const aniResults = sources[0].status === "fulfilled" ? sources[0].value : [];
+    const comickResults = sources[1].status === "fulfilled" ? sources[1].value : [];
+    // Merge: AniList first (better metadata), then ComicK (fills gaps)
+    const seen = new Set();
+    const merged = [];
+    for (const m of [...aniResults, ...comickResults]) {
+      const key = (m.title || "").toLowerCase().trim();
+      if (!key || seen.has(key)) continue;
+      seen.add(key);
+      merged.push(m);
     }
+    return merged.slice(0, limit);
   },
 
+  // Popular manga: try AniList first, fall back to ComicK.
   async mangaPopular(page = 1, limit = 20) {
-    try {
-      const q = `query($p: Int, $per: Int) {
-        Page(page: $p, perPage: $per) {
-          media(type: MANGA, isAdult: false, sort: POPULARITY_DESC) {
-            id title { romaji english native }
-            coverImage { large }
-            status format genres description(asHtml: false)
-            chapters volumes countryOfOrigin startDate { year }
-          }
+    const aniPromise = this._aniMangaQuery(`query($p: Int, $per: Int) {
+      Page(page: $p, perPage: $per) {
+        media(type: MANGA, isAdult: false, sort: POPULARITY_DESC) {
+          id title { romaji english native }
+          coverImage { large }
+          status format genres description(asHtml: false)
+          chapters volumes countryOfOrigin startDate { year }
+          staff { edges { node { name { full } } } }
         }
-      }`;
-      const data = await this._aniMangaQuery(q, { p: page, per: limit });
-      return this._aniMangaToList(data);
-    } catch (e) {
-      return [];
+      }
+    }`, { p: page, per: limit }).then(d => this._aniMangaToList(d)).catch(() => []);
+
+    const comickPromise = this.comickPopular(page, limit).catch(() => ({ data: [] }));
+
+    const [aniRes, comickRes] = await Promise.allSettled([aniPromise, comickPromise]);
+    const aniResults = aniRes.status === "fulfilled" ? aniRes.value : [];
+    const comickResults = comickRes.status === "fulfilled" ? (comickRes.value.data || []) : [];
+
+    const seen = new Set();
+    const merged = [];
+    for (const m of [...aniResults, ...comickResults]) {
+      const key = (m.title || "").toLowerCase().trim();
+      if (!key || seen.has(key)) continue;
+      seen.add(key);
+      merged.push(m);
     }
+    return {
+      data: merged.slice(0, limit),
+      pagination: {
+        last_visible_page: 999,
+        items: { total: merged.length, per_page: limit, count: Math.min(limit, merged.length) },
+      },
+    };
   },
 
-  async mangaDetail(anilistId) {
+  // Manga detail: supports both AniList IDs and ComicK hids (comick-* prefix).
+  async mangaDetail(id) {
+    // ComicK manga (id starts with "comick-")
+    if (String(id).startsWith("comick-")) {
+      const hid = String(id).replace("comick-", "");
+      return this.comickMangaDetail(hid);
+    }
+    // AniList manga
     try {
-      const data = await this._aniMangaQuery(this._MANGA_DETAIL_Q, { id: Number(anilistId) });
+      const data = await this._aniMangaQuery(this._MANGA_DETAIL_Q, { id: Number(id) });
       const m = data?.Media;
       if (!m) return null;
       const title = m.title?.english || m.title?.romaji || "";
@@ -1238,45 +1412,65 @@ const JIKAN = {
     return `https://mangadex.org/search?q=${encodeURIComponent(title)}`;
   },
 
-  // ── Manga catalog rows (AniList) ──────────────────────────────────────
+  // ── Manga catalog rows (merged AniList + ComicK) ─────────────────────
   async mangaTrending(page = 1) {
-    try {
-      const q = `query($p: Int, $per: Int) {
-        Page(page: $p, perPage: $per) {
-          media(type: MANGA, isAdult: false, sort: TRENDING_DESC) {
-            id title { romaji english native }
-            coverImage { large extraLarge }
-            status format genres description(asHtml: false)
-            chapters volumes countryOfOrigin startDate { year }
-            staff { edges { node { name { full } } } }
-          }
+    const aniPromise = this._aniMangaQuery(`query($p: Int, $per: Int) {
+      Page(page: $p, perPage: $per) {
+        media(type: MANGA, isAdult: false, sort: TRENDING_DESC) {
+          id title { romaji english native }
+          coverImage { large extraLarge }
+          status format genres description(asHtml: false)
+          chapters volumes countryOfOrigin startDate { year }
+          staff { edges { node { name { full } } } }
         }
-      }`;
-      const data = await this._aniMangaQuery(q, { p: page, per: 20 });
-      return { data: this._aniMangaToList(data) };
-    } catch (e) {
-      return { data: [] };
+      }
+    }`, { p: page, per: 20 }).then(d => ({ data: this._aniMangaToList(d) })).catch(() => ({ data: [] }));
+
+    const comickPromise = this.comickPopular(page, 10).catch(() => ({ data: [] }));
+
+    const [aniRes, comickRes] = await Promise.allSettled([aniPromise, comickPromise]);
+    const aniData = aniRes.status === "fulfilled" ? aniRes.value.data : [];
+    const comickData = comickRes.status === "fulfilled" ? (comickRes.value.data || []) : [];
+
+    const seen = new Set();
+    const merged = [];
+    for (const m of [...aniData, ...comickData]) {
+      const key = (m.title || "").toLowerCase().trim();
+      if (!key || seen.has(key)) continue;
+      seen.add(key);
+      merged.push(m);
     }
+    return { data: merged.slice(0, 20) };
   },
 
   async mangaNewReleases(page = 1) {
-    try {
-      const q = `query($p: Int, $per: Int) {
-        Page(page: $p, perPage: $per) {
-          media(type: MANGA, isAdult: false, sort: START_DATE_DESC) {
-            id title { romaji english native }
-            coverImage { large extraLarge }
-            status format genres description(asHtml: false)
-            chapters volumes countryOfOrigin startDate { year }
-            staff { edges { node { name { full } } } }
-          }
+    const aniPromise = this._aniMangaQuery(`query($p: Int, $per: Int) {
+      Page(page: $p, perPage: $per) {
+        media(type: MANGA, isAdult: false, sort: START_DATE_DESC) {
+          id title { romaji english native }
+          coverImage { large extraLarge }
+          status format genres description(asHtml: false)
+          chapters volumes countryOfOrigin startDate { year }
+          staff { edges { node { name { full } } } }
         }
-      }`;
-      const data = await this._aniMangaQuery(q, { p: page, per: 20 });
-      return { data: this._aniMangaToList(data) };
-    } catch (e) {
-      return { data: [] };
+      }
+    }`, { p: page, per: 20 }).then(d => ({ data: this._aniMangaToList(d) })).catch(() => ({ data: [] }));
+
+    const comickPromise = this.comickPopular(page + 5, 10).catch(() => ({ data: [] }));
+
+    const [aniRes, comickRes] = await Promise.allSettled([aniPromise, comickPromise]);
+    const aniData = aniRes.status === "fulfilled" ? aniRes.value.data : [];
+    const comickData = comickRes.status === "fulfilled" ? (comickRes.value.data || []) : [];
+
+    const seen = new Set();
+    const merged = [];
+    for (const m of [...aniData, ...comickData]) {
+      const key = (m.title || "").toLowerCase().trim();
+      if (!key || seen.has(key)) continue;
+      seen.add(key);
+      merged.push(m);
     }
+    return { data: merged.slice(0, 20) };
   },
 
   async mangaPopularRow(page = 1) {
