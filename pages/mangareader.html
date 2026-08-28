@@ -8,7 +8,7 @@
   <title>Read Manga - OtakuPier</title>
   <link rel="icon" type="image/svg+xml" href="../favicon.svg?v=2">
   <link rel="icon" type="image/x-icon" href="../favicon.ico">
-  <link rel="stylesheet" href="../css/style.css?v=26">
+  <link rel="stylesheet" href="../css/style.css?v=27">
   <link rel="preconnect" href="https://manga-scrape-api.vercel.app">
   <link rel="dns-prefetch" href="https://soukox.goatcounter.com">
 <script data-goatcounter="https://soukox.goatcounter.com/count"
@@ -57,10 +57,10 @@
   <h1 style="display:none;">Read Manga - OtakuPier</h1>
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <script src="../js/config.js?v=26"></script>
-  <script src="../js/api.js?v=26"></script>
-  <script src="../js/seo.js?v=26"></script>
-  <script src="../js/app.js?v=26"></script>
+  <script src="../js/config.js?v=27"></script>
+  <script src="../js/api.js?v=27"></script>
+  <script src="../js/seo.js?v=27"></script>
+  <script src="../js/app.js?v=27"></script>
   <script>
     (function() {
       const params = new URLSearchParams(window.location.search);
@@ -96,7 +96,7 @@
       }
 
       // CORS proxy for APIs without CORS headers
-      const PROXY_BASE = "https://otakupier.vercel.app/api/proxy?url=";
+      const PROXY_BASE = "https://otakupier.ankitchand533.workers.dev?url=";
       async function proxyFetch(url) {
         const target = PROXY_BASE + encodeURIComponent(url);
         const res = await fetch(target, { signal: AbortSignal.timeout(15000) });
