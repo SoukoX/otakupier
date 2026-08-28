@@ -22,6 +22,9 @@
   <meta property="og:url" content="https://otakupier.2bd.net/pages/watch">
   <meta property="og:image" content="https://otakupier.2bd.net/images/banner.svg">
   <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="Watch - OtakuPier">
+  <meta name="twitter:description" content="Watch anime on OtakuPier with the on-site player — episodes, community reviews and comments.">
+  <meta name="twitter:image" content="https://otakupier.2bd.net/images/banner.svg">
   <script type="application/ld+json">
   {
     "@context": "https://schema.org",
@@ -31,7 +34,7 @@
     "description": "Watch anime on OtakuPier — episodes, reviews and community rankings.",
     "potentialAction": {
       "@type": "SearchAction",
-      "target": "https://otakupier.2bd.net/pages/catalog.html?q={search_term_string}",
+      "target": "https://otakupier.2bd.net/pages/catalog?q={search_term_string}",
       "query-input": "required name=search_term_string"
     }
   }
@@ -65,6 +68,7 @@
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="../js/config.js?v=25"></script>
   <script src="../js/api.js?v=25"></script>
+  <script src="../js/seo.js?v=25"></script>
   <script src="../js/app.js?v=25"></script>
   <script>
     const params = new URLSearchParams(window.location.search);
@@ -111,6 +115,7 @@
         }
 
         renderPage();
+        SEO.setAnimeMeta(animeData);
         loadReviews();
         // Warm the MAL→AniList mapping used by the AniXo embed so the first
         // episode click doesn't wait on a live lookup.
