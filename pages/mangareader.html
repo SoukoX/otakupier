@@ -181,7 +181,7 @@
           } catch (e) { /* fall through */ }
         }
 
-        // Strategy: Search MangaDex by title (best match wins)
+        // Search MangaDex by title
         const titles = [
           mangaTitle,
           mangaTitle.replace(/[:\-!]/g, " ").replace(/\s+/g, " ").trim(),
@@ -208,10 +208,14 @@
           } catch (e) { continue; }
         }
 
+        // MangaDex failed — try WeebCentral directly
+        if (typeof JIKAN !== "undefined" && JIKAN.weebcentralSearch) {
+          await loadWeebCentralChapters();
+          return;
+        }
+
         $("chapterList").innerHTML = '<div class="empty-state">' +
-          '<p>Manga not found on MangaDex.</p>' +
-          '<p style="margin-top:8px;font-size:0.85em;"><a href="https://mangadex.org/search?q=' +
-          encodeURIComponent(mangaTitle) + '" target="_blank" rel="noopener">Search MangaDex →</a></p></div>';
+          '<p>No chapters found.</p></div>';
       }
 
       // ── Step 2: Load chapters (MangaDex first, fallback to WeebCentral) ──
@@ -246,46 +250,12 @@
           } catch (e) { /* MangaDex failed, try WeebCentral */ }
 
           // If MangaDex has no hosted chapters, try WeebCentral
-          if (!hostedChapters.length && typeof JIKAN !== "undefined" && JIKAN.weebcentralSearch) {
-            list.innerHTML = '<div class="loading"><div class="spinner"></div>Trying WeebCentral...</div>';
-            try {
-              const wcResults = await JIKAN.weebcentralSearch(mangaTitle);
-              // Find best match
-              const wcManga = wcResults.find(r => {
-                const t = r.title.toLowerCase();
-                const target = mangaTitle.toLowerCase();
-                return t === target || t.includes(target) || target.includes(t);
-              }) || wcResults[0];
-
-              if (wcManga) {
-                weebcentralMangaId = wcManga.id;
-                currentProvider = "weebcentral";
-                const wcChapters = await JIKAN.weebcentralChapters(wcManga.id);
-                if (wcChapters.length) {
-                  hostedChapters = wcChapters.map(ch => ({
-                    id: ch.id,
-                    attributes: {
-                      chapter: ch.number || ch.title?.match(/[\d.]+/)?.[0] || "?",
-                      title: ch.title || "",
-                      volume: null,
-                      pages: 0,
-                      externalUrl: null,
-                      provider: "weebcentral"
-                    }
-                  }));
-                }
-              }
-            } catch (e) {
-              console.warn("[WeebCentral] Fallback failed:", e);
-            }
+          if (!hostedChapters.length) {
+            await loadWeebCentralChapters();
+            return;
           }
 
-          chapters = hostedChapters.sort((a, b) => {
-            const na = parseNum(a.attributes.chapter);
-            const nb = parseNum(b.attributes.chapter);
-            if (na !== nb) return na - nb;
-            return (parseFloat(a.attributes.volume) || 0) - (parseFloat(b.attributes.volume) || 0);
-          });
+          chapters = sortChapters(hostedChapters);
 
           if (!chapters.length) {
             list.innerHTML = '<div class="empty-state">' +
@@ -295,11 +265,62 @@
           }
 
           renderChapterList();
-          goToChapter(0);
+          // Don't auto-load — wait for user to click a chapter
         } catch (e) {
           console.error("[Chapters]", e);
           list.innerHTML = '<div class="empty-state">Failed to load chapters.</div>';
         }
+      }
+
+      async function loadWeebCentralChapters() {
+        const list = $("chapterList");
+        list.innerHTML = '<div class="loading"><div class="spinner"></div>Trying WeebCentral...</div>';
+        try {
+          const wcResults = await JIKAN.weebcentralSearch(mangaTitle);
+          const wcManga = wcResults.find(r => {
+            const t = r.title.toLowerCase();
+            const target = mangaTitle.toLowerCase();
+            return t === target || t.includes(target) || target.includes(t);
+          }) || wcResults[0];
+
+          if (wcManga) {
+            weebcentralMangaId = wcManga.id;
+            currentProvider = "weebcentral";
+            const wcChapters = await JIKAN.weebcentralChapters(wcManga.id);
+            if (wcChapters.length) {
+              chapters = wcChapters.map(ch => ({
+                id: ch.id,
+                attributes: {
+                  chapter: ch.number || ch.title?.match(/[\d.]+/)?.[0] || "?",
+                  title: ch.title || "",
+                  volume: null,
+                  pages: 0,
+                  externalUrl: null,
+                  provider: "weebcentral"
+                }
+              }));
+              chapters = sortChapters(chapters);
+              renderChapterList();
+              return;
+            }
+          }
+        } catch (e) {
+          console.warn("[WeebCentral] Fallback failed:", e);
+        }
+        list.innerHTML = '<div class="empty-state">' +
+          '<p>No chapters found.</p>' +
+          '<p style="margin-top:8px;font-size:0.85em;">This manga may not have readable chapters available yet.</p></div>';
+      }
+
+      function sortChapters(arr) {
+        return arr.sort((a, b) => {
+          const na = parseNum(a.attributes.chapter);
+          const nb = parseNum(b.attributes.chapter);
+          if (na !== nb) return na - nb;
+          const va = parseFloat(a.attributes.volume) || 0;
+          const vb = parseFloat(b.attributes.volume) || 0;
+          return va - vb;
+        });
       }
 
       function parseNum(str) {
