@@ -214,7 +214,7 @@
           encodeURIComponent(mangaTitle) + '" target="_blank" rel="noopener">Search MangaDex →</a></p></div>';
       }
 
-      // ── Step 2: Load chapters (hosted only — no external links) ──
+      // ── Step 2: Load ALL chapters (hosted + external) ──
       async function loadChapters() {
         const list = $("chapterList");
         try {
@@ -230,18 +230,21 @@
           }
           const allChapters = data.data || [];
 
-          // Dedup: keep BEST hosted entry per chapter number
-          // External chapters (MangaPlus links) are excluded entirely
+          // Dedup: keep BEST entry per chapter number (prefer hosted over external)
           const seen = new Map();
           allChapters.forEach(ch => {
             if (!ch.attributes || !ch.attributes.chapter) return;
-            if (ch.attributes.externalUrl) return;
             const key = normKey(ch.attributes.chapter);
             const existing = seen.get(key);
             if (!existing) { seen.set(key, ch); return; }
-            const aPages = existing.attributes.pages || 0;
-            const bPages = ch.attributes.pages || 0;
-            if (bPages > aPages) seen.set(key, ch);
+            const existingExt = !!existing.attributes.externalUrl;
+            const thisExt = !!ch.attributes.externalUrl;
+            if (existingExt && !thisExt) { seen.set(key, ch); return; }
+            if (existingExt === thisExt) {
+              const aPages = existing.attributes.pages || 0;
+              const bPages = ch.attributes.pages || 0;
+              if (bPages > aPages) seen.set(key, ch);
+            }
           });
 
           chapters = Array.from(seen.values()).sort((a, b) => {
@@ -253,9 +256,9 @@
 
           if (!chapters.length) {
             list.innerHTML = '<div class="empty-state">' +
-              '<p>No readable chapters available on-site.</p>' +
-              '<p style="margin-top:8px;font-size:0.85em;">This manga is available on <a href="https://mangadex.org/title/' +
-              mangadexId + '" target="_blank" rel="noopener">MangaDex</a></p></div>';
+              '<p>No chapters found.</p>' +
+              '<p style="margin-top:8px;font-size:0.85em;"><a href="https://mangadex.org/title/' +
+              mangadexId + '" target="_blank" rel="noopener">View on MangaDex →</a></p></div>';
             return;
           }
 
@@ -282,13 +285,21 @@
 
       function renderChapterList() {
         const list = $("chapterList");
-        let html = `<div class="chapter-list-header">${chapters.length} chapters</div>`;
+        const hosted = chapters.filter(ch => !ch.attributes.externalUrl);
+        const external = chapters.filter(ch => !!ch.attributes.externalUrl);
+        const parts = [];
+        if (hosted.length) parts.push(hosted.length + " hosted");
+        if (external.length) parts.push(external.length + " external");
+        let html = `<div class="chapter-list-header">${parts.join(" · ")}</div>`;
+
         chapters.forEach((ch, i) => {
           const a = ch.attributes;
           const vol = a.volume ? ` Vol.${a.volume}` : "";
           const chTitle = a.title ? ` - ${a.title}` : "";
-          html += `<button class="chapter-item" data-idx="${i}">
-            <span class="chapter-num">Ch. ${esc(a.chapter || "?")}${vol}</span>
+          const isExternal = !!a.externalUrl;
+          const icon = isExternal ? "🔗 " : "";
+          html += `<button class="chapter-item${isExternal ? ' external-chapter' : ''}" data-idx="${i}">
+            <span class="chapter-num">${icon}Ch. ${esc(a.chapter || "?")}${vol}</span>
             <span class="chapter-name">${esc(chTitle)}</span>
           </button>`;
         });
@@ -315,8 +326,33 @@
         });
 
         $("readerPlaceholder") && ($("readerPlaceholder").style.display = "none");
-        $("readerPages").innerHTML = '<div class="reader-loading"><div class="spinner"></div><span>Loading...</span></div>';
 
+        // External chapter: embed in iframe (MangaPlus, etc.)
+        if (ch.attributes.externalUrl) {
+          $("readerPages").innerHTML =
+            '<div class="reader-loading"><div class="spinner"></div><span>Embedding chapter reader...</span></div>';
+          const iframe = document.createElement("iframe");
+          iframe.src = ch.attributes.externalUrl;
+          iframe.style.cssText = "width:100%;height:100%;border:none;border-radius:8px;";
+          iframe.setAttribute("sandbox", "allow-same-origin allow-scripts allow-popups allow-forms");
+          iframe.setAttribute("allowfullscreen", "true");
+          iframe.onload = () => {
+            const spinner = $("readerPages").querySelector(".reader-loading");
+            if (spinner) spinner.remove();
+          };
+          iframe.onerror = () => {
+            $("readerPages").innerHTML =
+              '<div class="empty-state"><p>Could not embed this chapter.</p>' +
+              '<p style="margin-top:8px;"><a href="' + esc(ch.attributes.externalUrl) +
+              '" target="_blank" rel="noopener">Open in new tab →</a></p></div>';
+          };
+          $("readerPages").innerHTML = "";
+          $("readerPages").appendChild(iframe);
+          updateNavButtons();
+          return;
+        }
+
+        $("readerPages").innerHTML = '<div class="reader-loading"><div class="spinner"></div><span>Loading...</span></div>';
         loadChapterImages(ch, gen);
       }
 
