@@ -64,10 +64,10 @@
   <script src="../js/app.js?v=25"></script>
   <script>
     const params = new URLSearchParams(window.location.search);
-    const anilistId = params.get("id");
+    const mangaId = params.get("id");
     const main = document.getElementById("main");
 
-    if (!anilistId) {
+    if (!mangaId) {
       main.innerHTML = '<div class="empty-state">No manga specified. <a href="' + pageHref("catalog") + '">Browse catalog</a></div>';
     } else {
       loadManga();
@@ -75,13 +75,13 @@
 
     async function loadManga() {
       try {
-        const data = await JIKAN.mangaDetail(anilistId);
+        const data = await JIKAN.mangaDetail(mangaId);
         if (!data) {
           main.innerHTML = '<div class="empty-state">Could not load manga. <a href="' + pageHref("catalog") + '">Browse catalog</a></div>';
           return;
         }
         renderManga(data);
-        SEO.setMangaMeta(data, data.title, anilistId);
+        SEO.setMangaMeta(data, data.title, mangaId);
       } catch (err) {
         console.error("[Manga detail]", err);
         main.innerHTML = '<div class="empty-state">Error loading manga. <small>' + (err.message || '') + '</small></div>';
@@ -89,8 +89,11 @@
     }
 
     function renderManga(m) {
-      const genres = m.genres.map(g => '<span class="genre-tag">' + JIKAN.esc(g) + '</span>').join("");
-      const altTitles = m.altTitles.length ? m.altTitles.slice(0, 5).join("; ") : "";
+      const genres = (m.genres || []).map(g => {
+        const name = typeof g === "string" ? g : (g.name || "");
+        return '<span class="genre-tag">' + JIKAN.esc(name) + '</span>';
+      }).join("");
+      const altTitles = m.altTitles && m.altTitles.length ? m.altTitles.slice(0, 5).join("; ") : "";
       const readerUrl = pageHref("mangareader") + "?id=" + encodeURIComponent(m.id) + "&title=" + encodeURIComponent(m.title);
       const img = m.cover || JIKAN.PLACEHOLDER;
 
@@ -105,6 +108,10 @@
             return '<a class="related-item" href="' + href + '">' + JIKAN.esc(r.title) + ' <span class="related-type">' + JIKAN.esc(r.relation) + '</span></a>';
           }).join("") + '</div></div>'
         : "";
+
+      // External reading links
+      const comickHid = m._comickHid || "";
+      const comickLink = comickHid ? `<a class="btn btn-outline" href="https://mangadex.org/title/${comickHid}" target="_blank" rel="noopener">📖 Read on MangaDex</a>` : "";
 
       main.innerHTML =
         '<a class="manga-back-btn" href="javascript:history.back()">← Back</a>' +
@@ -127,6 +134,7 @@
               (m.summary ? '<div class="manga-synopsis">' + JIKAN.esc(m.summary).replace(/\n/g, "<br>") + '</div>' : '') +
               '<div class="manga-actions">' +
                 '<a class="btn btn-primary btn-glow" href="' + JIKAN.esc(readerUrl) + '">📖 Read Now</a>' +
+                comickLink +
               '</div>' +
             '</div>' +
           '</div>' +
