@@ -418,10 +418,14 @@
       if (catType === "manga") {
         try {
           const q = state.q || "";
+          const g = state.genre || "";
           let results;
           if (q) {
             const searchRes = await JIKAN.mangaSearch(q, 20);
             results = Array.isArray(searchRes) ? searchRes : (searchRes.data || []);
+          } else if (g) {
+            const genreRes = await JIKAN.mangaByGenre(g, state.page, 20);
+            results = Array.isArray(genreRes) ? genreRes : (genreRes.data || []);
           } else {
             const popRes = await JIKAN.mangaPopular(state.page, 20);
             results = Array.isArray(popRes) ? popRes : (popRes.data || []);
@@ -443,7 +447,7 @@
             }
           });
           const rt = document.getElementById("resultsTitle");
-          if (rt) rt.textContent = q ? 'Manga results for "' + q + '"' : "Popular manga";
+          if (rt) rt.textContent = q ? 'Manga results for "' + q + '"' : g ? "Manga by genre" : "Popular manga";
           document.getElementById("pageInfo").textContent = "Page " + state.page;
           document.getElementById("prevBtn").style.visibility = state.page > 1 ? "visible" : "hidden";
           document.getElementById("nextBtn").style.visibility = results.length >= 20 ? "visible" : "hidden";
