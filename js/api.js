@@ -1190,10 +1190,10 @@ const JIKAN = {
   // no key). AniList has full manga data: titles, covers, descriptions,
   // genres, status, chapters. Chapter reading links to MangaKatana.
 
-  _MANGA_SEARCH_Q: `query($s: String, $p: Int, $per: Int) {
+  _MANGA_SEARCH_Q: `query($s: String, $p: Int, $per: Int, $adult: Boolean) {
     Page(page: $p, perPage: $per) {
       pageInfo { total }
-      media(search: $s, type: MANGA, isAdult: false, sort: SEARCH_MATCH) {
+      media(search: $s, type: MANGA, isAdult: $adult, sort: SEARCH_MATCH) {
         id title { romaji english native }
         coverImage { large }
         status format genres description(asHtml: false)
@@ -1255,9 +1255,9 @@ const JIKAN = {
 
   // Manga search: try AniList first (fast, CORS-open), fall back to ComicK.
   // Results are merged + deduped by title so the grid has the best coverage.
-  async mangaSearch(query, limit = 20) {
+  async mangaSearch(query, limit = 20, adult = false) {
     const sources = await Promise.allSettled([
-      this._aniMangaQuery(this._MANGA_SEARCH_Q, { s: query, p: 1, per: limit })
+      this._aniMangaQuery(this._MANGA_SEARCH_Q, { s: query, p: 1, per: limit, adult: !!adult })
         .then(d => this._aniMangaToList(d)),
       this.comickMangaSearch(query, Math.min(limit, 10)).catch(() => []),
     ]);
@@ -1276,10 +1276,10 @@ const JIKAN = {
   },
 
   // Popular manga: try AniList first, fall back to ComicK.
-  async mangaPopular(page = 1, limit = 20) {
-    const aniPromise = this._aniMangaQuery(`query($p: Int, $per: Int) {
+  async mangaPopular(page = 1, limit = 20, adult = false) {
+    const aniPromise = this._aniMangaQuery(`query($p: Int, $per: Int, $adult: Boolean) {
       Page(page: $p, perPage: $per) {
-        media(type: MANGA, isAdult: false, sort: POPULARITY_DESC) {
+        media(type: MANGA, isAdult: $adult, sort: POPULARITY_DESC) {
           id title { romaji english native }
           coverImage { large }
           status format genres description(asHtml: false)
@@ -1287,7 +1287,7 @@ const JIKAN = {
           staff { edges { node { name { full } } } }
         }
       }
-    }`, { p: page, per: limit }).then(d => this._aniMangaToList(d)).catch(() => []);
+    }`, { p: page, per: limit, adult: !!adult }).then(d => this._aniMangaToList(d)).catch(() => []);
 
     const comickPromise = this.comickPopular(page, limit).catch(() => ({ data: [] }));
 
@@ -1390,16 +1390,16 @@ const JIKAN = {
     20: { name: "Parody", type: "tag" },
   },
 
-  async mangaByGenre(genreId, page = 1, limit = 20) {
+  async mangaByGenre(genreId, page = 1, limit = 20, adult = false) {
     const entry = this._MANGA_GENRE_MAP[Number(genreId)];
     if (!entry) return { data: [] };
 
     try {
       let query, variables;
       if (entry.type === "tag") {
-        query = `query($tag: String, $p: Int, $per: Int) {
+        query = `query($tag: String, $p: Int, $per: Int, $adult: Boolean) {
           Page(page: $p, perPage: $per) {
-            media(tag: $tag, type: MANGA, isAdult: false, sort: POPULARITY_DESC) {
+            media(tag: $tag, type: MANGA, isAdult: $adult, sort: POPULARITY_DESC) {
               id title { romaji english native }
               coverImage { large }
               status format genres description(asHtml: false)
@@ -1408,11 +1408,11 @@ const JIKAN = {
             }
           }
         }`;
-        variables = { tag: entry.name, p: page, per: limit };
+        variables = { tag: entry.name, p: page, per: limit, adult: !!adult };
       } else {
-        query = `query($genre: String, $p: Int, $per: Int) {
+        query = `query($genre: String, $p: Int, $per: Int, $adult: Boolean) {
           Page(page: $p, perPage: $per) {
-            media(genre: $genre, type: MANGA, isAdult: false, sort: POPULARITY_DESC) {
+            media(genre: $genre, type: MANGA, isAdult: $adult, sort: POPULARITY_DESC) {
               id title { romaji english native }
               coverImage { large }
               status format genres description(asHtml: false)
@@ -1421,7 +1421,7 @@ const JIKAN = {
             }
           }
         }`;
-        variables = { genre: entry.name, p: page, per: limit };
+        variables = { genre: entry.name, p: page, per: limit, adult: !!adult };
       }
       const data = await this._aniMangaQuery(query, variables);
       return { data: this._aniMangaToList(data) };
@@ -1431,10 +1431,10 @@ const JIKAN = {
   },
 
   // ── Manga catalog rows (merged AniList + ComicK) ─────────────────────
-  async mangaTrending(page = 1) {
-    const aniPromise = this._aniMangaQuery(`query($p: Int, $per: Int) {
+  async mangaTrending(page = 1, adult = false) {
+    const aniPromise = this._aniMangaQuery(`query($p: Int, $per: Int, $adult: Boolean) {
       Page(page: $p, perPage: $per) {
-        media(type: MANGA, isAdult: false, sort: TRENDING_DESC) {
+        media(type: MANGA, isAdult: $adult, sort: TRENDING_DESC) {
           id title { romaji english native }
           coverImage { large extraLarge }
           status format genres description(asHtml: false)
@@ -1442,7 +1442,7 @@ const JIKAN = {
           staff { edges { node { name { full } } } }
         }
       }
-    }`, { p: page, per: 20 }).then(d => ({ data: this._aniMangaToList(d) })).catch(() => ({ data: [] }));
+    }`, { p: page, per: 20, adult: !!adult }).then(d => ({ data: this._aniMangaToList(d) })).catch(() => ({ data: [] }));
 
     const comickPromise = this.comickPopular(page, 10).catch(() => ({ data: [] }));
 
@@ -1461,10 +1461,10 @@ const JIKAN = {
     return { data: merged.slice(0, 20) };
   },
 
-  async mangaNewReleases(page = 1) {
-    const aniPromise = this._aniMangaQuery(`query($p: Int, $per: Int) {
+  async mangaNewReleases(page = 1, adult = false) {
+    const aniPromise = this._aniMangaQuery(`query($p: Int, $per: Int, $adult: Boolean) {
       Page(page: $p, perPage: $per) {
-        media(type: MANGA, isAdult: false, sort: START_DATE_DESC) {
+        media(type: MANGA, isAdult: $adult, sort: START_DATE_DESC) {
           id title { romaji english native }
           coverImage { large extraLarge }
           status format genres description(asHtml: false)
@@ -1472,7 +1472,7 @@ const JIKAN = {
           staff { edges { node { name { full } } } }
         }
       }
-    }`, { p: page, per: 20 }).then(d => ({ data: this._aniMangaToList(d) })).catch(() => ({ data: [] }));
+    }`, { p: page, per: 20, adult: !!adult }).then(d => ({ data: this._aniMangaToList(d) })).catch(() => ({ data: [] }));
 
     const comickPromise = this.comickPopular(page + 5, 10).catch(() => ({ data: [] }));
 
@@ -1491,11 +1491,11 @@ const JIKAN = {
     return { data: merged.slice(0, 20) };
   },
 
-  async mangaPopularRow(page = 1) {
+  async mangaPopularRow(page = 1, adult = false) {
     try {
-      const q = `query($p: Int, $per: Int) {
+      const q = `query($p: Int, $per: Int, $adult: Boolean) {
         Page(page: $p, perPage: $per) {
-          media(type: MANGA, isAdult: false, sort: POPULARITY_DESC) {
+          media(type: MANGA, isAdult: $adult, sort: POPULARITY_DESC) {
             id title { romaji english native }
             coverImage { large extraLarge }
             status format genres description(asHtml: false)
@@ -1504,18 +1504,18 @@ const JIKAN = {
           }
         }
       }`;
-      const data = await this._aniMangaQuery(q, { p: page, per: 20 });
+      const data = await this._aniMangaQuery(q, { p: page, per: 20, adult: !!adult });
       return { data: this._aniMangaToList(data) };
     } catch (e) {
       return { data: [] };
     }
   },
 
-  async mangaTopRated(page = 1) {
+  async mangaTopRated(page = 1, adult = false) {
     try {
-      const q = `query($p: Int, $per: Int) {
+      const q = `query($p: Int, $per: Int, $adult: Boolean) {
         Page(page: $p, perPage: $per) {
-          media(type: MANGA, isAdult: false, sort: SCORE_DESC) {
+          media(type: MANGA, isAdult: $adult, sort: SCORE_DESC) {
             id title { romaji english native }
             coverImage { large extraLarge }
             status format genres description(asHtml: false)
@@ -1524,7 +1524,7 @@ const JIKAN = {
           }
         }
       }`;
-      const data = await this._aniMangaQuery(q, { p: page, per: 20 });
+      const data = await this._aniMangaQuery(q, { p: page, per: 20, adult: !!adult });
       return { data: this._aniMangaToList(data) };
     } catch (e) {
       return { data: [] };
@@ -2108,13 +2108,26 @@ const JIKAN = {
         Math.abs(count - malEps) <= Math.max(2, malEps * 0.15);
 
       let pick = null;
-      for (const { r, s } of candidates) {
+      // Verify top candidates in parallel (up to 5) instead of sequentially.
+      const topCandidates = candidates.slice(0, 5);
+      const epChecks = await Promise.allSettled(
+        topCandidates.map(({ r }) =>
+          this._anikotoGet(`${base}/episodes/${r.animeId}`).then((epRes) => {
+            const eps = Array.isArray(epRes?.results?.episodes) ? epRes.results.episodes : [];
+            const total = Number(epRes?.results?.totalEpisodes) || eps.length;
+            return { r, eps, total };
+          })
+        )
+      );
+      for (const { r, s } of topCandidates) {
         if (s <= 0) continue;
-        const epsRes = await this._anikotoGet(`${base}/episodes/${r.animeId}`);
-        const eps = Array.isArray(epsRes?.results?.episodes) ? epsRes.results.episodes : [];
+        const check = epChecks.find(
+          (c) => c.status === "fulfilled" && c.value?.r?.animeId === r.animeId
+        );
+        if (!check) continue;
+        const { eps, total } = check.value;
         if (!eps.length) continue;
         const epMal = String(eps[0]?.mal_id || "");
-        const total = Number(epsRes?.results?.totalEpisodes) || eps.length;
         if (malId && epMal === malId) { pick = { r, eps, total }; break; }
         if (s >= 60 && plausible(total)) { pick = { r, eps, total }; break; }
       }
