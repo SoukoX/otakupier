@@ -1075,6 +1075,7 @@ const JIKAN = {
       _comickViews: m.viewCount,
       _source: "comick",
       isAdult: m.content_rating === "pornographic" || m.content_rating === "erotica",
+      contentRating: m.content_rating || "safe",
     };
   },
 
