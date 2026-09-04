@@ -4859,7 +4859,7 @@ footer .footer-links {
   flex: 1;
 }
 .manga-title {
-  font-size: 1.8rem;
+  font-size: clamp(1.4rem, 4vw, 1.8rem);
   font-weight: 700;
   margin-bottom: 6px;
   line-height: 1.25;
@@ -5302,6 +5302,51 @@ footer .footer-links {
   flex-shrink: 0;
 }
 
+/* ── Manga detail mobile ── */
+@media (max-width: 768px) {
+  .manga-detail {
+    padding: 16px 12px;
+  }
+  .manga-hero {
+    flex-direction: column;
+    align-items: center;
+    gap: 16px;
+    margin-bottom: 24px;
+  }
+  .manga-cover {
+    width: 100%;
+    max-width: 220px;
+  }
+  .manga-cover img {
+    max-height: 320px;
+    object-fit: cover;
+  }
+  .manga-info {
+    width: 100%;
+    text-align: center;
+  }
+  .manga-meta-row {
+    justify-content: center;
+    gap: 8px;
+  }
+  .manga-genres {
+    justify-content: center;
+  }
+  .manga-actions {
+    justify-content: center;
+  }
+  .manga-synopsis {
+    text-align: left;
+  }
+  .related-list {
+    gap: 8px;
+  }
+  .related-item {
+    padding: 6px 12px;
+    font-size: 0.82rem;
+  }
+}
+
 /* ── Reader mobile ── */
 @media (max-width: 768px) {
   .reader-top-bar {
@@ -5358,6 +5403,9 @@ footer .footer-links {
   .reader-page-img {
     max-width: 100%;
   }
+  .reader-page-wrapper {
+    max-width: 100%;
+  }
   .reader-loading {
     min-height: 200px;
     padding: 40px 16px;
@@ -5380,5 +5428,16 @@ footer .footer-links {
   }
   .reader-backdrop.show {
     display: block;
+  }
+}
+
+@media (max-width: 960px) and (orientation: landscape) {
+  .reader-sidebar {
+    width: 260px;
+    min-width: 260px;
+  }
+  .reader-sidebar:not(.hidden) {
+    width: 260px;
+    min-width: 260px;
   }
 }
