@@ -1007,14 +1007,13 @@ const JIKAN = {
   _COMICK_BASE: "https://api.comick.dev/v1.0",
   _comickCache: new Map(),
 
-  async comickSearch(title, limit = 5) {
+  async comickSearch(title, limit = 5, adult = false) {
     try {
       const ctrl = new AbortController();
       const timer = setTimeout(() => ctrl.abort(), 10000);
-      const res = await fetch(
-        `${this._COMICK_BASE}/search?q=${encodeURIComponent(title)}&type=comic&limit=${limit}`,
-        { signal: ctrl.signal }
-      );
+      let url = `${this._COMICK_BASE}/search?q=${encodeURIComponent(title)}&type=comic&limit=${limit}`;
+      if (adult) url += "&content_rating[]=pornographic&content_rating[]=erotica";
+      const res = await fetch(url, { signal: ctrl.signal });
       clearTimeout(timer);
       if (!res.ok) return [];
       const data = await res.json();
@@ -1075,14 +1074,15 @@ const JIKAN = {
       _comickRating: m.rating,
       _comickViews: m.viewCount,
       _source: "comick",
+      isAdult: m.content_rating === "pornographic" || m.content_rating === "erotica",
     };
   },
 
   // ComicK manga search with full details (cover art from individual lookups).
   // Returns unified manga objects. Used as primary source when AniList fails.
-  async comickMangaSearch(query, limit = 20) {
+  async comickMangaSearch(query, limit = 20, adult = false) {
     try {
-      const results = await this.comickSearch(query, Math.min(limit, 20));
+      const results = await this.comickSearch(query, Math.min(limit, 20), adult);
       if (!results.length) return [];
       // Fetch cover art in parallel (up to 10 at a time to avoid hammering)
       const fetchDetail = async (m) => {
@@ -1198,6 +1198,7 @@ const JIKAN = {
         coverImage { large }
         status format genres description(asHtml: false)
         chapters volumes countryOfOrigin startDate { year }
+        isAdult
       }
     }
   }`,
@@ -1249,6 +1250,7 @@ const JIKAN = {
           chapters: m.chapters,
           volumes: m.volumes,
           altTitles: [m.title?.romaji, m.title?.native].filter(t => t && t !== title),
+          isAdult: !!m.isAdult,
         };
       });
   },
@@ -1259,7 +1261,7 @@ const JIKAN = {
     const sources = await Promise.allSettled([
       this._aniMangaQuery(this._MANGA_SEARCH_Q, { s: query, p: 1, per: limit, adult: !!adult })
         .then(d => this._aniMangaToList(d)),
-      this.comickMangaSearch(query, Math.min(limit, 10)).catch(() => []),
+      this.comickMangaSearch(query, Math.min(limit, 10), adult).catch(() => []),
     ]);
     const aniResults = sources[0].status === "fulfilled" ? sources[0].value : [];
     const comickResults = sources[1].status === "fulfilled" ? sources[1].value : [];
@@ -1283,9 +1285,10 @@ const JIKAN = {
           id title { romaji english native }
           coverImage { large }
           status format genres description(asHtml: false)
-          chapters volumes countryOfOrigin startDate { year }
-          staff { edges { node { name { full } } } }
-        }
+        chapters volumes countryOfOrigin startDate { year }
+        isAdult
+        staff { edges { node { name { full } } } }
+      }
       }
     }`, { p: page, per: limit, adult: !!adult }).then(d => this._aniMangaToList(d)).catch(() => []);
 
@@ -1438,9 +1441,10 @@ const JIKAN = {
           id title { romaji english native }
           coverImage { large extraLarge }
           status format genres description(asHtml: false)
-          chapters volumes countryOfOrigin startDate { year }
-          staff { edges { node { name { full } } } }
-        }
+        chapters volumes countryOfOrigin startDate { year }
+        isAdult
+        staff { edges { node { name { full } } } }
+      }
       }
     }`, { p: page, per: 20, adult: !!adult }).then(d => ({ data: this._aniMangaToList(d) })).catch(() => ({ data: [] }));
 
@@ -1468,9 +1472,10 @@ const JIKAN = {
           id title { romaji english native }
           coverImage { large extraLarge }
           status format genres description(asHtml: false)
-          chapters volumes countryOfOrigin startDate { year }
-          staff { edges { node { name { full } } } }
-        }
+        chapters volumes countryOfOrigin startDate { year }
+        isAdult
+        staff { edges { node { name { full } } } }
+      }
       }
     }`, { p: page, per: 20, adult: !!adult }).then(d => ({ data: this._aniMangaToList(d) })).catch(() => ({ data: [] }));
 
