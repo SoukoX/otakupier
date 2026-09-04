@@ -127,8 +127,8 @@
         data.forEach((s) => {
           const el = document.createElement("div");
           el.className = "anime-card";
-          const readerUrl = pageHref("mangareader") + "?id=" + encodeURIComponent(s.manga_id) + "&title=" + encodeURIComponent(s.manga_title);
           const hasChapter = s.last_chapter && s.last_chapter !== "";
+          const readerUrl = pageHref("mangareader") + "?id=" + encodeURIComponent(s.manga_id) + "&title=" + encodeURIComponent(s.manga_title) + (hasChapter ? "&ch=" + encodeURIComponent(s.last_chapter) : "");
           el.innerHTML = `
             <div class="poster">
               <img src="${s.manga_image || JIKAN.PLACEHOLDER}"
