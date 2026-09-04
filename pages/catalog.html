@@ -235,6 +235,19 @@
       state.page = 1;
       const btn = document.getElementById("adultToggle");
       if (btn) btn.classList.toggle("is-active", state.adult);
+      document.getElementById("searchBox").placeholder = state.adult ? "Search adult manga & manhwa..." : (catType === "manga" ? "Search manga..." : "Search anime...");
+      if (state.adult) {
+        catType = "manga";
+        document.querySelectorAll(".cat-type-btn").forEach(b => b.classList.toggle("active", b.dataset.type === "manga"));
+        document.getElementById("catHero").style.display = "none";
+        document.getElementById("catRows").style.display = "none";
+        document.getElementById("mangaHero").style.display = "";
+        document.getElementById("mangaRows").style.display = "";
+        const adultBtn = document.getElementById("adultToggle");
+        if (adultBtn) adultBtn.style.display = "";
+        loadMangaHero();
+        loadMangaRows();
+      }
       loadCatalog();
     }
 
@@ -474,7 +487,10 @@
             }
           });
           const rt = document.getElementById("resultsTitle");
-          if (rt) rt.textContent = q ? 'Manga results for "' + q + '"' : g ? "Manga by genre" : "Popular manga";
+          if (rt) {
+            const label = state.adult ? '18+ ' : '';
+            rt.textContent = q ? label + 'Manga results for "' + q + '"' : g ? label + "Manga by genre" : label + "Popular manga";
+          }
           document.getElementById("pageInfo").textContent = "Page " + state.page;
           document.getElementById("prevBtn").style.visibility = state.page > 1 ? "visible" : "hidden";
           document.getElementById("nextBtn").style.visibility = results.length >= 20 ? "visible" : "hidden";
@@ -568,7 +584,10 @@
         : m.status === "NOT_YET_RELEASED" ? "Coming Soon"
         : m.status || "";
       const fmtClass = /manhwa/i.test(fmt) ? "fmt-manhwa" : /manhua/i.test(fmt) ? "fmt-manhua" : "fmt-manga";
-      const isAdult = m.isAdult || m._isAdult || (m.genres && (m.genres.includes("Hentai") || m.genres.includes("Ecchi")));
+      const isAdult = m.isAdult || m._isAdult ||
+        (m.genres && m.genres.some(g => /hentai|ecchi|adult/i.test(g))) ||
+        (m.format && /hentai/i.test(m.format)) ||
+        (m.contentRating && /pornographic|erotica/i.test(m.contentRating));
       return '<a class="card stream-card manga-card" href="' + href + '">' +
         '<div class="card-poster"><img src="' + JIKAN.esc(cover) + '" alt="' + JIKAN.esc(m.title) + '" loading="lazy" onerror="mangaImgError(this)">' +
         '<span class="card-fmt-badge ' + fmtClass + '">' + JIKAN.esc(fmt) + '</span>' +
