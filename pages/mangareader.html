@@ -26,6 +26,7 @@
         <span class="reader-chapter-label" id="chapterLabel">Select a chapter</span>
         <button class="btn btn-outline btn-small" id="nextChapter" disabled>Next →</button>
       </div>
+      <span id="readerSaveSlot"></span>
     </div>
 
     <div class="reader-content">
@@ -140,6 +141,7 @@
           if (chosen.mangadexId) mangadexId = chosen.mangadexId;
           if (chosen.weebcentralId) weebcentralMangaId = chosen.weebcentralId;
           renderChapterList();
+          loadReaderSaveState();
         } else {
           $("chapterList").innerHTML = '<div class="empty-state">' +
             '<p>No chapters found.</p>' +
@@ -326,6 +328,7 @@
         $("readerPages").innerHTML = '<div class="reader-loading"><div class="spinner"></div><span>Loading...</span></div>';
 
         loadChapterImages(ch, gen);
+        if (isSaved) updateSavePosition();
       }
 
       function updateNavButtons() {
@@ -463,6 +466,85 @@
         const d = document.createElement("div");
         d.textContent = str;
         return d.innerHTML;
+      }
+
+      // ── Save manga with chapter position ──
+      let isSaved = false;
+      let savedRowId = null;
+
+      async function loadReaderSaveState() {
+        if (!isLoggedIn() || !mangaId) return;
+        try {
+          const { data } = await supabase
+            .from("saved_manga")
+            .select("id, last_chapter_idx")
+            .eq("user_id", currentUser.id)
+            .eq("manga_id", mangaId)
+            .maybeSingle();
+          if (data) {
+            isSaved = true;
+            savedRowId = data.id;
+          }
+          renderReaderSaveButton();
+        } catch (_) {}
+      }
+
+      function renderReaderSaveButton() {
+        const slot = $("readerSaveSlot");
+        if (!slot) return;
+        if (!isLoggedIn()) {
+          slot.innerHTML = '<a class="btn btn-outline btn-small" href="' + pageHref("login") + '">Save</a>';
+          return;
+        }
+        if (isSaved) {
+          const ch = chapters[currentChapterIdx];
+          const chLabel = ch ? "Ch. " + (ch.attributes.chapter || "?") : "";
+          slot.innerHTML = '<button class="btn btn-outline btn-small" onclick="updateSavePosition()" title="Update save to current chapter">✓ Saved' +
+            (chLabel ? ' · ' + chLabel : '') + '</button>';
+        } else {
+          slot.innerHTML = '<button class="btn btn-primary btn-small" onclick="saveMangaFromReader()">＋ Save</button>';
+        }
+      }
+
+      async function saveMangaFromReader() {
+        if (!isLoggedIn()) return;
+        const ch = chapters[currentChapterIdx];
+        const chLabel = ch ? (ch.attributes.chapter || "?") : "";
+        const chTitle = ch ? (ch.attributes.title || "") : "";
+        try {
+          await dbInsert("saved_manga", {
+            user_id: currentUser.id,
+            manga_id: mangaId,
+            manga_title: mangaTitle,
+            manga_image: "",
+            last_chapter: chLabel,
+            last_chapter_idx: currentChapterIdx,
+          });
+          isSaved = true;
+          awardXp(5);
+          awardRp("save");
+          showToast("Saved! +5 XP — " + (chLabel ? "Ch. " + chLabel : "position saved"));
+          renderReaderSaveButton();
+        } catch (err) {
+          showToast("Could not save: " + err.message);
+        }
+      }
+
+      async function updateSavePosition() {
+        if (!isLoggedIn() || !isSaved) return;
+        const ch = chapters[currentChapterIdx];
+        const chLabel = ch ? (ch.attributes.chapter || "?") : "";
+        try {
+          await supabase.from("saved_manga").update({
+            last_chapter: chLabel,
+            last_chapter_idx: currentChapterIdx,
+            updated_at: new Date().toISOString(),
+          }).eq("user_id", currentUser.id).eq("manga_id", mangaId);
+          showToast("Position updated — Ch. " + chLabel);
+          renderReaderSaveButton();
+        } catch (err) {
+          showToast("Could not update position");
+        }
       }
 
       init();
