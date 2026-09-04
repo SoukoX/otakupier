@@ -252,6 +252,16 @@ img {
   display: none;
 }
 
+.nav-auth {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 0 0 auto;
+  margin-left: auto;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
 .nav-links a {
   padding: 8px 10px;
   border-radius: 6px;
@@ -297,16 +307,6 @@ img {
   font-weight: 800;
   line-height: 1;
   vertical-align: middle;
-}
-
-.nav-auth {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  flex: 0 0 auto;
-  margin-left: auto;
-  white-space: nowrap;
-  flex-shrink: 0;
 }
 
 /* Home page mobile dropdown panel */
