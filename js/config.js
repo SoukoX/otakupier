@@ -87,7 +87,7 @@ const CONFIG = {
     // those through AniPub's generic player wrapper so megaplay always receives
     // a Referer and serves its player inside an iframe ("dynamic" provider).
     // Listed first — it is the preferred on-site provider.
-    { id: "anikoto", name: "Stream 1", mode: "embed", dynamic: "anikoto",
+    { id: "anikoto", name: "AniKoto", mode: "embed", dynamic: "anikoto",
       referrerPolicy: "no-referrer-when-downgrade",
       // Its embeds are proxied through AniPub's generic player wrapper, which
       // refuses to run inside a sandboxed frame — so sandbox is disabled.
@@ -102,7 +102,7 @@ const CONFIG = {
     // NOTE: its player refuses to run inside a sandboxed frame, so sandbox is
     // disabled; it also streams with a referrer sent (matches its working
     // embeds), hence referrerPolicy below.
-    { id: "anipub", name: "Stream 2", mode: "embed", sandbox: false, dynamic: "anipub",
+    { id: "anipub", name: "AniPub", mode: "embed", sandbox: false, dynamic: "anipub",
       referrerPolicy: "no-referrer-when-downgrade",
       url: "https://anipub.xyz/video/{anipub_ep_id}/sub", enabled: true, volumeControl: "none" },
 
@@ -110,7 +110,7 @@ const CONFIG = {
     // URL resolved by JIKAN.anixoUrl which maps the MAL id to AniList first).
     // Requires the official embed-sdk.js loaded on the watch/anime pages and
     // refuses sandboxed iframes. Independent backend, kept for redundancy.
-    { id: "anixo", name: "Stream 3", mode: "embed", dynamic: "anixo",
+    { id: "anixo", name: "AniXo", mode: "embed", dynamic: "anixo",
       sandbox: false, referrerPolicy: "no-referrer-when-downgrade",
       url: "https://anixo.buzz/embed/ani/{anilist_id}/{ep_num}/{sub}", enabled: true, volumeControl: "full" },
 
