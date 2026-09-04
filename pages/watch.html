@@ -116,9 +116,10 @@
 
         renderPage();
         SEO.setAnimeMeta(animeData);
-        // Warm the MAL→AniList mapping used by the AniXo embed so the first
-        // episode click doesn't wait on a live lookup.
+        // Pre-warm provider caches in background so first episode loads fast.
         JIKAN.anilistIdOf(animeData.mal_id).catch(() => {});
+        JIKAN.anikotoEpisodes(animeData).catch(() => {});
+        JIKAN.anipubEpisodes(animeData).catch(() => {});
       } catch (err) {
         main.innerHTML = `<div class="empty-state">Could not load this anime.</div>`;
       }
@@ -403,7 +404,7 @@
         // the same way as AniPub so "Loading…" never persists.
         url = await Promise.race([
           JIKAN.anikotoUrl(animeData, ep, streamLang),
-          new Promise((r) => setTimeout(() => r(null), 12000)),
+          new Promise((r) => setTimeout(() => r(null), 8000)),
         ]);
         if (!url) {
           frame.innerHTML = `<div class="stream-notice">
