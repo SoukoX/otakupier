@@ -798,7 +798,7 @@ async function awardRp(reason) {
   try { await supabase.rpc("add_rp", { amount, reason }); } catch (e) {}
 }
 
-// Award RP to another user (e.g. their review got liked). No self-award.
+// Award RP to another user. No self-award.
 async function awardRpTo(recipient, reason) {
   if (!supabase || !isLoggedIn() || !recipient) return;
   const amount = RP_REWARDS[reason];
