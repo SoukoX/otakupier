@@ -83,12 +83,12 @@ const SEO = {
   setAnimeMeta(anime) {
     if (!anime) return;
     const title = anime.title_english || anime.title || "Anime";
-    const clean = this._clean(anime.synopsis, 200) || "View anime details, rankings and community reviews on OtakuPier.";
+    const clean = this._clean(anime.synopsis, 200) || "View anime details and where to watch on OtakuPier.";
     const id = anime.mal_id || "";
     const url = id ? `${this.BASE}/pages/anime?id=${encodeURIComponent(id)}` : this.BASE + "/";
     const img = anime.images?.jpg?.large_image_url || anime.images?.jpg?.image_url || `${this.BASE}/images/banner.svg`;
 
-    document.title = `${title} - Reviews, Ranking & Where to Watch | OtakuPier`;
+    document.title = `${title} - Where to Watch | OtakuPier`;
     this._set('meta[name="description"]', clean);
     this._set('meta[property="og:type"]', "article");
     this._set('meta[property="og:site_name"]', "OtakuPier");
@@ -158,7 +158,7 @@ const SEO = {
     const title = anime?.title_english || anime?.title || "OtakuPier";
     const id = anime?.mal_id || "";
     const url = id ? `${this.BASE}/pages/anime?id=${encodeURIComponent(id)}` : this.BASE + "/";
-    const text = encodeURIComponent(`Check out "${title}" on OtakuPier - reviews, ranking & where to watch`);
+    const text = encodeURIComponent(`Check out "${title}" on OtakuPier - where to watch`);
     const encUrl = encodeURIComponent(url);
     return [
       { label: "𝕏 Post", href: `https://twitter.com/intent/tweet?text=${text}&url=${encUrl}` },
