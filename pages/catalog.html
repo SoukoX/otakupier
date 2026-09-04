@@ -439,6 +439,7 @@
     async function loadCatalog() {
       const grid = document.getElementById("catalogGrid");
       grid.innerHTML = skeletonGrid(20);
+      grid.classList.toggle("adult-active", state.adult && catType === "manga");
 
       // ── Manga mode ──
       if (catType === "manga") {
@@ -567,9 +568,11 @@
         : m.status === "NOT_YET_RELEASED" ? "Coming Soon"
         : m.status || "";
       const fmtClass = /manhwa/i.test(fmt) ? "fmt-manhwa" : /manhua/i.test(fmt) ? "fmt-manhua" : "fmt-manga";
+      const isAdult = m.isAdult || m._isAdult || (m.genres && (m.genres.includes("Hentai") || m.genres.includes("Ecchi")));
       return '<a class="card stream-card manga-card" href="' + href + '">' +
         '<div class="card-poster"><img src="' + JIKAN.esc(cover) + '" alt="' + JIKAN.esc(m.title) + '" loading="lazy" onerror="mangaImgError(this)">' +
         '<span class="card-fmt-badge ' + fmtClass + '">' + JIKAN.esc(fmt) + '</span>' +
+        (isAdult ? '<span class="card-badge adult-badge">18+</span>' : '') +
         (statusLabel ? '<span class="card-badge">' + JIKAN.esc(statusLabel) + '</span>' : '') +
         '</div>' +
         '<div class="card-body">' +
