@@ -6,9 +6,9 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta name="msvalidate.01" content="4F55345C289F9597335C55566F2B31F9" />
 
-  <title>Anime Details & Reviews - OtakuPier</title>
+  <title>Anime Details - OtakuPier</title>
   <meta name="robots" content="index, follow">
-  <meta name="description" content="Full anime details on OtakuPier — synopsis, episodes, characters, trailers, community rankings and user reviews.">
+  <meta name="description" content="Full anime details on OtakuPier — synopsis, episodes, characters, trailers, and where to watch.">
   <link rel="canonical" href="https://otakupier.2bd.net/pages/anime">
   <link rel="alternate" hreflang="en" href="https://otakupier.2bd.net/pages/anime">
   <link rel="alternate" hreflang="x-default" href="https://otakupier.2bd.net/pages/anime">
@@ -17,13 +17,13 @@
   <link rel="icon" type="image/x-icon" href="../favicon.ico">
   <meta property="og:type" content="website">
   <meta property="og:site_name" content="OtakuPier">
-  <meta property="og:title" content="Anime Details & Reviews - OtakuPier">
-  <meta property="og:description" content="Full anime details — synopsis, episodes, characters, trailers, community rankings and user reviews.">
+  <meta property="og:title" content="Anime Details - OtakuPier">
+  <meta property="og:description" content="Full anime details — synopsis, episodes, characters, trailers, and where to watch.">
   <meta property="og:url" content="https://otakupier.2bd.net/pages/anime">
   <meta property="og:image" content="https://otakupier.2bd.net/images/banner.svg">
   <meta name="twitter:card" content="summary_large_image">
-  <meta name="twitter:title" content="Anime Details & Reviews - OtakuPier">
-  <meta name="twitter:description" content="Full anime details on OtakuPier — synopsis, episodes, characters, trailers, community rankings and user reviews.">
+  <meta name="twitter:title" content="Anime Details - OtakuPier">
+  <meta name="twitter:description" content="Full anime details on OtakuPier — synopsis, episodes, characters, trailers, and where to watch.">
   <meta name="twitter:image" content="https://otakupier.2bd.net/images/banner.svg">
   <link rel="preconnect" href="https://api.jikan.moe">
   <link rel="preconnect" href="https://cdn.jsdelivr.net">
@@ -47,7 +47,7 @@
      <div class="loading"><div class="spinner"></div>Loading anime...</div>
    </main>
 
-   <h1 style="display:none;">Anime Details & Reviews - OtakuPier</h1>
+   <h1 style="display:none;">Anime Details - OtakuPier</h1>
 
    <footer id="siteFooter"></footer>
 
@@ -60,8 +60,6 @@
   <script>
     const id = new URLSearchParams(window.location.search).get("id");
     let animeData = null;
-    let myRank = null;
-    let communityRating = null;
     let episodeCount = 0;
 
     async function loadAnime() {
@@ -104,10 +102,7 @@
         loadNextEpisode();
         // Warm the MAL→AniList mapping used by the AniXo embed.
         JIKAN.anilistIdOf(animeData.mal_id).catch(() => {});
-        loadCommunityRating();
         loadSavedState();
-        loadReviews();
-        loadMyRank();
         // Characters + episodes fetch in parallel (they're independent)
         await Promise.all([loadCharacters(), loadEpisodes()]);
       } catch (err) {
@@ -155,21 +150,11 @@
           </div>
         </div>
 
-        <div id="rankBox"></div>
-        <div id="saveSlot" style="margin-top:14px;"></div>
-
-        <div class="reviews-section">
-          <h3 class="sub-head">Reviews &amp; Comments</h3>
-          <div id="reviewFormSlot"></div>
-          <div id="reviewList"></div>
-        </div>`;
+        <div id="saveSlot" style="margin-top:14px;"></div>`;
 
       SEO.setAnimeMeta(animeData);
       renderShareRow();
       loadSavedState();
-      loadCommunityRating();
-      loadReviews();
-      loadMyRank();
     }
 
     function renderHeader() {
@@ -204,7 +189,6 @@
                 ${a.episodes ? `<span class="meta-item">${a.episodes} eps</span>` : ""}
                 ${a.status ? `<span class="meta-item">${JIKAN.esc(a.status)}</span>` : ""}
                 ${a.score ? `<span class="meta-score" title="MyAnimeList score">★ ${a.score.toFixed(2)}</span>` : ""}
-                <span class="meta-score" id="opScoreStat" title="OtakuPier community score">★ --</span>
                 ${a.rank ? `<span class="meta-item">Rank #${a.rank}</span>` : ""}
               </div>
               <div class="detail-hero-actions">
@@ -230,8 +214,6 @@
           <span class="fact">Duration: <b>${JIKAN.esc(a.duration || "N/A")}</b></span>
         </div>
 
-        <div id="rankBox"></div>
-
         <div id="saveSlot" style="margin-top:14px;"></div>
 
         <div id="relatedSlot"></div>
@@ -242,13 +224,7 @@
         <div class="char-grid" id="charGrid"><div class="loading"><div class="spinner"></div></div></div>
 
         <h3 class="sub-head">Episodes</h3>
-        <div class="ep-list" id="epList"><div class="loading"><div class="spinner"></div></div></div>
-
-        <div class="reviews-section">
-          <h3 class="sub-head">Reviews &amp; Comments</h3>
-          <div id="reviewFormSlot"></div>
-          <div id="reviewList"></div>
-        </div>`;
+        <div class="ep-list" id="epList"><div class="loading"><div class="spinner"></div></div></div>`;
 
       loadMangaLinks();
       renderWatchPanel();
@@ -1070,134 +1046,6 @@
       }
     }
 
-    // ---------- OtakuPier community rating (avg of all user votes) ----------
-    // Users who bought "Voting Power 2x" have their vote count twice, so
-    // power users genuinely move the community score.
-    async function loadCommunityRating() {
-      if (!SUPABASE_READY || !supabase) return;
-      try {
-        const { data, error } = await supabase
-          .from("rankings")
-          .select("user_id, position")
-          .eq("anime_mal_id", Number(id));
-        if (error) throw error;
-        const n = data.length;
-        if (!n) return;
-        const perkMap = await spendingsMap(data.map((r) => r.user_id));
-        let total = 0, weight = 0;
-        data.forEach((r) => {
-          const p = perkMap[r.user_id] || {};
-          const w = p.vote_power ? 2 : 1;
-          total += r.position * w;
-          weight += w;
-        });
-        const avg = total / weight;
-        communityRating = { avg: avg.toFixed(2), count: n };
-        const stat = document.getElementById("opScoreStat");
-        if (stat) {
-          stat.innerHTML = `★ ${avg.toFixed(2)} (${n})`;
-          stat.title = `OtakuPier community score (${n} votes)`;
-        }
-      } catch (err) {
-        // silently ignore; official score stays
-      }
-    }
-
-    // ---------- Rankings: 1 user = 1 vote ----------
-    async function loadMyRank() {
-      if (!SUPABASE_READY || !supabase) return;
-      const box = document.getElementById("rankBox");
-      try {
-        const { data } = await supabase
-          .from("rankings")
-          .select("*")
-          .eq("anime_mal_id", Number(id))
-          .eq("user_id", currentUser?.id)
-          .maybeSingle();
-        myRank = data;
-        renderRankBox(box);
-      } catch (err) {
-        renderRankBox(box);
-      }
-    }
-
-    function renderRankBox(box) {
-      if (!box) return;
-      const official = animeData.score ? animeData.score.toFixed(1) : "N/A";
-      const op = communityRating ? `${communityRating.avg} (${communityRating.count} votes)` : "No votes yet";
-      box.innerHTML = `
-        <div class="review-form">
-          <strong>Rate this anime</strong> <span style="color:var(--text-dim); font-weight:400; font-size:.9rem;">— 1 vote per user ${isAdmin() ? "(admins can vote multiple times)" : ""}</span>
-          <div style="display:flex; flex-wrap:wrap; gap:18px; margin:10px 0 14px;">
-            <div style="text-align:center;">
-              <div style="font-size:.8rem; color:var(--text-dim);">Official score</div>
-              <div style="font-size:1.4rem; font-weight:800; color:var(--accent-3);">${official}</div>
-            </div>
-            <div style="text-align:center;">
-              <div style="font-size:.8rem; color:var(--text-dim);">OtakuPier score</div>
-              <div style="font-size:1.4rem; font-weight:800; color:var(--accent-2);">${op}</div>
-            </div>
-            ${myRank && !isAdmin() ? `<div style="text-align:center;">
-              <div style="font-size:.8rem; color:var(--text-dim);">Your vote</div>
-              <div style="font-size:1.4rem; font-weight:800; color:var(--accent);">${myRank.position}/10</div>
-            </div>` : ""}
-          </div>
-          ${isLoggedIn()
-            ? `<label style="display:block; margin-bottom:8px;">Vote ${myRank && !isAdmin() ? "(change your vote)" : ""}:</label>
-               <div style="display:flex; gap:10px; flex-wrap:wrap; align-items:center;">
-                 <input type="number" id="rankInput" min="1" max="10" step="1" value="${myRank?.position || 5}"
-                        style="width:90px; padding:10px; border-radius:10px; border:1px solid var(--border); background:var(--bg-alt); color:var(--text); font-family:inherit;">
-                 <button class="btn btn-primary" onclick="saveRank()">${myRank && !isAdmin() ? "Update vote" : "Cast vote"}</button>
-                 ${myRank && !isAdmin() ? `<button class="btn btn-danger" onclick="removeRank()">Remove vote</button>` : ""}
-               </div>`
-            : `<a class="btn btn-outline" href="login.html">Login to vote on this anime</a>`}
-        </div>`;
-    }
-
-    async function saveRank() {
-      const pos = Number(document.getElementById("rankInput").value);
-      if (!Number.isInteger(pos) || pos < 1 || pos > 10) {
-        showToast("Vote must be a whole number between 1 and 10");
-        return;
-      }
-      try {
-        const payload = {
-          user_id: currentUser.id,
-          anime_mal_id: Number(id),
-          anime_title: JIKAN.title(animeData),
-          anime_image: animeData.images?.jpg?.image_url,
-          position: pos,
-        };
-        if (myRank && !isAdmin()) {
-          await supabase.from("rankings").update({ position: pos }).eq("id", myRank.id);
-        } else {
-          await dbInsert("rankings", payload);
-          if (!myRank) { awardXp(5); awardRp("vote"); } // +5 XP +5 RP for first vote
-        }
-        showToast("Vote saved!");
-        myRank = { ...myRank, position: pos, id: myRank?.id };
-        communityRating = null;
-        renderRankBox(document.getElementById("rankBox"));
-        loadCommunityRating();
-      } catch (err) {
-        showToast("Could not save vote: " + err.message);
-      }
-    }
-
-    async function removeRank() {
-      if (!myRank) return;
-      try {
-        await supabase.from("rankings").delete().eq("id", myRank.id);
-        myRank = null;
-        communityRating = null;
-        showToast("Vote removed");
-        renderRankBox(document.getElementById("rankBox"));
-        loadCommunityRating();
-      } catch (err) {
-        showToast("Could not remove vote");
-      }
-    }
-
     // ---------- Save to My List ----------
     let isSaved = false;
     async function loadSavedState() {
@@ -1256,275 +1104,6 @@
         renderSaveButton(document.getElementById("saveSlot"));
       } catch (err) {
         showToast("Could not remove");
-      }
-    }
-
-    // ---------- Reviews & Comments ----------
-    function renderReviewForm() {
-      const slot = document.getElementById("reviewFormSlot");
-      if (!slot) return;
-      if (!isLoggedIn()) {
-        slot.innerHTML = `<p style="color:var(--text-dim); margin-bottom:20px;">
-          <a href="login.html" style="color:var(--accent)">Login</a> to leave a review or comment.</p>`;
-        return;
-      }
-      slot.innerHTML = `
-        <form class="review-form" id="reviewForm">
-          <div class="form-group">
-            <label for="reviewType">Type</label>
-            <select id="reviewType" style="width:100%; padding:12px; border-radius:10px; border:1px solid var(--border); background:var(--bg-alt); color:var(--text); font-family:inherit; margin-bottom:10px;">
-              <option value="review">Review (with rating)</option>
-              <option value="comment">Comment (no rating)</option>
-            </select>
-          </div>
-          <div class="rating-picker" id="starPicker"></div>
-          <textarea id="reviewText" placeholder="Share your thoughts on this anime..."></textarea>
-          <button type="submit" class="btn btn-primary">Post</button>
-        </form>`;
-      buildStarPicker();
-      document.getElementById("reviewType").addEventListener("change", (e) => {
-        const picker = document.getElementById("starPicker");
-        if (picker) picker.style.display = e.target.value === "review" ? "flex" : "none";
-      });
-      document.getElementById("reviewForm").addEventListener("submit", submitReview);
-    }
-
-    let pickedRating = 0;
-    function buildStarPicker() {
-      const picker = document.getElementById("starPicker");
-      if (!picker) return;
-      picker.innerHTML = "";
-      for (let i = 1; i <= 10; i++) {
-        const star = document.createElement("button");
-        star.type = "button";
-        star.className = "star";
-        star.textContent = "\u2605";
-        star.addEventListener("click", () => {
-          pickedRating = i;
-          [...picker.children].forEach((s, idx) => s.classList.toggle("active", idx < i));
-        });
-        picker.appendChild(star);
-      }
-    }
-
-    async function submitReview(e) {
-      e.preventDefault();
-      const text = document.getElementById("reviewText").value.trim();
-      const type = document.getElementById("reviewType").value;
-      if (!text) {
-        showToast("Please write something first");
-        return;
-      }
-      if (type === "review" && !pickedRating) {
-        showToast("Please pick a star rating for your review");
-        return;
-      }
-      try {
-        await dbInsert("reviews", {
-          user_id: currentUser.id,
-          author_name: getProfile().name,
-          anime_mal_id: Number(id),
-          anime_title: JIKAN.title(animeData),
-          rating: type === "review" ? pickedRating : null,
-          text,
-          is_comment: type === "comment",
-        });
-        awardXp(10); // +10 XP for posting
-        awardRp("review"); // +10 RP
-        showToast((type === "review" ? "Review posted! +10 XP +10 RP" : "Comment posted! +10 XP +10 RP"));
-        document.getElementById("reviewText").value = "";
-        pickedRating = 0;
-        buildStarPicker();
-        loadReviews();
-      } catch (err) {
-        showToast("Could not post: " + err.message);
-      }
-    }
-
-    async function loadReviews() {
-      const list = document.getElementById("reviewList");
-      renderReviewForm();
-      if (!SUPABASE_READY || !supabase) {
-        list.innerHTML = `<div class="empty-state">Reviews will appear here once Supabase is configured.</div>`;
-        return;
-      }
-      try {
-        const { data, error } = await supabase
-          .from("reviews")
-          .select("*")
-          .eq("anime_mal_id", Number(id))
-          .order("created_at", { ascending: false })
-          .limit(200);
-        if (error) throw error;
-        list.innerHTML = "";
-        if (!data.length) {
-          list.innerHTML = `<div class="empty-state">No reviews or comments yet. Be the first!</div>`;
-          return;
-        }
-        // Fetch like counts + whether the current user liked each review
-        let likeMap = {};
-        try {
-          const ids = data.map((r) => r.id);
-          const { data: likes } = await supabase.from("review_likes").select("review_id").in("review_id", ids);
-          likes.forEach((l) => { likeMap[l.review_id] = (likeMap[l.review_id] || 0) + 1; });
-        } catch (e) {}
-
-        // Build a review card (top-level or reply)
-        const renderCard = (r) => {
-          const el = document.createElement("div");
-          el.className = "review" + (r.parent_id ? " review-reply" : "");
-          const name = r.author_name || "User";
-          const stars = r.rating
-            ? `<span class="stars">${"\u2605".repeat(r.rating)}<span style="opacity:.25">${"\u2605".repeat(10 - r.rating)}</span></span>`
-            : `<span class="review-date" style="padding:2px 8px; background:rgba(0,212,168,.12); border-radius:999px;">${r.parent_id ? "Reply" : "Comment"}</span>`;
-          const likeCount = likeMap[r.id] || 0;
-          el.innerHTML = `
-            <div class="review-top">
-              <div class="review-author">
-                <div class="avatar" style="cursor:pointer;" onclick="location.href='profile.html?id=${r.user_id}'">${name.charAt(0).toUpperCase()}</div>
-                <a href="profile.html?id=${r.user_id}" style="color:var(--text); text-decoration:none;">${JIKAN.esc(name)}</a>
-                <span id="rankTag-${r.id}"></span>
-              </div>
-              ${stars}
-            </div>
-            <div class="review-date">${new Date(r.created_at).toLocaleString()}</div>
-            <p style="margin-top:8px;">${JIKAN.esc(r.text)}</p>
-            <div class="review-actions">
-              <button class="like-btn" onclick="toggleLike(${r.id})" id="likeBtn-${r.id}">
-                ♡ <span id="likeCount-${r.id}">${likeCount}</span>
-              </button>
-              <button class="like-btn" onclick="toggleReplyBox(${r.id})">↩ Reply</button>
-            </div>
-            <div class="reply-box" id="replyBox-${r.id}" style="display:none;">
-              <textarea id="replyText-${r.id}" placeholder="Write a reply..." class="reply-textarea"></textarea>
-              <button class="btn btn-primary" onclick="submitReply(${r.id})">Post reply</button>
-            </div>
-            <div class="reply-children" id="replies-${r.id}"></div>`;
-          fetchReviewAuthor(r.user_id, r.id, name);
-          return el;
-        };
-
-        // Separate top-level items from replies
-        const top = data.filter((r) => !r.parent_id);
-        const replies = data.filter((r) => r.parent_id);
-
-        // Render top-level cards first
-        const topEls = new Map();
-        top.forEach((r) => {
-          const el = renderCard(r);
-          topEls.set(r.id, el);
-          list.appendChild(el);
-        });
-        // Attach replies under their parent
-        replies.forEach((r) => {
-          const parentEl = topEls.get(r.parent_id);
-          const holder = parentEl ? parentEl.querySelector(`#replies-${r.parent_id}`) : null;
-          if (holder) holder.appendChild(renderCard(r));
-          else list.appendChild(renderCard(r));
-        });
-      } catch (err) {
-        list.innerHTML = `<div class="empty-state">Could not load reviews.</div>`;
-      }
-    }
-
-    function toggleReplyBox(reviewId) {
-      const box = document.getElementById(`replyBox-${reviewId}`);
-      if (!box) return;
-      box.style.display = box.style.display === "none" ? "block" : "none";
-      if (box.style.display === "block") {
-        const ta = document.getElementById(`replyText-${reviewId}`);
-        if (ta) ta.focus();
-      }
-    }
-
-    async function submitReply(parentId) {
-      if (!isLoggedIn()) {
-        showToast("Login to reply to a review");
-        return;
-      }
-      const ta = document.getElementById(`replyText-${parentId}`);
-      const text = ta ? ta.value.trim() : "";
-      if (!text) {
-        showToast("Please write a reply first");
-        return;
-      }
-      try {
-        await dbInsert("reviews", {
-          user_id: currentUser.id,
-          author_name: getProfile().name,
-          anime_mal_id: Number(id),
-          anime_title: JIKAN.title(animeData),
-          rating: null,
-          text,
-          is_comment: true,
-          parent_id: parentId,
-        });
-        awardXp(5); // +5 XP for replying
-        awardRp("reply"); // +5 RP
-        showToast("Reply posted! +5 XP +5 RP");
-        loadReviews();
-      } catch (err) {
-        showToast("Could not post reply: " + err.message);
-      }
-    }
-
-    // Fetch a reviewer's profile to display their name + rank badge + prestige
-    async function fetchReviewAuthor(userId, reviewId, fallback) {
-      const tag = document.getElementById(`rankTag-${reviewId}`);
-      if (!tag) return;
-      try {
-        const [profRes, perks] = await Promise.all([
-          supabase.from("profiles").select("name, xp, is_admin").eq("id", userId).maybeSingle(),
-          spendingsMap([userId]),
-        ]);
-        const data = profRes.data;
-        if (data) {
-          // Only overwrite the displayed name when the profile actually has
-          // one. Signup stores the name in the auth user metadata and the
-          // profiles row can be created empty by the DB trigger, which would
-          // otherwise clobber the review's own author_name with "User".
-          if (data.name) {
-            const nameEl = tag.parentElement.querySelector("a");
-            if (nameEl) nameEl.outerHTML = `<a href="${pageHref("profile")}?id=${userId}" style="color:var(--text); text-decoration:none;">${prestigeNameHTML(data, perks[userId])}</a>`;
-          }
-          tag.innerHTML = rankTag(userId, data);
-        } else {
-          tag.innerHTML = rankTag(userId, { xp: 0 });
-        }
-      } catch (e) {
-        tag.innerHTML = rankTag(userId, { xp: 0 });
-      }
-    }
-
-    let likesLoaded = false;
-    async function toggleLike(reviewId) {
-      if (!isLoggedIn()) {
-        showToast("Login to like reviews");
-        return;
-      }
-      const btn = document.getElementById(`likeBtn-${reviewId}`);
-      const countEl = document.getElementById(`likeCount-${reviewId}`);
-      const already = btn.classList.contains("liked");
-      try {
-        if (already) {
-          await supabase.from("review_likes").delete().eq("review_id", reviewId).eq("user_id", currentUser.id);
-          btn.classList.remove("liked");
-          btn.innerHTML = `♡ <span id="likeCount-${reviewId}">${Math.max(0, Number(countEl.textContent) - 1)}</span>`;
-        } else {
-          await dbInsert("review_likes", { user_id: currentUser.id, review_id: reviewId });
-          btn.classList.add("liked");
-          btn.innerHTML = `♥ <span id="likeCount-${reviewId}">${Number(countEl.textContent) + 1}</span>`;
-          // +10 XP +5 RP to the review author (fire-and-forget)
-          try {
-            const { data: rev } = await supabase.from("reviews").select("user_id").eq("id", reviewId).single();
-            if (rev && rev.user_id !== currentUser.id) {
-              await supabase.rpc("award_xp_to", { recipient: rev.user_id, amount: 10 });
-              await supabase.rpc("award_rp_to", { recipient: rev.user_id, amount: 2, reason: "like_received" });
-            }
-          } catch (e) {}
-        }
-      } catch (err) {
-        showToast("Could not update like");
       }
     }
 
