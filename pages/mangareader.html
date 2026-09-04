@@ -66,6 +66,7 @@
       const params = new URLSearchParams(window.location.search);
       const mangaTitle = params.get("title") || "Manga";
       const mangaId = params.get("id") || "";
+      const resumeChapter = params.get("ch") || "";
       let mangadexId = null;
       let currentProvider = "mangadex";
       let weebcentralMangaId = null;
@@ -142,6 +143,12 @@
           if (chosen.weebcentralId) weebcentralMangaId = chosen.weebcentralId;
           renderChapterList();
           loadReaderSaveState();
+          // Resume from saved chapter if ?ch= param present
+          if (resumeChapter) {
+            const targetNum = resumeChapter.trim();
+            const idx = chapters.findIndex(ch => String(ch.attributes.chapter || "").trim() === targetNum);
+            if (idx >= 0) goToChapter(idx);
+          }
         } else {
           $("chapterList").innerHTML = '<div class="empty-state">' +
             '<p>No chapters found.</p>' +
