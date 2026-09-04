@@ -986,6 +986,15 @@ const JIKAN = {
     return res.data;
   },
 
+  // Manga-specific genres (MAL genre IDs mapped to names)
+  mangaGenres() {
+    const map = this._MANGA_GENRE_MAP;
+    return Object.entries(map)
+      .filter(([id, e]) => e.type === "genre")
+      .map(([id, e]) => ({ mal_id: Number(id), name: e.name }))
+      .sort((a, b) => a.name.localeCompare(b.name));
+  },
+
   // MangaDex search link that always works (no API / CORS involved).
   mangadexSearchLink(title) {
     return `https://mangadex.org/search?q=${encodeURIComponent(title)}`;
@@ -1502,11 +1511,32 @@ const JIKAN = {
     }
   },
 
+  async mangaTopRated(page = 1) {
+    try {
+      const q = `query($p: Int, $per: Int) {
+        Page(page: $p, perPage: $per) {
+          media(type: MANGA, isAdult: false, sort: SCORE_DESC) {
+            id title { romaji english native }
+            coverImage { large extraLarge }
+            status format genres description(asHtml: false)
+            chapters volumes countryOfOrigin startDate { year }
+            staff { edges { node { name { full } } } }
+          }
+        }
+      }`;
+      const data = await this._aniMangaQuery(q, { p: page, per: 20 });
+      return { data: this._aniMangaToList(data) };
+    } catch (e) {
+      return { data: [] };
+    }
+  },
+
   // Streaming-style card for manga scroll rows.
   mangaStreamCard(m) {
     const href = pageHref("manga") + "?id=" + encodeURIComponent(m.id);
     const img = m.cover || JIKAN.PLACEHOLDER;
     const fmt = (m.format || "Manga").replace(/_/g, " ");
+    const fmtClass = /manhwa/i.test(fmt) ? "fmt-manhwa" : /manhua/i.test(fmt) ? "fmt-manhua" : "fmt-manga";
     let statusLine = "";
     if (m.status === "RELEASING") {
       statusLine = m.chapters ? `${m.chapters}+ chapters` : "Ongoing";
@@ -1522,7 +1552,7 @@ const JIKAN = {
       <div class="sc-poster">
         <img src="${this.esc(img)}" alt="${this.esc(m.title)}" loading="lazy"
              onerror="this.onerror=null;this.src=JIKAN.PLACEHOLDER">
-        <span class="sc-fmt">${this.esc(fmt)}</span>
+        <span class="sc-fmt ${fmtClass}">${this.esc(fmt)}</span>
         <div class="sc-overlay">
           <span class="sc-play">📖</span>
           <span class="sc-overlay-title">${this.esc(m.title)}</span>
