@@ -106,6 +106,7 @@
       <select id="genreSelect" onchange="applyFilters(1)" aria-label="Filter by genre">
         <option value="">All genres</option>
       </select>
+      <button class="btn btn-outline btn-small" id="adultToggle" style="display:none;" onclick="toggleAdult()">18+</button>
       <button class="btn btn-primary" id="searchBtn" onclick="applyFilters(1)">Search</button>
       <button class="btn btn-outline" onclick="clearFilters()">Clear</button>
     </div>
@@ -226,7 +227,16 @@
       q: params.get("q") || "",
       genre: "",
       page: 1,
+      adult: false,
     };
+
+    function toggleAdult() {
+      state.adult = !state.adult;
+      state.page = 1;
+      const btn = document.getElementById("adultToggle");
+      if (btn) btn.classList.toggle("is-active", state.adult);
+      loadCatalog();
+    }
 
     // ── Anime / Manga toggle ──
     function switchCatType(type) {
@@ -234,6 +244,8 @@
       document.querySelectorAll(".cat-type-btn").forEach(b => b.classList.toggle("active", b.dataset.type === type));
       state.page = 1;
       document.getElementById("searchBox").placeholder = type === "manga" ? "Search manga..." : "Search anime...";
+      const adultBtn = document.getElementById("adultToggle");
+      if (adultBtn) adultBtn.style.display = type === "manga" ? "" : "none";
       const animeHero = document.getElementById("catHero");
       const animeRows = document.getElementById("catRows");
       const mangaHero = document.getElementById("mangaHero");
@@ -435,13 +447,13 @@
           const g = state.genre || "";
           let results;
           if (q) {
-            const searchRes = await JIKAN.mangaSearch(q, 20);
+            const searchRes = await JIKAN.mangaSearch(q, 20, state.adult);
             results = Array.isArray(searchRes) ? searchRes : (searchRes.data || []);
           } else if (g) {
-            const genreRes = await JIKAN.mangaByGenre(g, state.page, 20);
+            const genreRes = await JIKAN.mangaByGenre(g, state.page, 20, state.adult);
             results = Array.isArray(genreRes) ? genreRes : (genreRes.data || []);
           } else {
-            const popRes = await JIKAN.mangaPopular(state.page, 20);
+            const popRes = await JIKAN.mangaPopular(state.page, 20, state.adult);
             results = Array.isArray(popRes) ? popRes : (popRes.data || []);
           }
           grid.innerHTML = "";
@@ -903,9 +915,9 @@
           row.dispatchEvent(new Event("scroll"));
         }).catch(() => { row.innerHTML = `<div class="empty-state">Could not load.</div>`; });
       };
-      loadMangaRow("mangaRowTrending", () => JIKAN.mangaTrending(1));
-      loadMangaRow("mangaRowNew", () => JIKAN.mangaNewReleases(1));
-      loadMangaRow("mangaRowRated", () => JIKAN.mangaTopRated(1));
+      loadMangaRow("mangaRowTrending", () => JIKAN.mangaTrending(1, state.adult));
+      loadMangaRow("mangaRowNew", () => JIKAN.mangaNewReleases(1, state.adult));
+      loadMangaRow("mangaRowRated", () => JIKAN.mangaTopRated(1, state.adult));
     }
 
     function setupScrollRow(el) {
