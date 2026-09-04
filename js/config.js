@@ -80,15 +80,15 @@ const CONFIG = {
     { id: "vudu", name: "Fandango at Home", mode: "link",
       url: "https://www.vudu.com/content/movies/search?q={title}", enabled: true },
 
-    // AniKoto — API currently down (DEPLOYMENT_NOT_FOUND). Disabled until restored.
+    // AniKoto — free public catalog API (https://anikototvapi.vercel.app).
     { id: "anikoto", name: "Stream 1", mode: "embed", dynamic: "anikoto",
       referrerPolicy: "no-referrer-when-downgrade",
-      sandbox: false, url: "", enabled: false, volumeControl: "none" },
+      sandbox: false, url: "", enabled: true, volumeControl: "none" },
 
-    // AniPub — API currently returning 404. Disabled until restored.
+    // AniPub — community anime catalog (https://anipub.xyz).
     { id: "anipub", name: "Stream 2", mode: "embed", sandbox: false, dynamic: "anipub",
       referrerPolicy: "no-referrer-when-downgrade",
-      url: "https://anipub.xyz/video/{anipub_ep_id}/sub", enabled: false, volumeControl: "none" },
+      url: "https://anipub.xyz/video/{anipub_ep_id}/sub", enabled: true, volumeControl: "none" },
 
     // AniXo — active provider. Embed player keyed by AniList id + episode.
     { id: "anixo", name: "Stream 3", mode: "embed", dynamic: "anixo",
