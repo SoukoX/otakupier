@@ -4621,6 +4621,15 @@ footer .footer-links {
   color: #e53e3e;
 }
 
+/* Adult catalog grid slide-in animation */
+.catalog-grid.adult-active {
+  animation: slideDown 0.3s ease-out;
+}
+@keyframes slideDown {
+  from { opacity: 0; transform: translateY(-10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
 /* ── Manga card ── */
 .manga-card {
   display: block;
@@ -4662,6 +4671,12 @@ footer .footer-links {
   padding: 2px 8px;
   border-radius: 10px;
   font-weight: 600;
+}
+.manga-card .card-badge.adult-badge {
+  background: #e53e3e;
+  top: 8px;
+  left: 8px;
+  right: auto;
 }
 .manga-card .card-body {
   padding: 10px 12px 12px;
