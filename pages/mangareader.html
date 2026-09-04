@@ -359,7 +359,7 @@
                 wrapper.className = "reader-page-wrapper";
                 const img = document.createElement("img");
                 img.className = "reader-page-img";
-                img.src = PROXY_BASE + encodeURIComponent(url);
+                img.src = url;
                 img.alt = `Page ${pi + 1}`;
                 img.loading = pi < 3 ? "eager" : "lazy";
                 const errLabel = document.createElement("div");
@@ -367,7 +367,7 @@
                 errLabel.style.display = "none";
                 errLabel.textContent = "Failed to load";
                 img.onerror = function() {
-                  if (this.dataset.retried === "1") {
+                  if (this.dataset.retried === "2") {
                     this.style.display = "none";
                     errLabel.style.display = "block";
                     failedCount++;
@@ -376,8 +376,15 @@
                     }
                     return;
                   }
-                  this.dataset.retried = "1";
-                  this.src = url;
+                  this.dataset.retried = String(parseInt(this.dataset.retried || "0") + 1);
+                  const retry = parseInt(this.dataset.retried);
+                  if (retry === 1) {
+                    this.src = PROXY_BASE + encodeURIComponent(url);
+                  } else {
+                    this.style.display = "none";
+                    errLabel.style.display = "block";
+                    failedCount++;
+                  }
                 };
                 wrapper.appendChild(img);
                 wrapper.appendChild(errLabel);
@@ -415,7 +422,7 @@
                 const img = document.createElement("img");
                 img.className = "reader-page-img";
                 const directUrl = `${data.baseUrl}/${basePath}/${data.chapter.hash}/${filename}`;
-                img.src = PROXY_BASE + encodeURIComponent(directUrl);
+                img.src = directUrl;
                 img.alt = `Page ${pi + 1}`;
                 img.loading = pi < 3 ? "eager" : "lazy";
                 const errLabel = document.createElement("div");
@@ -435,11 +442,11 @@
                   this.dataset.retried = String(parseInt(this.dataset.retried || "0") + 1);
                   const retry = parseInt(this.dataset.retried);
                   if (retry === 1) {
-                    this.src = directUrl;
+                    this.src = PROXY_BASE + encodeURIComponent(directUrl);
                   } else {
                     const saverPath = basePath === "data" ? "data-saver" : "data";
                     const saverUrl = `${data.baseUrl}/${saverPath}/${data.chapter.hash}/${filename}`;
-                    this.src = PROXY_BASE + encodeURIComponent(saverUrl);
+                    this.src = saverUrl;
                   }
                 };
                 wrapper.appendChild(img);
