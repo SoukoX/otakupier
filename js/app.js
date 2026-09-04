@@ -340,7 +340,6 @@ const NAV_LINKS = [
   { label: "Catalog", href: "pages/catalog.html", file: "catalog.html", inPages: true },
   { label: "Forums", href: "pages/forums.html", file: "forums.html", inPages: true },
   { label: "Clubs", href: "pages/clubs.html", file: "clubs.html", inPages: true },
-  { label: "Leaderboard", href: "pages/leaderboard.html", file: "leaderboard.html", inPages: true },
   { label: "Chat", href: "pages/chat.html", file: "chat.html", inPages: true },
 ];
 
@@ -469,7 +468,6 @@ function renderFooter() {
       <a href="${pageHref("catalog")}">Catalog</a>
       <a href="${pageHref("forums")}">Forums</a>
       <a href="${pageHref("clubs")}">Clubs</a>
-      <a href="${pageHref("leaderboard")}">Leaderboard</a>
       <a href="${pageHref("chat")}">Chat</a>
       ${isLoggedIn() ? `<a href="${pageHref("mylist")}">My List</a>
       <a href="${pageHref("friends")}">Friends</a>
