@@ -340,7 +340,6 @@ const NAV_LINKS = [
   { label: "Catalog", href: "pages/catalog.html", file: "catalog.html", inPages: true },
   { label: "Forums", href: "pages/forums.html", file: "forums.html", inPages: true },
   { label: "Clubs", href: "pages/clubs.html", file: "clubs.html", inPages: true },
-  { label: "Rankings", href: "pages/rankings.html", file: "rankings.html", inPages: true },
   { label: "Leaderboard", href: "pages/leaderboard.html", file: "leaderboard.html", inPages: true },
   { label: "Chat", href: "pages/chat.html", file: "chat.html", inPages: true },
 ];
@@ -470,7 +469,6 @@ function renderFooter() {
       <a href="${pageHref("catalog")}">Catalog</a>
       <a href="${pageHref("forums")}">Forums</a>
       <a href="${pageHref("clubs")}">Clubs</a>
-      <a href="${pageHref("rankings")}">Rankings</a>
       <a href="${pageHref("leaderboard")}">Leaderboard</a>
       <a href="${pageHref("chat")}">Chat</a>
       ${isLoggedIn() ? `<a href="${pageHref("mylist")}">My List</a>
@@ -783,9 +781,6 @@ async function awardXp(amount) {
 // Whitelisted (reason -> amount) pairs that map 1:1 to add_rp() server-side.
 // Keep in sync with the SQL whitelist in supabase_schema.sql.
 const RP_REWARDS = {
-  review: 2,
-  reply: 1,
-  vote: 1,
   save: 1,
   thread: 3,
   forum_reply: 1,
@@ -887,9 +882,8 @@ const RP_SHOP = [
   { id: "name_color", name: "Name Color", icon: "🎨", price: 15000, duration: null, desc: "Pick a custom color for your name everywhere on the site." },
   { id: "custom_title", name: "Custom Title", icon: "🏷️", price: 25000, duration: null, desc: "A custom title shown under your name (max 24 chars)." },
   { id: "vip_badge", name: "VIP Badge", icon: "💎", price: 500000, duration: null, desc: "The ultimate status — a shining VIP badge next to your name site-wide." },
-  { id: "avatar_ring", name: "Glowing Avatar", icon: "🌟", price: 40000, duration: null, desc: "Your avatar glows with a purple-teal aura on chat, DMs & reviews." },
+  { id: "avatar_ring", name: "Glowing Avatar", icon: "🌟", price: 40000, duration: null, desc: "Your avatar glows with a purple-teal aura on chat, DMs & profiles." },
   { id: "chat_glow", name: "Chat Glow", icon: "✨", price: 8000, duration: "30 days", desc: "Your chat messages always glow with VIP styling." },
-  { id: "vote_power", name: "Voting Power 2x", icon: "🗳️", price: 10000, duration: "30 days", desc: "Your community votes count 2x in the OtakuPier rating." },
   { id: "profile_banner", name: "Profile Banner", icon: "🖼️", price: 50000, duration: null, desc: "A special banner at the top of your profile page." },
 ];
 
@@ -936,11 +930,8 @@ function badgesFor(profile, counts) {
   const badges = [];
   const years = Math.floor((Date.now() - new Date(profile.created_at).getTime()) / (365.25 * 24 * 3600 * 1000));
   if (years >= 1) badges.push({ id: "senior", icon: "🏅", label: `Member ${years}y` });
-  if ((counts.likes || 0) >= 50) badges.push({ id: "review-star", icon: "⭐", label: "Review Star" });
   if ((counts.chat || 0) >= 100) badges.push({ id: "chatter", icon: "💬", label: "Chatter" });
   if ((counts.saved || 0) >= 50) badges.push({ id: "collector", icon: "📚", label: "Collector" });
-  if ((counts.reviews || 0) >= 10) badges.push({ id: "critic", icon: "✍️", label: "Critic" });
-  if ((counts.votes || 0) >= 25) badges.push({ id: "rater", icon: "🗳️", label: "Rater" });
   return badges;
 }
 
@@ -950,18 +941,14 @@ async function userStats(userId) {
   try {
     const { data: profile } = await supabase.from("profiles").select("*").eq("id", userId).maybeSingle();
     if (!profile) return { profile: null, counts: {} };
-    const [{ count: reviews }, { count: saved }, { count: chat }, { count: votes }, { count: likes }] = await Promise.all([
-      supabase.from("reviews").select("id", { count: "exact", head: true }).eq("user_id", userId),
+    const [{ count: saved }, { count: chat }] = await Promise.all([
       supabase.from("saved_anime").select("id", { count: "exact", head: true }).eq("user_id", userId),
       supabase.from("chat_messages").select("id", { count: "exact", head: true }).eq("user_id", userId),
-      supabase.from("rankings").select("id", { count: "exact", head: true }).eq("user_id", userId),
-      supabase.from("review_likes").select("id", { count: "exact", head: true }).eq("user_id", userId),
     ]);
     return {
       profile,
       counts: {
-        reviews: reviews || 0, saved: saved || 0, chat: chat || 0,
-        votes: votes || 0, likes: likes || 0,
+        saved: saved || 0, chat: chat || 0,
       },
     };
   } catch (e) {
