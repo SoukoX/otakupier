@@ -88,8 +88,10 @@
           main.innerHTML = '<div class="empty-state">Could not load manga. <a href="' + pageHref("catalog") + '">Browse catalog</a></div>';
           return;
         }
+        mangaData = data;
         renderManga(data);
         SEO.setMangaMeta(data, data.title, mangaId);
+        loadSavedState();
       } catch (err) {
         console.error("[Manga detail]", err);
         main.innerHTML = '<div class="empty-state">Error loading manga. <small>' + (err.message || '') + '</small></div>';
@@ -138,11 +140,75 @@
               (m.summary ? '<div class="manga-synopsis">' + JIKAN.esc(m.summary).replace(/\n/g, "<br>") + '</div>' : '') +
               '<div class="manga-actions">' +
                 '<a class="btn btn-primary btn-glow" href="' + JIKAN.esc(readerUrl) + '">📖 Read Now</a>' +
+                '<span id="saveSlot"></span>' +
               '</div>' +
             '</div>' +
           '</div>' +
           relatedHtml +
         '</div>';
+    }
+
+    // ── Save / Unsave manga ──
+    let isSaved = false;
+    let mangaData = null;
+
+    async function loadSavedState() {
+      if (!isLoggedIn() || !mangaId) return;
+      try {
+        const { data } = await supabase
+          .from("saved_manga")
+          .select("id")
+          .eq("user_id", currentUser.id)
+          .eq("manga_id", mangaId)
+          .maybeSingle();
+        isSaved = !!data;
+        renderSaveButton(document.getElementById("saveSlot"));
+      } catch (_) {}
+    }
+
+    function renderSaveButton(slot) {
+      if (!slot) return;
+      if (!isLoggedIn()) {
+        slot.innerHTML = '<a class="btn btn-outline btn-small" href="' + pageHref("login") + '">Save to My List</a>';
+        return;
+      }
+      if (isSaved) {
+        slot.innerHTML = '<button class="btn btn-outline btn-small" onclick="unsaveManga()">✓ Saved</button>';
+      } else {
+        slot.innerHTML = '<button class="btn btn-primary btn-small" onclick="saveManga()">＋ Save</button>';
+      }
+    }
+
+    async function saveManga() {
+      if (!isLoggedIn()) return;
+      try {
+        await dbInsert("saved_manga", {
+          user_id: currentUser.id,
+          manga_id: mangaId,
+          manga_title: mangaData?.title || "",
+          manga_image: mangaData?.cover || "",
+        });
+        isSaved = true;
+        awardXp(5);
+        awardRp("save");
+        showToast("Saved to My List! +5 XP");
+        renderSaveButton(document.getElementById("saveSlot"));
+      } catch (err) {
+        showToast("Could not save: " + err.message);
+      }
+    }
+
+    async function unsaveManga() {
+      try {
+        await supabase.from("saved_manga").delete()
+          .eq("manga_id", mangaId)
+          .eq("user_id", currentUser.id);
+        isSaved = false;
+        showToast("Removed from My List");
+        renderSaveButton(document.getElementById("saveSlot"));
+      } catch (err) {
+        showToast("Could not remove");
+      }
     }
   </script>
 </body>
