@@ -187,8 +187,12 @@
                   if (!chapNum) return;
                   const key = normKey(chapNum);
                   const existing = seen.get(key);
-                  if (!existing || (ch.attributes.pages || 0) > (existing.attributes.pages || 0)) {
+                  if (!existing) {
                     seen.set(key, ch);
+                  } else {
+                    const curTime = new Date(ch.attributes.publishAt || 0).getTime();
+                    const exTime = new Date(existing.attributes.publishAt || 0).getTime();
+                    if (curTime > exTime) seen.set(key, ch);
                   }
                 });
                 const hostedChapters = Array.from(seen.values());
