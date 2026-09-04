@@ -80,37 +80,18 @@ const CONFIG = {
     { id: "vudu", name: "Fandango at Home", mode: "link",
       url: "https://www.vudu.com/content/movies/search?q={title}", enabled: true },
 
-    // AniKoto — free public catalog API (https://anikototvapi.vercel.app,
-    // CORS-open) with broad coverage including titles missing from AniPub
-    // (e.g. Fullmetal Alchemist: Brotherhood) and both sub & dub tracks. Its
-    // /api/stream resolves each episode to a megaplay embed URL; api.js proxies
-    // those through AniPub's generic player wrapper so megaplay always receives
-    // a Referer and serves its player inside an iframe ("dynamic" provider).
-    // Listed first — it is the preferred on-site provider.
-    { id: "anikoto", name: "AniKoto", mode: "embed", dynamic: "anikoto",
+    // AniKoto — API currently down (DEPLOYMENT_NOT_FOUND). Disabled until restored.
+    { id: "anikoto", name: "Stream 1", mode: "embed", dynamic: "anikoto",
       referrerPolicy: "no-referrer-when-downgrade",
-      // Its embeds are proxied through AniPub's generic player wrapper, which
-      // refuses to run inside a sandboxed frame — so sandbox is disabled.
-      sandbox: false, url: "", enabled: true, volumeControl: "none" },
+      sandbox: false, url: "", enabled: false, volumeControl: "none" },
 
-    // AniPub — open-source, ad-free community anime catalog with a free public
-    // API (https://anipub.xyz) that is CORS-open. Its embeddable episode pages
-    // (https://anipub.xyz/video/{id}/sub) stream reliably inside an iframe, but
-    // they are keyed by AniPub's OWN episode ids — so api.js resolves them at
-    // runtime: search by title to get the AniPub id, then /v1/api/details for
-    // the per-episode /video/{id}/sub links ("dynamic" provider).
-    // NOTE: its player refuses to run inside a sandboxed frame, so sandbox is
-    // disabled; it also streams with a referrer sent (matches its working
-    // embeds), hence referrerPolicy below.
-    { id: "anipub", name: "AniPub", mode: "embed", sandbox: false, dynamic: "anipub",
+    // AniPub — API currently returning 404. Disabled until restored.
+    { id: "anipub", name: "Stream 2", mode: "embed", sandbox: false, dynamic: "anipub",
       referrerPolicy: "no-referrer-when-downgrade",
-      url: "https://anipub.xyz/video/{anipub_ep_id}/sub", enabled: true, volumeControl: "none" },
+      url: "https://anipub.xyz/video/{anipub_ep_id}/sub", enabled: false, volumeControl: "none" },
 
-    // AniXo — embed player keyed by AniList id + episode ("dynamic" provider;
-    // URL resolved by JIKAN.anixoUrl which maps the MAL id to AniList first).
-    // Requires the official embed-sdk.js loaded on the watch/anime pages and
-    // refuses sandboxed iframes. Independent backend, kept for redundancy.
-    { id: "anixo", name: "AniXo", mode: "embed", dynamic: "anixo",
+    // AniXo — active provider. Embed player keyed by AniList id + episode.
+    { id: "anixo", name: "Stream 3", mode: "embed", dynamic: "anixo",
       sandbox: false, referrerPolicy: "no-referrer-when-downgrade",
       url: "https://anixo.buzz/embed/ani/{anilist_id}/{ep_num}/{sub}", enabled: true, volumeControl: "full" },
 
