@@ -44,8 +44,7 @@
       <button class="btn btn-outline btn-small" onclick="copyBoardLink()" style="margin-left:auto;">Share board</button>
     </div>
     <div class="lb-tabs" style="display:flex; gap:8px; margin-bottom:18px; flex-wrap:wrap;">
-      <button class="btn btn-primary btn-small lb-tab" data-lb="reviewers">⭐ Top reviewers</button>
-      <button class="btn btn-outline btn-small lb-tab" data-lb="contributors">🏅 Top contributors</button>
+      <button class="btn btn-primary btn-small lb-tab" data-lb="contributors">🏅 Top contributors</button>
       <button class="btn btn-outline btn-small lb-tab" data-lb="earners">⛁ Top earners</button>
     </div>
     <div id="lbBody">
@@ -55,10 +54,9 @@
 
   <section class="seo-content container">
     <h2>OtakuPier leaderboards</h2>
-    <p>Compete with the community across three leaderboards. Review anime, chat, and take part to climb the ranks — the more you contribute, the higher you climb.</p>
+    <p>Compete with the community across two leaderboards. Chat, save anime, and take part to climb the ranks — the more you contribute, the higher you climb.</p>
     <ul>
-      <li><strong>Top reviewers</strong> — the members who have written the most anime reviews.</li>
-      <li><strong>Top contributors</strong> — the fans with the most experience points from daily logins, reviews, votes, and chat.</li>
+      <li><strong>Top contributors</strong> — the fans with the most experience points from daily logins, saving anime, and chat.</li>
       <li><strong>Top earners</strong> — the members who have earned the most Reward Points, including through the invite system.</li>
     </ul>
     <p>Each board deep-links to its own tab, so you can share a direct link to any ranking category.</p>
@@ -73,8 +71,8 @@
   <script>
     // Deep-linkable tabs: leaderboard.html#earners etc. — URLs are shareable
     // and indexed per category.
-    let lbKind = (window.location.hash || "#reviewers").replace("#", "");
-    if (!["reviewers", "contributors", "earners"].includes(lbKind)) lbKind = "reviewers";
+    let lbKind = (window.location.hash || "#contributors").replace("#", "");
+    if (!["contributors", "earners"].includes(lbKind)) lbKind = "contributors";
 
     document.querySelectorAll(".lb-tab").forEach((b) => {
       b.addEventListener("click", () => {
@@ -106,32 +104,12 @@
             .order("xp", { ascending: false })
             .limit(50);
           rows = (data || []).map((p, i) => ({ rank: i + 1, p, score: p.xp || 0, scoreLabel: "XP" }));
-        } else if (lbKind === "earners") {
+        } else {
           const { data } = await supabase.from("profiles")
             .select("id, name, avatar_url, rp_earned, is_admin, created_at")
             .order("rp_earned", { ascending: false })
             .limit(50);
           rows = (data || []).map((p, i) => ({ rank: i + 1, p, score: p.rp_earned || 0, scoreLabel: "RP earned" }));
-        } else {
-          // Top reviewers: count real reviews (not comments) per user.
-          const { data } = await supabase.from("reviews")
-            .select("user_id, is_comment")
-            .limit(2000);
-          const counts = {};
-          (data || []).forEach((r) => { if (!r.is_comment) counts[r.user_id] = (counts[r.user_id] || 0) + 1; });
-          const ids = Object.keys(counts);
-          if (!ids.length) {
-            body.innerHTML = `<div class="empty-state">No reviews yet — be the first to review an anime!</div>`;
-            return;
-          }
-          const { data: profs } = await supabase.from("profiles")
-            .select("id, name, avatar_url, is_admin, created_at")
-            .in("id", ids);
-          rows = (profs || []).map((p) => ({ p, score: counts[p.id] || 0 }))
-            .filter((r) => r.score > 0)
-            .sort((a, b) => b.score - a.score)
-            .slice(0, 50)
-            .map((r, i) => ({ rank: i + 1, p: r.p, score: r.score, scoreLabel: "reviews" }));
         }
 
         if (!rows.length) {
