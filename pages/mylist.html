@@ -140,9 +140,13 @@
               ${hasChapter ? '<div class="meta" style="color:var(--accent-3);font-size:.8rem;">📖 Ch. ' + JIKAN.esc(s.last_chapter) + '</div>' : ''}
               <div class="meta">
                 ${hasChapter ? '<a class="btn btn-primary btn-small" href="' + readerUrl + '">Continue</a>' : '<a class="btn btn-outline btn-small" href="' + pageHref("manga") + '?id=' + encodeURIComponent(s.manga_id) + '">View</a>'}
-                <button class="btn btn-danger btn-small" onclick="unsaveManga('${JIKAN.esc(s.manga_id)}', this)">Remove</button>
+                <button class="btn btn-danger btn-small" data-remove-manga="${JIKAN.esc(s.manga_id)}">Remove</button>
               </div>
             </div>`;
+          el.querySelector("[data-remove-manga]").addEventListener("click", function(e) {
+            e.stopPropagation();
+            unsaveManga(this.dataset.removeManga, this);
+          });
           el.addEventListener("click", (e) => {
             if (e.target.closest("button") || e.target.closest("a")) return;
             window.location.href = pageHref("manga") + "?id=" + encodeURIComponent(s.manga_id);
