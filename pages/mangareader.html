@@ -359,7 +359,7 @@
                 wrapper.className = "reader-page-wrapper";
                 const img = document.createElement("img");
                 img.className = "reader-page-img";
-                img.src = url;
+                img.src = PROXY_BASE + encodeURIComponent(url);
                 img.alt = `Page ${pi + 1}`;
                 img.loading = pi < 3 ? "eager" : "lazy";
                 const errLabel = document.createElement("div");
@@ -377,6 +377,7 @@
                     return;
                   }
                   this.dataset.retried = "1";
+                  this.src = url;
                 };
                 wrapper.appendChild(img);
                 wrapper.appendChild(errLabel);
@@ -413,7 +414,8 @@
                 wrapper.className = "reader-page-wrapper";
                 const img = document.createElement("img");
                 img.className = "reader-page-img";
-                img.src = `${data.baseUrl}/${basePath}/${data.chapter.hash}/${filename}`;
+                const directUrl = `${data.baseUrl}/${basePath}/${data.chapter.hash}/${filename}`;
+                img.src = PROXY_BASE + encodeURIComponent(directUrl);
                 img.alt = `Page ${pi + 1}`;
                 img.loading = pi < 3 ? "eager" : "lazy";
                 const errLabel = document.createElement("div");
@@ -431,9 +433,14 @@
                     return;
                   }
                   this.dataset.retried = String(parseInt(this.dataset.retried || "0") + 1);
-                  const tryPaths = ["data", "data-saver"];
-                  const nextPath = tryPaths[parseInt(this.dataset.retried) - 1];
-                  this.src = `${data.baseUrl}/${nextPath}/${data.chapter.hash}/${filename}`;
+                  const retry = parseInt(this.dataset.retried);
+                  if (retry === 1) {
+                    this.src = directUrl;
+                  } else {
+                    const saverPath = basePath === "data" ? "data-saver" : "data";
+                    const saverUrl = `${data.baseUrl}/${saverPath}/${data.chapter.hash}/${filename}`;
+                    this.src = PROXY_BASE + encodeURIComponent(saverUrl);
+                  }
                 };
                 wrapper.appendChild(img);
                 wrapper.appendChild(errLabel);
