@@ -1201,6 +1201,17 @@ const JIKAN = {
       }
     }
   }`,
+  _MANGA_SEARCH_Q_ADULT: `query($s: String, $p: Int, $per: Int) {
+    Page(page: $p, perPage: $per) {
+      pageInfo { total }
+      media(search: $s, type: MANGA, sort: SEARCH_MATCH) {
+        id title { romaji english native }
+        coverImage { large }
+        status format genres description(asHtml: false)
+        chapters volumes countryOfOrigin startDate { year }
+      }
+    }
+  }`,
 
   _MANGA_DETAIL_Q: `query($id: Int!) {
     Media(id: $id, type: MANGA) {
@@ -1256,8 +1267,10 @@ const JIKAN = {
   // Manga search: try AniList first (fast, CORS-open), fall back to ComicK.
   // Results are merged + deduped by title so the grid has the best coverage.
   async mangaSearch(query, limit = 20, adult = false) {
+    const q = adult ? this._MANGA_SEARCH_Q_ADULT : this._MANGA_SEARCH_Q;
+    const vars = adult ? { s: query, p: 1, per: limit } : { s: query, p: 1, per: limit, adult: false };
     const sources = await Promise.allSettled([
-      this._aniMangaQuery(this._MANGA_SEARCH_Q, { s: query, p: 1, per: limit, adult: !!adult })
+      this._aniMangaQuery(q, vars)
         .then(d => this._aniMangaToList(d)),
       this.comickMangaSearch(query, Math.min(limit, 10)).catch(() => []),
     ]);
@@ -1277,17 +1290,29 @@ const JIKAN = {
 
   // Popular manga: try AniList first, fall back to ComicK.
   async mangaPopular(page = 1, limit = 20, adult = false) {
-    const aniPromise = this._aniMangaQuery(`query($p: Int, $per: Int, $adult: Boolean) {
-      Page(page: $p, perPage: $per) {
-        media(type: MANGA, isAdult: $adult, sort: POPULARITY_DESC) {
-          id title { romaji english native }
-          coverImage { large }
-          status format genres description(asHtml: false)
-          chapters volumes countryOfOrigin startDate { year }
-          staff { edges { node { name { full } } } }
+    const aniPromise = adult
+      ? this._aniMangaQuery(`query($p: Int, $per: Int) {
+        Page(page: $p, perPage: $per) {
+          media(type: MANGA, sort: POPULARITY_DESC) {
+            id title { romaji english native }
+            coverImage { large }
+            status format genres description(asHtml: false)
+            chapters volumes countryOfOrigin startDate { year }
+            staff { edges { node { name { full } } } }
+          }
         }
-      }
-    }`, { p: page, per: limit, adult: !!adult }).then(d => this._aniMangaToList(d)).catch(() => []);
+      }`, { p: page, per: limit }).then(d => this._aniMangaToList(d)).catch(() => [])
+      : this._aniMangaQuery(`query($p: Int, $per: Int) {
+        Page(page: $p, perPage: $per) {
+          media(type: MANGA, isAdult: false, sort: POPULARITY_DESC) {
+            id title { romaji english native }
+            coverImage { large }
+            status format genres description(asHtml: false)
+            chapters volumes countryOfOrigin startDate { year }
+            staff { edges { node { name { full } } } }
+          }
+        }
+      }`, { p: page, per: limit }).then(d => this._aniMangaToList(d)).catch(() => []);
 
     const comickPromise = this.comickPopular(page, limit).catch(() => ({ data: [] }));
 
@@ -1397,31 +1422,55 @@ const JIKAN = {
     try {
       let query, variables;
       if (entry.type === "tag") {
-        query = `query($tag: String, $p: Int, $per: Int, $adult: Boolean) {
-          Page(page: $p, perPage: $per) {
-            media(tag: $tag, type: MANGA, isAdult: $adult, sort: POPULARITY_DESC) {
-              id title { romaji english native }
-              coverImage { large }
-              status format genres description(asHtml: false)
-              chapters volumes countryOfOrigin startDate { year }
-              staff { edges { node { name { full } } } }
+        query = adult
+          ? `query($tag: String, $p: Int, $per: Int) {
+            Page(page: $p, perPage: $per) {
+              media(tag: $tag, type: MANGA, sort: POPULARITY_DESC) {
+                id title { romaji english native }
+                coverImage { large }
+                status format genres description(asHtml: false)
+                chapters volumes countryOfOrigin startDate { year }
+                staff { edges { node { name { full } } } }
+              }
             }
-          }
-        }`;
-        variables = { tag: entry.name, p: page, per: limit, adult: !!adult };
+          }`
+          : `query($tag: String, $p: Int, $per: Int) {
+            Page(page: $p, perPage: $per) {
+              media(tag: $tag, type: MANGA, isAdult: false, sort: POPULARITY_DESC) {
+                id title { romaji english native }
+                coverImage { large }
+                status format genres description(asHtml: false)
+                chapters volumes countryOfOrigin startDate { year }
+                staff { edges { node { name { full } } } }
+              }
+            }
+          }`;
+        variables = { tag: entry.name, p: page, per: limit };
       } else {
-        query = `query($genre: String, $p: Int, $per: Int, $adult: Boolean) {
-          Page(page: $p, perPage: $per) {
-            media(genre: $genre, type: MANGA, isAdult: $adult, sort: POPULARITY_DESC) {
-              id title { romaji english native }
-              coverImage { large }
-              status format genres description(asHtml: false)
-              chapters volumes countryOfOrigin startDate { year }
-              staff { edges { node { name { full } } } }
+        query = adult
+          ? `query($genre: String, $p: Int, $per: Int) {
+            Page(page: $p, perPage: $per) {
+              media(genre: $genre, type: MANGA, sort: POPULARITY_DESC) {
+                id title { romaji english native }
+                coverImage { large }
+                status format genres description(asHtml: false)
+                chapters volumes countryOfOrigin startDate { year }
+                staff { edges { node { name { full } } } }
+              }
             }
-          }
-        }`;
-        variables = { genre: entry.name, p: page, per: limit, adult: !!adult };
+          }`
+          : `query($genre: String, $p: Int, $per: Int) {
+            Page(page: $p, perPage: $per) {
+              media(genre: $genre, type: MANGA, isAdult: false, sort: POPULARITY_DESC) {
+                id title { romaji english native }
+                coverImage { large }
+                status format genres description(asHtml: false)
+                chapters volumes countryOfOrigin startDate { year }
+                staff { edges { node { name { full } } } }
+              }
+            }
+          }`;
+        variables = { genre: entry.name, p: page, per: limit };
       }
       const data = await this._aniMangaQuery(query, variables);
       return { data: this._aniMangaToList(data) };
@@ -1432,17 +1481,29 @@ const JIKAN = {
 
   // ── Manga catalog rows (merged AniList + ComicK) ─────────────────────
   async mangaTrending(page = 1, adult = false) {
-    const aniPromise = this._aniMangaQuery(`query($p: Int, $per: Int, $adult: Boolean) {
-      Page(page: $p, perPage: $per) {
-        media(type: MANGA, isAdult: $adult, sort: TRENDING_DESC) {
-          id title { romaji english native }
-          coverImage { large extraLarge }
-          status format genres description(asHtml: false)
-          chapters volumes countryOfOrigin startDate { year }
-          staff { edges { node { name { full } } } }
+    const aniPromise = adult
+      ? this._aniMangaQuery(`query($p: Int, $per: Int) {
+        Page(page: $p, perPage: $per) {
+          media(type: MANGA, sort: TRENDING_DESC) {
+            id title { romaji english native }
+            coverImage { large extraLarge }
+            status format genres description(asHtml: false)
+            chapters volumes countryOfOrigin startDate { year }
+            staff { edges { node { name { full } } } }
+          }
         }
-      }
-    }`, { p: page, per: 20, adult: !!adult }).then(d => ({ data: this._aniMangaToList(d) })).catch(() => ({ data: [] }));
+      }`, { p: page, per: 20 }).then(d => ({ data: this._aniMangaToList(d) })).catch(() => ({ data: [] }))
+      : this._aniMangaQuery(`query($p: Int, $per: Int) {
+        Page(page: $p, perPage: $per) {
+          media(type: MANGA, isAdult: false, sort: TRENDING_DESC) {
+            id title { romaji english native }
+            coverImage { large extraLarge }
+            status format genres description(asHtml: false)
+            chapters volumes countryOfOrigin startDate { year }
+            staff { edges { node { name { full } } } }
+          }
+        }
+      }`, { p: page, per: 20 }).then(d => ({ data: this._aniMangaToList(d) })).catch(() => ({ data: [] }));
 
     const comickPromise = this.comickPopular(page, 10).catch(() => ({ data: [] }));
 
@@ -1462,17 +1523,29 @@ const JIKAN = {
   },
 
   async mangaNewReleases(page = 1, adult = false) {
-    const aniPromise = this._aniMangaQuery(`query($p: Int, $per: Int, $adult: Boolean) {
-      Page(page: $p, perPage: $per) {
-        media(type: MANGA, isAdult: $adult, sort: START_DATE_DESC) {
-          id title { romaji english native }
-          coverImage { large extraLarge }
-          status format genres description(asHtml: false)
-          chapters volumes countryOfOrigin startDate { year }
-          staff { edges { node { name { full } } } }
+    const aniPromise = adult
+      ? this._aniMangaQuery(`query($p: Int, $per: Int) {
+        Page(page: $p, perPage: $per) {
+          media(type: MANGA, sort: START_DATE_DESC) {
+            id title { romaji english native }
+            coverImage { large extraLarge }
+            status format genres description(asHtml: false)
+            chapters volumes countryOfOrigin startDate { year }
+            staff { edges { node { name { full } } } }
+          }
         }
-      }
-    }`, { p: page, per: 20, adult: !!adult }).then(d => ({ data: this._aniMangaToList(d) })).catch(() => ({ data: [] }));
+      }`, { p: page, per: 20 }).then(d => ({ data: this._aniMangaToList(d) })).catch(() => ({ data: [] }))
+      : this._aniMangaQuery(`query($p: Int, $per: Int) {
+        Page(page: $p, perPage: $per) {
+          media(type: MANGA, isAdult: false, sort: START_DATE_DESC) {
+            id title { romaji english native }
+            coverImage { large extraLarge }
+            status format genres description(asHtml: false)
+            chapters volumes countryOfOrigin startDate { year }
+            staff { edges { node { name { full } } } }
+          }
+        }
+      }`, { p: page, per: 20 }).then(d => ({ data: this._aniMangaToList(d) })).catch(() => ({ data: [] }));
 
     const comickPromise = this.comickPopular(page + 5, 10).catch(() => ({ data: [] }));
 
@@ -1493,18 +1566,30 @@ const JIKAN = {
 
   async mangaPopularRow(page = 1, adult = false) {
     try {
-      const q = `query($p: Int, $per: Int, $adult: Boolean) {
-        Page(page: $p, perPage: $per) {
-          media(type: MANGA, isAdult: $adult, sort: POPULARITY_DESC) {
-            id title { romaji english native }
-            coverImage { large extraLarge }
-            status format genres description(asHtml: false)
-            chapters volumes countryOfOrigin startDate { year }
-            staff { edges { node { name { full } } } }
+      const q = adult
+        ? `query($p: Int, $per: Int) {
+          Page(page: $p, perPage: $per) {
+            media(type: MANGA, sort: POPULARITY_DESC) {
+              id title { romaji english native }
+              coverImage { large extraLarge }
+              status format genres description(asHtml: false)
+              chapters volumes countryOfOrigin startDate { year }
+              staff { edges { node { name { full } } } }
+            }
           }
-        }
-      }`;
-      const data = await this._aniMangaQuery(q, { p: page, per: 20, adult: !!adult });
+        }`
+        : `query($p: Int, $per: Int) {
+          Page(page: $p, perPage: $per) {
+            media(type: MANGA, isAdult: false, sort: POPULARITY_DESC) {
+              id title { romaji english native }
+              coverImage { large extraLarge }
+              status format genres description(asHtml: false)
+              chapters volumes countryOfOrigin startDate { year }
+              staff { edges { node { name { full } } } }
+            }
+          }
+        }`;
+      const data = await this._aniMangaQuery(q, { p: page, per: 20 });
       return { data: this._aniMangaToList(data) };
     } catch (e) {
       return { data: [] };
@@ -1513,18 +1598,30 @@ const JIKAN = {
 
   async mangaTopRated(page = 1, adult = false) {
     try {
-      const q = `query($p: Int, $per: Int, $adult: Boolean) {
-        Page(page: $p, perPage: $per) {
-          media(type: MANGA, isAdult: $adult, sort: SCORE_DESC) {
-            id title { romaji english native }
-            coverImage { large extraLarge }
-            status format genres description(asHtml: false)
-            chapters volumes countryOfOrigin startDate { year }
-            staff { edges { node { name { full } } } }
+      const q = adult
+        ? `query($p: Int, $per: Int) {
+          Page(page: $p, perPage: $per) {
+            media(type: MANGA, sort: SCORE_DESC) {
+              id title { romaji english native }
+              coverImage { large extraLarge }
+              status format genres description(asHtml: false)
+              chapters volumes countryOfOrigin startDate { year }
+              staff { edges { node { name { full } } } }
+            }
           }
-        }
-      }`;
-      const data = await this._aniMangaQuery(q, { p: page, per: 20, adult: !!adult });
+        }`
+        : `query($p: Int, $per: Int) {
+          Page(page: $p, perPage: $per) {
+            media(type: MANGA, isAdult: false, sort: SCORE_DESC) {
+              id title { romaji english native }
+              coverImage { large extraLarge }
+              status format genres description(asHtml: false)
+              chapters volumes countryOfOrigin startDate { year }
+              staff { edges { node { name { full } } } }
+            }
+          }
+        }`;
+      const data = await this._aniMangaQuery(q, { p: page, per: 20 });
       return { data: this._aniMangaToList(data) };
     } catch (e) {
       return { data: [] };
