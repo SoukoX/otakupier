@@ -117,11 +117,13 @@
         renderPage();
         SEO.setAnimeMeta(animeData);
         // Pre-warm provider caches before first episode loads.
-        await Promise.allSettled([
-          JIKAN.anilistIdOf(animeData.mal_id),
-          JIKAN.anikotoEpisodes(animeData),
-          JIKAN.anipubEpisodes(animeData),
-        ]);
+        const embedProviders = getStreamingProviders().filter((p) => p.mode === "embed");
+        const warmups = [JIKAN.anilistIdOf(animeData.mal_id)];
+        for (const p of embedProviders) {
+          if (p.dynamic === "anikoto") warmups.push(JIKAN.anikotoEpisodes(animeData));
+          if (p.dynamic === "anipub") warmups.push(JIKAN.anipubEpisodes(animeData));
+        }
+        await Promise.allSettled(warmups);
         playEpisode(1);
       } catch (err) {
         main.innerHTML = `<div class="empty-state">Could not load this anime.</div>`;
