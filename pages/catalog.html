@@ -185,6 +185,17 @@
           <div class="scroll-row" id="mangaRowNew"><div class="skeleton-row"></div></div>
         </div>
       </div>
+
+      <div class="row-section">
+        <div class="row-head">
+          <h2>Highest Rated</h2>
+        </div>
+        <div class="sc-row-wrap">
+          <button class="sc-row-btn prev" aria-label="Scroll left"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg></button>
+          <button class="sc-row-btn next" aria-label="Scroll right"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6l6 6-6 6"/></svg></button>
+          <div class="scroll-row" id="mangaRowRated"><div class="skeleton-row"></div></div>
+        </div>
+      </div>
     </section>
 
     <!-- Full browse / search grid with pagination -->
@@ -246,6 +257,8 @@
         loadHero();
         loadRows();
       }
+      state.genre = "";
+      loadGenres();
       loadCatalog();
       try {
         const newParams = new URLSearchParams(window.location.search);
@@ -288,6 +301,9 @@
       if (catType === "anime") {
         document.getElementById("catHero").style.display = "none";
         document.getElementById("catRows").style.display = "none";
+      } else {
+        document.getElementById("mangaHero").style.display = "none";
+        document.getElementById("mangaRows").style.display = "none";
       }
       loadCatalog();
       scrollToBrowse();
@@ -350,7 +366,7 @@
         return `<a class="suggest-item" data-i="${i}" href="${href}">
 <img class="suggest-img" src="${JIKAN.esc(cover)}"
                  alt="${JIKAN.esc(m.title)}" loading="lazy"
-                 onerror="this.onerror=null;this.src=JIKAN.PLACEHOLDER">
+                 onerror="mangaImgError(this)">
           <span class="suggest-body">
             <span class="suggest-title">${JIKAN.esc(m.title)}</span>
             <span class="suggest-meta">${JIKAN.esc(m.status || "Manga")}${m.author ? " · " + JIKAN.esc(m.author) : ""}</span>
@@ -514,6 +530,22 @@
       }
     }
 
+    function mangaImgError(el) {
+      if (!el.dataset.retries) el.dataset.retries = "0";
+      const retries = parseInt(el.dataset.retries);
+      const src = el.src;
+      if (retries === 0 && src.includes("mangadex.org/covers/")) {
+        el.dataset.retries = "1";
+        el.src = src.replace("/covers/", "/media/uploads/");
+      } else if (retries <= 1 && src.includes("anilist.co")) {
+        el.dataset.retries = String(retries + 1);
+        el.src = src.replace("/large/", "/medium/");
+      } else {
+        el.onerror = null;
+        el.src = JIKAN.PLACEHOLDER;
+      }
+    }
+
     function mangaCard(m) {
       const href = pageHref("manga") + "?id=" + encodeURIComponent(m.id);
       const cover = m.cover || JIKAN.PLACEHOLDER;
@@ -522,23 +554,28 @@
         : m.status === "FINISHED" ? "Completed"
         : m.status === "NOT_YET_RELEASED" ? "Coming Soon"
         : m.status || "";
+      const fmtClass = /manhwa/i.test(fmt) ? "fmt-manhwa" : /manhua/i.test(fmt) ? "fmt-manhua" : "fmt-manga";
       return '<a class="card stream-card manga-card" href="' + href + '">' +
-        '<div class="card-poster"><img src="' + JIKAN.esc(cover) + '" alt="' + JIKAN.esc(m.title) + '" loading="lazy" onerror="this.onerror=null;this.src=JIKAN.PLACEHOLDER">' +
+        '<div class="card-poster"><img src="' + JIKAN.esc(cover) + '" alt="' + JIKAN.esc(m.title) + '" loading="lazy" onerror="mangaImgError(this)">' +
+        '<span class="card-fmt-badge ' + fmtClass + '">' + JIKAN.esc(fmt) + '</span>' +
         (statusLabel ? '<span class="card-badge">' + JIKAN.esc(statusLabel) + '</span>' : '') +
         '</div>' +
         '<div class="card-body">' +
           '<div class="card-title">' + JIKAN.esc(m.title) + '</div>' +
-          (m.genres && m.genres.length ? '<div class="card-meta">' + m.genres.slice(0, 3).map(g => JIKAN.esc(typeof g === "string" ? g : g.name || "")).join(" · ") + '</div>' : '') +
+          '<div class="card-meta-row">' +
+            (m.genres && m.genres.length ? '<span class="card-genres">' + JIKAN.esc(typeof m.genres[0] === "string" ? m.genres[0] : m.genres[0].name || "") + '</span>' : '') +
+            (m.chapters ? '<span class="card-chapters">' + m.chapters + ' ch</span>' : '') +
+          '</div>' +
           (m.author ? '<div class="card-meta">' + JIKAN.esc(m.author) + '</div>' : '') +
-          (m.chapters ? '<div class="card-meta">' + m.chapters + ' chapters</div>' : '') +
         '</div>' +
       '</a>';
     }
 
     async function loadGenres() {
       const sel = document.getElementById("genreSelect");
+      sel.innerHTML = '<option value="">All genres</option>';
       try {
-        const genres = await JIKAN.genres();
+        const genres = catType === "manga" ? JIKAN.mangaGenres() : await JIKAN.genres();
         genres.forEach((g) => {
           const opt = document.createElement("option");
           opt.value = g.mal_id;
@@ -868,6 +905,7 @@
       };
       loadMangaRow("mangaRowTrending", () => JIKAN.mangaTrending(1));
       loadMangaRow("mangaRowNew", () => JIKAN.mangaNewReleases(1));
+      loadMangaRow("mangaRowRated", () => JIKAN.mangaTopRated(1));
     }
 
     function setupScrollRow(el) {
