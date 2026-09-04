@@ -100,8 +100,10 @@
         renderTrailer();
         SEO.setAnimeMeta(animeData);
         loadNextEpisode();
-        // Warm the MAL→AniList mapping used by the AniXo embed.
+        // Pre-warm provider caches in background so first episode loads fast.
         JIKAN.anilistIdOf(animeData.mal_id).catch(() => {});
+        JIKAN.anikotoEpisodes(animeData).catch(() => {});
+        JIKAN.anipubEpisodes(animeData).catch(() => {});
         loadSavedState();
         // Characters + episodes fetch in parallel (they're independent)
         await Promise.all([loadCharacters(), loadEpisodes()]);
@@ -722,7 +724,7 @@
         // slow/offline API never leaves the modal hanging.
         url = await Promise.race([
           JIKAN.anikotoUrl(animeData, ep, streamLang),
-          new Promise((r) => setTimeout(() => r(null), 12000)),
+          new Promise((r) => setTimeout(() => r(null), 8000)),
         ]);
         if (!url) {
           showToast(`Couldn't resolve episode ${ep} on ${provider.name}. Try another provider.`);
