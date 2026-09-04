@@ -135,14 +135,13 @@
     async function loadDash() {
       const panel = document.getElementById("panel");
       const count = async (table) => (await supabase.from(table).select("id", { count: "exact", head: true })).count || 0;
-      let profiles = 0, reviews = 0, chat = 0, threads = 0, clubs = 0, bans = 0;
-      try { [profiles, reviews, chat, threads, clubs, bans] = await Promise.all([
-        count("profiles"), count("reviews"), count("chat_messages"), count("forum_threads"), count("clubs"), count("bans"),
+      let profiles = 0, chat = 0, threads = 0, clubs = 0, bans = 0;
+      try { [profiles, chat, threads, clubs, bans] = await Promise.all([
+        count("profiles"), count("chat_messages"), count("forum_threads"), count("clubs"), count("bans"),
       ]); } catch (e) {}
       panel.innerHTML = `
         <div class="stat-grid">
           <div class="stat-card"><b>${profiles}</b><span>Users</span></div>
-          <div class="stat-card"><b>${reviews}</b><span>Reviews</span></div>
           <div class="stat-card"><b>${chat}</b><span>Chat messages</span></div>
           <div class="stat-card"><b>${threads}</b><span>Forum threads</span></div>
           <div class="stat-card"><b>${clubs}</b><span>Clubs</span></div>
@@ -297,10 +296,8 @@
     }
 
     async function deleteCustomAnime(cid) {
-      if (!confirm("Delete this custom anime and its reviews/rankings?")) return;
+      if (!confirm("Delete this custom anime?")) return;
       try {
-        await supabase.from("reviews").delete().eq("anime_mal_id", cid);
-        await supabase.from("rankings").delete().eq("anime_mal_id", cid);
         await supabase.from("saved_anime").delete().eq("anime_mal_id", cid);
         await supabase.from("custom_anime").delete().eq("id", cid);
         showToast("Deleted");
@@ -615,33 +612,12 @@
     async function loadModeration() {
       const panel = document.getElementById("panel");
       panel.innerHTML = `
-        <h3 class="sub-head">Recent reviews</h3><div id="modReviews"></div>
         <h3 class="sub-head">Recent chat messages</h3><div id="modChat"></div>
         <h3 class="sub-head">Recent forum threads</h3><div id="modThreads"></div>
         <h3 class="sub-head">Recent club posts</h3><div id="modClub"></div>`;
-      loadModReviews();
       loadModChat();
       loadModThreads();
       loadModClub();
-    }
-
-    async function loadModReviews() {
-      const box = document.getElementById("modReviews");
-      const { data } = await supabase.from("reviews").select("id, user_id, anime_mal_id, anime_title, rating, text, parent_id, created_at").order("created_at", { ascending: false }).limit(20);
-      box.innerHTML = "";
-      if (!data?.length) { box.innerHTML = `<div class="empty-state">None.</div>`; return; }
-      data.forEach(async (r) => {
-        const p = await fetchProfileRow(r.user_id);
-        const el = document.createElement("div");
-        el.className = "admin-list-item";
-        el.innerHTML = `
-          <div class="grow">
-            <div>${adminNameHTML(p)} <span style="color:var(--text-dim); font-size:.8rem;">${r.parent_id ? "replied to a review on" : `rated ${r.rating ?? "—"} on`} ${JIKAN.esc(r.anime_title || r.anime_mal_id)}</span></div>
-            <div style="color:var(--text-dim); font-size:.85rem;">${JIKAN.esc((r.text || "").slice(0, 140))}</div>
-          </div>
-          <button class="btn btn-danger btn-small" onclick="modDelete('reviews', ${r.id})">Delete</button>`;
-        box.appendChild(el);
-      });
     }
 
     async function loadModChat() {
