@@ -22,7 +22,7 @@ const CONFIG = {
   CAPTCHA_SITE_KEY: "",
 
   SITE_NAME: "OtakuPier",
-  SITE_TAGLINE: "Discover, Rank & Review Anime — Find Where to Watch",
+  SITE_TAGLINE: "Discover Anime & Manga — Find Where to Watch",
   // Your GitHub Pages URL once deployed
   SITE_URL: "https://otakupier.2bd.net",
 
