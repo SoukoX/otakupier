@@ -25,10 +25,13 @@
   <nav class="navbar" id="navbar"></nav>
 
   <main class="container">
-    <h1 style="display:none;">My Anime List - OtakuPier</h1>
+    <h1 style="display:none;">My List - OtakuPier</h1>
     <div class="section-head">
       <h2>My List</h2>
-      <span style="color:var(--text-dim); font-size:.9rem;">Anime you've saved</span>
+    </div>
+    <div class="cat-type-toggle" style="padding:0 0 12px;">
+      <button class="cat-type-btn active" data-list="anime" onclick="switchList('anime')">Anime</button>
+      <button class="cat-type-btn" data-list="manga" onclick="switchList('manga')">Manga</button>
     </div>
     <div class="grid" id="savedGrid"></div>
   </main>
@@ -40,16 +43,33 @@
   <script src="../js/api.js?v=25"></script>
   <script src="../js/app.js?v=25"></script>
   <script>
-    async function loadSaved() {
+    let currentList = "anime";
+
+    function switchList(type) {
+      currentList = type;
+      document.querySelectorAll(".cat-type-btn").forEach(b => b.classList.toggle("active", b.dataset.list === type));
+      loadList();
+    }
+
+    async function loadList() {
       const grid = document.getElementById("savedGrid");
       grid.innerHTML = skeletonGrid(12);
       if (!isLoggedIn()) {
         grid.innerHTML = `<div class="empty-state">
           <a href="login.html" class="btn btn-primary">Login</a>
-          <p style="margin-top:12px;">Login to save anime to your list.</p>
+          <p style="margin-top:12px;">Login to save anime and manga to your list.</p>
         </div>`;
         return;
       }
+      if (currentList === "manga") {
+        await loadSavedManga();
+      } else {
+        await loadSavedAnime();
+      }
+    }
+
+    async function loadSavedAnime() {
+      const grid = document.getElementById("savedGrid");
       try {
         const { data, error } = await supabase
           .from("saved_anime")
@@ -75,7 +95,7 @@
             <div class="info">
               <div class="title">${JIKAN.esc(s.anime_title)}</div>
               <div class="meta">
-                <button class="btn btn-danger btn-small" onclick="unsave(${s.anime_mal_id}, this)">Remove</button>
+                <button class="btn btn-danger btn-small" onclick="unsaveAnime(${s.anime_mal_id}, this)">Remove</button>
               </div>
             </div>`;
           el.addEventListener("click", (e) => {
@@ -89,7 +109,52 @@
       }
     }
 
-    async function unsave(malId, btn) {
+    async function loadSavedManga() {
+      const grid = document.getElementById("savedGrid");
+      try {
+        const { data, error } = await supabase
+          .from("saved_manga")
+          .select("*")
+          .eq("user_id", currentUser.id)
+          .order("updated_at", { ascending: false });
+        if (error) throw error;
+        grid.innerHTML = "";
+        if (!data.length) {
+          grid.innerHTML = `<div class="empty-state">
+            No manga saved yet. Browse the <a href="catalog.html?type=manga" style="color:var(--accent)">manga catalog</a> and hit "Save".</div>`;
+          return;
+        }
+        data.forEach((s) => {
+          const el = document.createElement("div");
+          el.className = "anime-card";
+          const readerUrl = pageHref("mangareader") + "?id=" + encodeURIComponent(s.manga_id) + "&title=" + encodeURIComponent(s.manga_title);
+          const hasChapter = s.last_chapter && s.last_chapter !== "";
+          el.innerHTML = `
+            <div class="poster">
+              <img src="${s.manga_image || JIKAN.PLACEHOLDER}"
+                   alt="${JIKAN.esc(s.manga_title)}" loading="lazy"
+                   onerror="this.onerror=null;this.src=JIKAN.PLACEHOLDER">
+            </div>
+            <div class="info">
+              <div class="title">${JIKAN.esc(s.manga_title)}</div>
+              ${hasChapter ? '<div class="meta" style="color:var(--accent-3);font-size:.8rem;">📖 Ch. ' + JIKAN.esc(s.last_chapter) + '</div>' : ''}
+              <div class="meta">
+                ${hasChapter ? '<a class="btn btn-primary btn-small" href="' + readerUrl + '">Continue</a>' : '<a class="btn btn-outline btn-small" href="' + pageHref("manga") + '?id=' + encodeURIComponent(s.manga_id) + '">View</a>'}
+                <button class="btn btn-danger btn-small" onclick="unsaveManga('${JIKAN.esc(s.manga_id)}', this)">Remove</button>
+              </div>
+            </div>`;
+          el.addEventListener("click", (e) => {
+            if (e.target.closest("button") || e.target.closest("a")) return;
+            window.location.href = pageHref("manga") + "?id=" + encodeURIComponent(s.manga_id);
+          });
+          grid.appendChild(el);
+        });
+      } catch (err) {
+        grid.innerHTML = `<div class="empty-state">Could not load your list.</div>`;
+      }
+    }
+
+    async function unsaveAnime(malId, btn) {
       try {
         await supabase.from("saved_anime").delete().eq("anime_mal_id", malId).eq("user_id", currentUser.id);
         const card = btn.closest(".anime-card");
@@ -100,7 +165,18 @@
       }
     }
 
-    document.addEventListener("DOMContentLoaded", loadSaved);
+    async function unsaveManga(mangaId, btn) {
+      try {
+        await supabase.from("saved_manga").delete().eq("manga_id", mangaId).eq("user_id", currentUser.id);
+        const card = btn.closest(".anime-card");
+        if (card) card.remove();
+        showToast("Removed from My List");
+      } catch (err) {
+        showToast("Could not remove");
+      }
+    }
+
+    document.addEventListener("DOMContentLoaded", loadList);
   </script>
 </body>
 </html>
