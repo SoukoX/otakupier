@@ -982,6 +982,8 @@ updateEdges();
         document.getElementById("mangaHero").style.display = "";
         document.getElementById("mangaRows").style.display = "";
         document.getElementById("heroRestore").hidden = true;
+        const adultBtn = document.getElementById("adultToggle");
+        if (adultBtn) adultBtn.style.display = "";
       }
       if (state.q) {
         document.getElementById("searchBox").value = state.q;
