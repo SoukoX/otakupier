@@ -108,6 +108,20 @@ create table if not exists public.saved_anime (
   unique (user_id, anime_mal_id)
 );
 
+-- 5b. Saved manga (My List)
+create table if not exists public.saved_manga (
+  id bigint generated always as identity primary key,
+  user_id uuid references auth.users on delete cascade not null,
+  manga_id text not null,
+  manga_title text default '',
+  manga_image text,
+  last_chapter text default '',
+  last_chapter_idx integer default -1,
+  created_at timestamptz default now(),
+  updated_at timestamptz default now(),
+  unique (user_id, manga_id)
+);
+
 -- 6. Friendships (friend requests)
 create table if not exists public.friendships (
   id bigint generated always as identity primary key,
@@ -480,6 +494,26 @@ drop policy if exists "Users can delete their own saved anime" on public.saved_a
 create policy "Users can delete their own saved anime"
   on public.saved_anime for delete using (auth.uid() = user_id);
 
+-- Saved manga policies
+alter table public.saved_manga enable row level security;
+
+drop policy if exists "Saved manga are viewable by everyone" on public.saved_manga;
+create policy "Saved manga are viewable by everyone"
+  on public.saved_manga for select using (true);
+
+drop policy if exists "Users can insert their own saved manga" on public.saved_manga;
+create policy "Users can insert their own saved manga"
+  on public.saved_manga for insert
+  with check (auth.uid() = user_id and not exists (select 1 from public.bans b where b.user_id = auth.uid()));
+
+drop policy if exists "Users can update their own saved manga" on public.saved_manga;
+create policy "Users can update their own saved manga"
+  on public.saved_manga for update using (auth.uid() = user_id);
+
+drop policy if exists "Users can delete their own saved manga" on public.saved_manga;
+create policy "Users can delete their own saved manga"
+  on public.saved_manga for delete using (auth.uid() = user_id);
+
 -- Friendships: participants can see and manage their own
 drop policy if exists "Users can see friendships they are part of" on public.friendships;
 create policy "Users can see friendships they are part of"
@@ -812,6 +846,7 @@ create index if not exists idx_reviews_parent on public.reviews (parent_id);
 create index if not exists idx_rankings_anime on public.rankings (anime_mal_id);
 create index if not exists idx_chat_created on public.chat_messages (created_at desc);
 create index if not exists idx_saved_user on public.saved_anime (user_id);
+create index if not exists idx_saved_manga_user on public.saved_manga (user_id);
 create index if not exists idx_friends_user on public.friendships (addressee_id, status);
 create index if not exists idx_messages_pair on public.messages (sender_id, recipient_id, created_at desc);
 create index if not exists idx_likes_review on public.review_likes (review_id);
