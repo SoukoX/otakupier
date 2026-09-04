@@ -146,7 +146,14 @@
           // Resume from saved chapter if ?ch= param present
           if (resumeChapter) {
             const targetNum = resumeChapter.trim();
-            const idx = chapters.findIndex(ch => String(ch.attributes.chapter || "").trim() === targetNum);
+            const targetParsed = parseNum(targetNum);
+            let idx = -1;
+            // Try exact string match first
+            idx = chapters.findIndex(ch => String(ch.attributes.chapter || "").trim() === targetNum);
+            // Fallback: numeric match
+            if (idx < 0 && !isNaN(targetParsed)) {
+              idx = chapters.findIndex(ch => parseNum(ch.attributes.chapter) === targetParsed);
+            }
             if (idx >= 0) goToChapter(idx);
           }
         } else {
