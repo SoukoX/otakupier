@@ -507,18 +507,21 @@
       async function loadReaderSaveState() {
         if (!isLoggedIn() || !mangaId) return;
         try {
-          const { data } = await supabase
+          const { data, error } = await supabase
             .from("saved_manga")
             .select("id, last_chapter_idx")
             .eq("user_id", currentUser.id)
             .eq("manga_id", mangaId)
             .maybeSingle();
+          if (error) throw error;
           if (data) {
             isSaved = true;
             savedRowId = data.id;
           }
-          renderReaderSaveButton();
-        } catch (_) {}
+        } catch (e) {
+          console.warn("[manga save] load state failed:", e.message);
+        }
+        renderReaderSaveButton();
       }
 
       function renderReaderSaveButton() {
