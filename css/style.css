@@ -4610,6 +4610,17 @@ footer .footer-links {
   color: var(--text);
 }
 
+/* 18+ adult toggle button */
+#adultToggle.is-active {
+  background: #e53e3e;
+  color: #fff;
+  border-color: #e53e3e;
+}
+#adultToggle:hover:not(.is-active) {
+  border-color: #e53e3e;
+  color: #e53e3e;
+}
+
 /* ── Manga card ── */
 .manga-card {
   display: block;
