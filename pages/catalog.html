@@ -12,6 +12,22 @@
   <link rel="canonical" href="https://otakupier.2bd.net/pages/catalog">
   <link rel="alternate" hreflang="en" href="https://otakupier.2bd.net/pages/catalog">
   <link rel="alternate" hreflang="x-default" href="https://otakupier.2bd.net/pages/catalog">
+  <script>
+    // Dynamic canonical: include query params so Google sees each variant as unique
+    (function(){
+      var u = location.pathname + location.search;
+      var base = 'https://otakupier.2bd.net';
+      var full = base + u;
+      var c = document.querySelector('link[rel="canonical"]');
+      if (c) c.href = full;
+      var h = document.querySelector('link[hreflang="en"]');
+      if (h) h.href = full;
+      var x = document.querySelector('link[hreflang="x-default"]');
+      if (x) x.href = full;
+      var o = document.querySelector('meta[property="og:url"]');
+      if (o) o.setAttribute('content', full);
+    })();
+  </script>
   <meta name="googlebot" content="index, follow">
   <link rel="icon" type="image/svg+xml" href="../favicon.svg?v=2">
   <link rel="icon" type="image/x-icon" href="../favicon.ico">
@@ -20,11 +36,11 @@
   <meta property="og:title" content="Browse Anime & Manga - OtakuPier">
   <meta property="og:description" content="Browse and search anime and manga on OtakuPier. See what's airing now, trending, and most popular.">
   <meta property="og:url" content="https://otakupier.2bd.net/pages/catalog">
-  <meta property="og:image" content="https://otakupier.2bd.net/images/banner.svg">
+  <meta property="og:image" content="https://otakupier.2bd.net/images/og-image.png">
   <meta name="twitter:card" content="summary_large_image">
   <meta name="twitter:title" content="Browse Anime & Manga - OtakuPier">
   <meta name="twitter:description" content="Browse and search anime and manga. Filter by genre and find where to watch.">
-  <meta name="twitter:image" content="https://otakupier.2bd.net/images/banner.svg">
+  <meta name="twitter:image" content="https://otakupier.2bd.net/images/og-image.png">
   <script type="application/ld+json">
   {
     "@context": "https://schema.org",
