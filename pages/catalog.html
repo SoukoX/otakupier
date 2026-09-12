@@ -794,16 +794,17 @@
       const track = document.getElementById("mangaHeroSlides");
       if (!track) return;
       try {
-        const res = await JIKAN.mangaTrending(1);
+        const res = await JIKAN.mangaTrending(1, state.adult);
         const newList = (res.data || []).slice(0, 6);
         if (!newList.length) { track.innerHTML = ""; return; }
 
         // Compare with cached hero entries — only update if new entries are genuinely better
         let cached = [];
-        try { cached = JSON.parse(localStorage.getItem("otk.mangaHero") || "[]"); } catch(e) {}
+        const cacheKey = state.adult ? "otk.mangaHeroAdult" : "otk.mangaHero";
+        try { cached = JSON.parse(localStorage.getItem(cacheKey) || "[]"); } catch(e) {}
 
         const merged = mergeHeroEntries(cached, newList);
-        try { localStorage.setItem("otk.mangaHero", JSON.stringify(merged)); } catch(e) {}
+        try { localStorage.setItem(cacheKey, JSON.stringify(merged)); } catch(e) {}
 
         track.innerHTML = merged.map((m, i) => mangaHeroSlide(m, i === 0)).join("");
         initMangaHero(merged.length);
