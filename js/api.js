@@ -1186,6 +1186,133 @@ const JIKAN = {
     }
   },
 
+  // ── MangaDex adult content (CORS-open, no key) ──────────────────────
+  // MangaDex has 16k+ adult titles with covers via includes[]=cover_art.
+  _MANGADEX_BASE: "https://api.mangadex.org",
+
+  async _mangadexAdultSearch(query, limit = 20, offset = 0) {
+    try {
+      const ctrl = new AbortController();
+      const timer = setTimeout(() => ctrl.abort(), 15000);
+      let url = `${this._MANGADEX_BASE}/manga?limit=${limit}&offset=${offset}&contentRating[]=pornographic&contentRating[]=erotica&includes[]=cover_art`;
+      if (query) url += `&title=${encodeURIComponent(query)}`;
+      const res = await fetch(url, { signal: ctrl.signal });
+      clearTimeout(timer);
+      if (!res.ok) return [];
+      const body = await res.json();
+      if (!body.data) return [];
+      return body.data.map(m => this._mangadexToManga(m));
+    } catch (e) {
+      return [];
+    }
+  },
+
+  async _mangadexAdultTrending(limit = 20) {
+    const results = await this._mangadexAdultSearch("", limit, 0);
+    return results;
+  },
+
+  _mangadexToManga(m) {
+    const attr = m.attributes || {};
+    const title = attr.title?.en || attr.title?.ja || Object.values(attr.title || {})[0] || "";
+    const covers = (m.relationships || []).filter(r => r.type === "cover_art");
+    const cover = covers.length && covers[0].attributes?.fileName
+      ? `https://mangadex.org/covers/${m.id}/${covers[0].attributes.fileName}.256.jpg`
+      : "";
+    return {
+      id: `mdx-${m.id}`,
+      title,
+      cover,
+      status: attr.status || "",
+      summary: (attr.description?.en || "").slice(0, 250),
+      genres: (attr.tags || []).map(t => t.attributes?.name?.en || "").filter(Boolean),
+      author: "",
+      year: attr.year || null,
+      format: "Manga",
+      chapters: attr.lastChapter ? parseInt(attr.lastChapter) : null,
+      volumes: null,
+      altTitles: (attr.altTitles || []).map(t => Object.values(t)[0]).filter(Boolean).slice(0, 3),
+      isAdult: true,
+      _mangadexId: m.id,
+    };
+  },
+
+  // ── Adult manga merged search (MangaDex primary + ComicK fallback) ──
+  async adultMangaSearch(query, limit = 20) {
+    const [mdxResult, comickResult] = await Promise.allSettled([
+      this._mangadexAdultSearch(query, Math.min(limit, 10)).catch(() => []),
+      this.comickMangaSearch(query, Math.min(limit, 10), true).catch(() => []),
+    ]);
+    const mdxResults = mdxResult.status === "fulfilled" ? mdxResult.value : [];
+    const comickResults = comickResult.status === "fulfilled" ? comickResult.value : [];
+    const seen = new Set();
+    const merged = [];
+    for (const m of [...mdxResults, ...comickResults]) {
+      const key = (m.title || "").toLowerCase().trim();
+      if (!key || seen.has(key)) continue;
+      seen.add(key);
+      merged.push(m);
+    }
+    return merged.slice(0, limit);
+  },
+
+  async adultMangaPopular(page = 1, limit = 20) {
+    const [mdxResult, comickResult] = await Promise.allSettled([
+      this._mangadexAdultSearch("", limit, 0).catch(() => []),
+      this.comickMangaSearch("harem", Math.min(limit, 10), true).catch(() => []),
+    ]);
+    const mdxData = mdxResult.status === "fulfilled" ? mdxResult.value : [];
+    const comickData = comickResult.status === "fulfilled" ? comickResult.value : [];
+    const seen = new Set();
+    const merged = [];
+    for (const m of [...mdxData, ...comickData]) {
+      const key = (m.title || "").toLowerCase().trim();
+      if (!key || seen.has(key)) continue;
+      seen.add(key);
+      merged.push(m);
+    }
+    return {
+      data: merged.slice(0, limit),
+      pagination: { last_visible_page: 999, items: { total: merged.length, per_page: limit, count: Math.min(limit, merged.length) } },
+    };
+  },
+
+  async adultMangaTrending(limit = 20) {
+    const [mdxResult, comickResult] = await Promise.allSettled([
+      this._mangadexAdultTrending(limit).catch(() => []),
+      this.comickMangaSearch("milf", Math.min(limit, 10), true).catch(() => []),
+    ]);
+    const mdxData = mdxResult.status === "fulfilled" ? mdxResult.value : [];
+    const comickData = comickResult.status === "fulfilled" ? comickResult.value : [];
+    const seen = new Set();
+    const merged = [];
+    for (const m of [...mdxData, ...comickData]) {
+      const key = (m.title || "").toLowerCase().trim();
+      if (!key || seen.has(key)) continue;
+      seen.add(key);
+      merged.push(m);
+    }
+    return { data: merged.slice(0, limit) };
+  },
+
+  async adultMangaNewReleases(limit = 20) {
+    const [mdxResult, comickResult] = await Promise.allSettled([
+      this._mangadexAdultSearch("", limit, 0).catch(() => []),
+      this.comickMangaSearch("ecchi", Math.min(limit, 10), true).catch(() => []),
+    ]);
+    const mdxData = mdxResult.status === "fulfilled" ? mdxResult.value : [];
+    const comickData = comickResult.status === "fulfilled" ? comickResult.value : [];
+    const seen = new Set();
+    const merged = [];
+    for (const m of [...mdxData, ...comickData]) {
+      const key = (m.title || "").toLowerCase().trim();
+      if (!key || seen.has(key)) continue;
+      seen.add(key);
+      merged.push(m);
+    }
+    return { data: merged.slice(0, limit) };
+  },
+
   // ── Manga (AniList GraphQL) ──────────────────────────────────────────
   // Uses the same AniList GraphQL API already proven for anime (CORS-open,
   // no key). AniList has full manga data: titles, covers, descriptions,
