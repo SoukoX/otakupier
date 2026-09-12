@@ -1292,88 +1292,25 @@ const JIKAN = {
   // When adult=true, queries both ComicK (pornographic/erotica) and
   // MangaDex (pornographic/erotica), merges + dedupes by title.
   async adultMangaSearch(query, limit = 20) {
-    const [comickPromise, mdxPromise] = await Promise.allSettled([
-      this.comickMangaSearch(query, Math.min(limit, 15), true).catch(() => []),
-      this._mangadexAdultSearch(query, Math.min(limit, 15)).catch(() => []),
-    ]);
-    const comickResults = comickPromise.status === "fulfilled" ? comickPromise.value : [];
-    const mdxResults = mdxPromise.status === "fulfilled" ? mdxPromise.value : [];
-    const seen = new Set();
-    const merged = [];
-    for (const m of [...comickResults, ...mdxResults]) {
-      const key = (m.title || "").toLowerCase().trim();
-      if (!key || seen.has(key)) continue;
-      seen.add(key);
-      merged.push(m);
-    }
-    return merged.slice(0, limit);
+    return await this._mangadexAdultSearch(query, limit).catch(() => []);
   },
 
   async adultMangaPopular(page = 1, limit = 20) {
-    const [mdxPromise, comickPromise] = await Promise.allSettled([
-      this._mangadexAdultPopular(limit).catch(() => []),
-      Promise.all(["harem","milf","ecchi","adult","romance","fantasy","isekai","school","office","seduction","secret"]
-        .slice(0, Math.min(limit, 8))
-        .map(q => this.comickMangaSearch(q, 3, true).catch(() => []))
-      ).then(r => r.flat()),
-    ]);
-    const mdxData = mdxPromise.status === "fulfilled" ? mdxPromise.value : [];
-    const comickData = comickPromise.status === "fulfilled" ? comickPromise.value : [];
-    const seen = new Set();
-    const merged = [];
-    for (const m of [...mdxData, ...comickData]) {
-      const key = (m.title || "").toLowerCase().trim();
-      if (!key || seen.has(key)) continue;
-      seen.add(key);
-      merged.push(m);
-    }
+    const data = await this._mangadexAdultPopular(limit).catch(() => []);
     return {
-      data: merged.slice(0, limit),
-      pagination: { last_visible_page: 999, items: { total: merged.length, per_page: limit, count: Math.min(limit, merged.length) } },
+      data: data.slice(0, limit),
+      pagination: { last_visible_page: 999, items: { total: data.length, per_page: limit, count: Math.min(limit, data.length) } },
     };
   },
 
   async adultMangaTrending(limit = 20) {
-    // MangaDex first (has covers), then ComicK fills gaps
-    const [mdxPromise, comickPromise] = await Promise.allSettled([
-      this._mangadexAdultTrending(limit).catch(() => []),
-      Promise.all(["harem","milf","fantasy","romance","school","adult","ecchi","isekai"]
-        .slice(0, Math.min(limit, 8))
-        .map(q => this.comickMangaSearch(q, 2, true).catch(() => []))
-      ).then(r => r.flat()),
-    ]);
-    const mdxData = mdxPromise.status === "fulfilled" ? mdxPromise.value : [];
-    const comickData = comickPromise.status === "fulfilled" ? comickPromise.value : [];
-    const seen = new Set();
-    const merged = [];
-    for (const m of [...mdxData, ...comickData]) {
-      const key = (m.title || "").toLowerCase().trim();
-      if (!key || seen.has(key)) continue;
-      seen.add(key);
-      merged.push(m);
-    }
-    return { data: merged.slice(0, limit) };
+    const data = await this._mangadexAdultTrending(limit).catch(() => []);
+    return { data: data.slice(0, limit) };
   },
 
   async adultMangaNewReleases(limit = 20) {
-    const [mdxPromise, comickPromise] = await Promise.allSettled([
-      this._mangadexAdultSearch("", limit, 0).catch(() => []),
-      Promise.all(["harem","milf","fantasy","romance","school","adult","ecchi","isekai"]
-        .slice(0, Math.min(limit, 8))
-        .map(q => this.comickMangaSearch(q, 2, true).catch(() => []))
-      ).then(r => r.flat()),
-    ]);
-    const mdxData = mdxPromise.status === "fulfilled" ? mdxPromise.value : [];
-    const comickData = comickPromise.status === "fulfilled" ? comickPromise.value : [];
-    const seen = new Set();
-    const merged = [];
-    for (const m of [...mdxData, ...comickData]) {
-      const key = (m.title || "").toLowerCase().trim();
-      if (!key || seen.has(key)) continue;
-      seen.add(key);
-      merged.push(m);
-    }
-    return { data: merged.slice(0, limit) };
+    const data = await this._mangadexAdultSearch("", limit, 0).catch(() => []);
+    return { data: data.slice(0, limit) };
   },
 
   // ── Manga (AniList GraphQL) ──────────────────────────────────────────
