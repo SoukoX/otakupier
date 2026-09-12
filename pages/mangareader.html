@@ -209,16 +209,24 @@
             if (idx >= 0) goToChapter(idx);
           }
         } else {
+          // Build external reading links
+          const mdLink = mangaId.startsWith("mdx-")
+            ? `https://mangadex.org/title/${mangaId.replace("mdx-", "")}`
+            : (mangadexId ? `https://mangadex.org/title/${mangadexId}` : `https://mangadex.org/search?q=${encodeURIComponent(mangaTitle)}`);
           $("chapterList").innerHTML = '<div class="empty-state">' +
             '<p>No chapters found.</p>' +
-            '<p style="margin-top:8px;font-size:0.85em;">This manga may not have readable chapters available yet.</p></div>';
+            '<p style="margin-top:8px;font-size:0.85em;">This manga may not have readable chapters available yet.</p>' +
+            '<div style="margin-top:12px;display:flex;gap:8px;flex-wrap:wrap;">' +
+              '<a class="btn btn-primary btn-small" href="' + mdLink + '" target="_blank" rel="noopener">📖 Read on MangaDex</a>' +
+              '<a class="btn btn-outline btn-small" href="https://mangakatana.com/?search=' + encodeURIComponent(mangaTitle) + '&search_by=m_name" target="_blank" rel="noopener">Search MangaKatana</a>' +
+            '</div></div>';
         }
       }
 
       async function fetchMangaDexChapters(titles) {
         for (const title of titles) {
           try {
-            const data = await proxyFetch(`https://api.mangadex.org/manga?title=${encodeURIComponent(title)}&limit=10&includes[]=cover_art`);
+            const data = await proxyFetch(`https://api.mangadex.org/manga?title=${encodeURIComponent(title)}&limit=10&includes[]=cover_art&contentRating[]=pornographic&contentRating[]=erotica&contentRating[]=suggestive`);
             if (data && data.data && data.data.length) {
               const lower = mangaTitle.toLowerCase();
               const scored = data.data
@@ -242,34 +250,38 @@
                 .sort((a, b) => b.score - a.score);
 
               if (scored.length) {
-                const mangaId = scored[0].manga.id;
-                const chData = await proxyFetch(
-                  `https://api.mangadex.org/manga/${mangaId}/feed?translatedLanguage%5B%5D=en&limit=500&order%5Bchapter%5D=asc`
-                );
-                const allChapters = (chData.data || []).filter(ch => ch.attributes && ch.attributes.chapter && !ch.attributes.externalUrl);
-                const seen = new Map();
-                allChapters.forEach(ch => {
-                  const chapNum = ch.attributes.chapter;
-                  if (!chapNum) return;
-                  const key = normKey(chapNum);
-                  const existing = seen.get(key);
-                  if (!existing) {
-                    seen.set(key, ch);
-                  } else {
-                    const curTime = new Date(ch.attributes.publishAt || 0).getTime();
-                    const exTime = new Date(existing.attributes.publishAt || 0).getTime();
-                    if (curTime > exTime) seen.set(key, ch);
-                  }
-                });
-                const hostedChapters = Array.from(seen.values());
-                if (hostedChapters.length) {
-                  return {
-                    provider: "mangadex",
-                    count: hostedChapters.length,
-                    chapters: sortChapters(hostedChapters),
-                    title: scored[0].manga.attributes?.title?.en || mangaTitle,
-                    mangadexId: mangaId,
-                  };
+                for (const candidate of scored) {
+                  const mangaId = candidate.manga.id;
+                  try {
+                    const chData = await proxyFetch(
+                      `https://api.mangadex.org/manga/${mangaId}/feed?translatedLanguage%5B%5D=en&limit=500&order%5Bchapter%5D=asc`
+                    );
+                    const allChapters = (chData.data || []).filter(ch => ch.attributes && ch.attributes.chapter && !ch.attributes.externalUrl);
+                    const seen = new Map();
+                    allChapters.forEach(ch => {
+                      const chapNum = ch.attributes.chapter;
+                      if (!chapNum) return;
+                      const key = normKey(chapNum);
+                      const existing = seen.get(key);
+                      if (!existing) {
+                        seen.set(key, ch);
+                      } else {
+                        const curTime = new Date(ch.attributes.publishAt || 0).getTime();
+                        const exTime = new Date(existing.attributes.publishAt || 0).getTime();
+                        if (curTime > exTime) seen.set(key, ch);
+                      }
+                    });
+                    const hostedChapters = Array.from(seen.values());
+                    if (hostedChapters.length) {
+                      return {
+                        provider: "mangadex",
+                        count: hostedChapters.length,
+                        chapters: sortChapters(hostedChapters),
+                        title: candidate.manga.attributes?.title?.en || mangaTitle,
+                        mangadexId: mangaId,
+                      };
+                    }
+                  } catch (_) { continue; }
                 }
               }
             }
