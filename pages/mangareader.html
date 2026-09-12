@@ -209,17 +209,9 @@
             if (idx >= 0) goToChapter(idx);
           }
         } else {
-          // Build external reading links
-          const mdLink = mangaId.startsWith("mdx-")
-            ? `https://mangadex.org/title/${mangaId.replace("mdx-", "")}`
-            : (mangadexId ? `https://mangadex.org/title/${mangadexId}` : `https://mangadex.org/search?q=${encodeURIComponent(mangaTitle)}`);
           $("chapterList").innerHTML = '<div class="empty-state">' +
             '<p>No chapters found.</p>' +
-            '<p style="margin-top:8px;font-size:0.85em;">This manga may not have readable chapters available yet.</p>' +
-            '<div style="margin-top:12px;display:flex;gap:8px;flex-wrap:wrap;">' +
-              '<a class="btn btn-primary btn-small" href="' + mdLink + '" target="_blank" rel="noopener">📖 Read on MangaDex</a>' +
-              '<a class="btn btn-outline btn-small" href="https://mangakatana.com/?search=' + encodeURIComponent(mangaTitle) + '&search_by=m_name" target="_blank" rel="noopener">Search MangaKatana</a>' +
-            '</div></div>';
+            '<p style="margin-top:8px;font-size:0.85em;">This manga may not have readable chapters available yet.</p></div>';
         }
       }
 
