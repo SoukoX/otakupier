@@ -1234,7 +1234,7 @@ const JIKAN = {
     const cached = this._mangadexCache.get(cacheKey);
     if (cached && Date.now() - cached.at < 30 * 60 * 1000) return cached.val;
     const results = await this._mangadexAdultSearch("", limit, 0);
-    this._mangadexCache.set(cacheKey, { at: Date.now(), val: results });
+    if (results.length) this._mangadexCache.set(cacheKey, { at: Date.now(), val: results });
     return results;
   },
 
@@ -1244,14 +1244,14 @@ const JIKAN = {
     if (cached && Date.now() - cached.at < 30 * 60 * 1000) return cached.val;
     try {
       const ctrl = new AbortController();
-      const timer = setTimeout(() => ctrl.abort(), 12000);
+      const timer = setTimeout(() => ctrl.abort(), 20000);
       const url = `${this._MANGADEX_BASE}/manga?limit=${limit}&contentRating[]=pornographic&contentRating[]=erotica&includes[]=cover_art&hasAvailableChapters=true&order[latestUploadedChapter]=desc`;
       const res = await fetch(url, { signal: ctrl.signal });
       clearTimeout(timer);
       if (!res.ok) return [];
       const body = await res.json();
       const results = (body.data || []).map(m => this._mangadexToManga(m));
-      this._mangadexCache.set(cacheKey, { at: Date.now(), val: results });
+      if (results.length) this._mangadexCache.set(cacheKey, { at: Date.now(), val: results });
       return results;
     } catch (e) {
       return [];
