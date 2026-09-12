@@ -1217,7 +1217,7 @@ const JIKAN = {
     const title = attr.title?.en || attr.title?.ja || Object.values(attr.title || {})[0] || "";
     const covers = (m.relationships || []).filter(r => r.type === "cover_art");
     const cover = covers.length && covers[0].attributes?.fileName
-      ? `https://mangadex.org/covers/${m.id}/${covers[0].attributes.fileName}.256.jpg`
+      ? `https://mangadex.org/covers/${m.id}/${covers[0].attributes.fileName}.512.jpg`
       : "";
     return {
       id: `mdx-${m.id}`,
@@ -1235,6 +1235,46 @@ const JIKAN = {
       isAdult: true,
       _mangadexId: m.id,
     };
+  },
+
+  async _mangadexDetail(mdxId) {
+    try {
+      const ctrl = new AbortController();
+      const timer = setTimeout(() => ctrl.abort(), 15000);
+      const res = await fetch(`${this._MANGADEX_BASE}/manga/${mdxId}?includes[]=cover_art`, { signal: ctrl.signal });
+      clearTimeout(timer);
+      if (!res.ok) return null;
+      const body = await res.json();
+      const m = body.data;
+      if (!m) return null;
+      const attr = m.attributes || {};
+      const title = attr.title?.en || attr.title?.ja || Object.values(attr.title || {})[0] || "";
+      const covers = (m.relationships || []).filter(r => r.type === "cover_art");
+      const cover = covers.length && covers[0].attributes?.fileName
+        ? `https://mangadex.org/covers/${m.id}/${covers[0].attributes.fileName}.512.jpg`
+        : "";
+      const authors = (m.relationships || []).filter(r => r.type === "author");
+      const authorName = authors[0]?.attributes?.name || "";
+      return {
+        id: `mdx-${m.id}`,
+        title,
+        cover,
+        coverSm: cover ? cover.replace(".512.jpg", ".256.jpg") : "",
+        banner: "",
+        status: attr.status || "",
+        summary: attr.description?.en || "",
+        genres: (attr.tags || []).map(t => t.attributes?.name?.en || "").filter(Boolean),
+        author: authorName,
+        year: attr.year || null,
+        format: "Manga",
+        chapters: attr.lastChapter ? parseInt(attr.lastChapter) : null,
+        volumes: null,
+        altTitles: (attr.altTitles || []).map(t => Object.values(t)[0]).filter(Boolean).slice(0, 5),
+        relations: [],
+      };
+    } catch (e) {
+      return null;
+    }
   },
 
   // ── Adult manga merged search (MangaDex primary + ComicK fallback) ──
@@ -1449,6 +1489,11 @@ const JIKAN = {
     if (String(id).startsWith("comick-")) {
       const hid = String(id).replace("comick-", "");
       return this.comickMangaDetail(hid);
+    }
+    // MangaDex manga (id starts with "mdx-")
+    if (String(id).startsWith("mdx-")) {
+      const mdxId = String(id).replace("mdx-", "");
+      return this._mangadexDetail(mdxId);
     }
     // AniList manga
     try {
