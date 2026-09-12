@@ -1291,17 +1291,17 @@ const JIKAN = {
   // ── Adult manga merged search (ComicK + MangaDex) ───────────────────
   // When adult=true, queries both ComicK (pornographic/erotica) and
   // MangaDex (pornographic/erotica), merges + dedupes by title.
-  // ── Adult manga (MangaDex primary, ComicK fallback) ─────────────────
+  // ── Adult manga merged search (ComicK + MangaDex) ───────────────────
   async adultMangaSearch(query, limit = 20) {
-    const [mdxResult, comickResult] = await Promise.allSettled([
-      this._mangadexAdultSearch(query, limit).catch(() => []),
-      this.comickMangaSearch(query, limit, true).catch(() => []),
+    const [comickPromise, mdxPromise] = await Promise.allSettled([
+      this.comickMangaSearch(query, Math.min(limit, 10), true).catch(() => []),
+      this._mangadexAdultSearch(query, Math.min(limit, 10)).catch(() => []),
     ]);
-    const mdx = mdxResult.status === "fulfilled" ? mdxResult.value : [];
-    const comick = comickResult.status === "fulfilled" ? comickResult.value : [];
+    const comickResults = comickPromise.status === "fulfilled" ? comickPromise.value : [];
+    const mdxResults = mdxPromise.status === "fulfilled" ? mdxPromise.value : [];
     const seen = new Set();
     const merged = [];
-    for (const m of [...mdx, ...comick]) {
+    for (const m of [...mdxResults, ...comickResults]) {
       const key = (m.title || "").toLowerCase().trim();
       if (!key || seen.has(key)) continue;
       seen.add(key);
@@ -1311,15 +1311,25 @@ const JIKAN = {
   },
 
   async adultMangaPopular(page = 1, limit = 20) {
-    const [mdxResult, comickResult] = await Promise.allSettled([
+    const adultQueries = [
+      "harem", "milf", "ecchi", "adult", "romance", "fantasy",
+      "isekai", "school", "office", "seduction", "secret",
+    ];
+    const startIdx = ((page - 1) * limit) % adultQueries.length;
+    const batch = [];
+    for (let i = 0; i < Math.min(limit, 8); i++) {
+      batch.push(adultQueries[(startIdx + i) % adultQueries.length]);
+    }
+    const [comickPromise, mdxPromise] = await Promise.allSettled([
+      Promise.all(batch.map(q => this.comickMangaSearch(q, 3, true).catch(() => [])))
+        .then(results => results.flat()),
       this._mangadexAdultPopular(limit).catch(() => []),
-      this.comickMangaSearch("harem milf", limit, true).catch(() => []),
     ]);
-    const mdx = mdxResult.status === "fulfilled" ? mdxResult.value : [];
-    const comick = comickResult.status === "fulfilled" ? comickResult.value : [];
+    const comickData = comickPromise.status === "fulfilled" ? comickPromise.value : [];
+    const mdxData = mdxPromise.status === "fulfilled" ? mdxPromise.value : [];
     const seen = new Set();
     const merged = [];
-    for (const m of [...mdx, ...comick]) {
+    for (const m of [...mdxData, ...comickData]) {
       const key = (m.title || "").toLowerCase().trim();
       if (!key || seen.has(key)) continue;
       seen.add(key);
@@ -1332,15 +1342,21 @@ const JIKAN = {
   },
 
   async adultMangaTrending(limit = 20) {
-    const [mdxResult, comickResult] = await Promise.allSettled([
+    const adultQueries = [
+      "harem", "milf", "fantasy", "romance", "school",
+      "office", "isekai", "adult", "ecchi", "seduction",
+    ];
+    const batch = adultQueries.slice(0, Math.min(limit, 10));
+    const [comickPromise, mdxPromise] = await Promise.allSettled([
+      Promise.all(batch.map(q => this.comickMangaSearch(q, 2, true).catch(() => [])))
+        .then(results => results.flat()),
       this._mangadexAdultTrending(limit).catch(() => []),
-      this.comickMangaSearch("harem milf", limit, true).catch(() => []),
     ]);
-    const mdx = mdxResult.status === "fulfilled" ? mdxResult.value : [];
-    const comick = comickResult.status === "fulfilled" ? comickResult.value : [];
+    const comickData = comickPromise.status === "fulfilled" ? comickPromise.value : [];
+    const mdxData = mdxPromise.status === "fulfilled" ? mdxPromise.value : [];
     const seen = new Set();
     const merged = [];
-    for (const m of [...mdx, ...comick]) {
+    for (const m of [...comickData, ...mdxData]) {
       const key = (m.title || "").toLowerCase().trim();
       if (!key || seen.has(key)) continue;
       seen.add(key);
@@ -1350,15 +1366,21 @@ const JIKAN = {
   },
 
   async adultMangaNewReleases(limit = 20) {
-    const [mdxResult, comickResult] = await Promise.allSettled([
+    const adultQueries = [
+      "harem", "milf", "fantasy", "romance", "school",
+      "adult", "ecchi", "isekai",
+    ];
+    const batch = adultQueries.slice(0, Math.min(limit, 8));
+    const [comickPromise, mdxPromise] = await Promise.allSettled([
+      Promise.all(batch.map(q => this.comickMangaSearch(q, 2, true).catch(() => [])))
+        .then(results => results.flat()),
       this._mangadexAdultSearch("", limit, 0).catch(() => []),
-      this.comickMangaSearch("new adult", limit, true).catch(() => []),
     ]);
-    const mdx = mdxResult.status === "fulfilled" ? mdxResult.value : [];
-    const comick = comickResult.status === "fulfilled" ? comickResult.value : [];
+    const comickData = comickPromise.status === "fulfilled" ? comickPromise.value : [];
+    const mdxData = mdxPromise.status === "fulfilled" ? mdxPromise.value : [];
     const seen = new Set();
     const merged = [];
-    for (const m of [...mdx, ...comick]) {
+    for (const m of [...comickData, ...mdxData]) {
       const key = (m.title || "").toLowerCase().trim();
       if (!key || seen.has(key)) continue;
       seen.add(key);
