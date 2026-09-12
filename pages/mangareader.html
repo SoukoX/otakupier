@@ -170,7 +170,7 @@
           mangaTitle.split(":")[0].trim(),
         ].filter(Boolean);
 
-        // Collect results from both providers (no rendering yet)
+        // Collect results from MangaDex + WeebCentral (no rendering yet)
         const [mdData, wcData] = await Promise.allSettled([
           fetchMangaDexChapters(titles),
           fetchWeebCentralChapters(),
@@ -185,6 +185,21 @@
           chosen = md.count >= wc.count ? md : wc;
         } else {
           chosen = md || wc;
+        }
+
+        // If MangaDex + WeebCentral have 0 chapters, try ManhwaUS + NHentai
+        if (!chosen || chosen.count === 0) {
+          const [mhData, nhData] = await Promise.allSettled([
+            fetchManhwaUsChapters(titles),
+            fetchNhentaiChapters(titles),
+          ]);
+          const mh = mhData.status === "fulfilled" ? mhData.value : null;
+          const nh = nhData.status === "fulfilled" ? nhData.value : null;
+          if (mh && nh) {
+            chosen = mh.count >= nh.count ? mh : nh;
+          } else {
+            chosen = mh || nh;
+          }
         }
 
         if (chosen && chosen.count > 0) {
@@ -340,6 +355,107 @@
         };
       }
 
+      // ── ManhwaUS provider ──
+      async function fetchManhwaUsChapters(titles) {
+        const slug = mangaTitle.toLowerCase()
+          .replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
+        const urls = [
+          `https://manhwaus.net/webtoon/${slug}/`,
+          ...titles.map(t => `https://manhwaus.net/?s=${encodeURIComponent(t)}`),
+        ];
+        for (const url of urls) {
+          try {
+            const html = await proxyFetchText(url);
+            if (!html) continue;
+            // Try to find chapter links on a series page
+            const chapMatches = [...html.matchAll(/href="\/webtoon\/[^"]*\/(chapter-[\w-]+)\/"[^>]*>/g)];
+            if (chapMatches.length) {
+              const seen = new Set();
+              const chaps = [];
+              for (const m of chapMatches) {
+                const slug2 = m[1];
+                if (seen.has(slug2)) continue;
+                seen.add(slug2);
+                const num = slug2.replace("chapter-", "").replace(/-/g, ".");
+                chaps.push({
+                  attributes: { chapter: num, title: "", volume: null },
+                  _manhwausUrl: `https://manhwaus.net${m[0].match(/href="([^"]+)"/)[1]}`,
+                  _provider: "manhwaus",
+                });
+              }
+              if (chaps.length) {
+                return {
+                  provider: "manhwaus",
+                  count: chaps.length,
+                  chapters: sortChapters(chaps),
+                  title: mangaTitle,
+                  _manhwausBase: `https://manhwaus.net/webtoon/${slug}/`,
+                };
+              }
+            }
+          } catch (_) { continue; }
+        }
+        return null;
+      }
+
+      // ── NHentai provider ──
+      async function fetchNhentaiChapters(titles) {
+        for (const title of titles) {
+          try {
+            const data = await proxyFetch(
+              `https://nhentai.net/api/v2/galleries?query=${encodeURIComponent(title)}`
+            );
+            const results = data?.result || [];
+            if (!results.length) continue;
+            // Score results by title similarity
+            const lower = mangaTitle.toLowerCase();
+            const scored = results.map(g => {
+              const t = (g.english_title || g.japanese_title || "").toLowerCase();
+              let score = 0;
+              if (t === lower) score = 200;
+              else if (t.includes(lower) || lower.includes(t)) score = 100;
+              else {
+                const words = lower.split(/\s+/);
+                const matches = words.filter(w => t.includes(w)).length;
+                score = matches / words.length * 80;
+              }
+              return { gallery: g, score };
+            }).sort((a, b) => b.score - a.score);
+
+            if (scored.length && scored[0].score > 20) {
+              const g = scored[0].gallery;
+              const pages = g.num_pages || 0;
+              if (!pages) continue;
+              const chaps = [];
+              for (let p = 1; p <= pages; p++) {
+                chaps.push({
+                  attributes: { chapter: String(p), title: `Page ${p}`, volume: null },
+                  _nhentaiId: g.id,
+                  _nhentaiMediaId: g.media_id,
+                  _nhentaiPage: p,
+                  _provider: "nhentai",
+                });
+              }
+              return {
+                provider: "nhentai",
+                count: chaps.length,
+                chapters: chaps,
+                title: g.english_title || g.japanese_title || mangaTitle,
+              };
+            }
+          } catch (_) { continue; }
+        }
+        return null;
+      }
+
+      // Fetch text content via proxy (for HTML scraping)
+      async function proxyFetchText(url, timeoutMs) {
+        const target = PROXY_BASE + encodeURIComponent(url);
+        const res = await fetch(target, { signal: AbortSignal.timeout(timeoutMs || 20000) });
+        if (!res.ok) throw new Error("Proxy HTTP " + res.status);
+        return res.text();
+      }
+
       function sortChapters(arr) {
         return arr.sort((a, b) => {
           const na = parseNum(a.attributes.chapter);
@@ -470,6 +586,90 @@
             }
           } catch (e) {
             if (gen !== chapterGen) return;
+          }
+          container.innerHTML = '<div class="empty-state">Failed to load chapter images.</div>';
+          return;
+        }
+
+        // ManhwaUS: fetch chapter page and extract image URLs
+        if (currentProvider === "manhwaus") {
+          try {
+            const html = await proxyFetchText(ch._manhwausUrl);
+            if (gen !== chapterGen) return;
+            const imgMatches = [...html.matchAll(/(?:src|data-src)=['"](https?:\/\/[^'"]+\.(?:jpg|jpeg|png|webp))['"]/gi)];
+            const pages = imgMatches.map(m => m[1]).filter(u => !u.includes("thumbnail") && !u.includes("logo") && !u.includes("avatar"));
+            if (pages.length) {
+              container.innerHTML = "";
+              let failedCount = 0;
+              pages.forEach((url, pi) => {
+                const wrapper = document.createElement("div");
+                wrapper.className = "reader-page-wrapper";
+                const img = document.createElement("img");
+                img.className = "reader-page-img";
+                img.src = url;
+                img.alt = `Page ${pi + 1}`;
+                img.loading = pi < 3 ? "eager" : "lazy";
+                const errLabel = document.createElement("div");
+                errLabel.className = "reader-page-error";
+                errLabel.style.display = "none";
+                errLabel.textContent = "Failed to load";
+                img.onerror = function() {
+                  if (this.dataset.retried === "1") {
+                    this.style.display = "none";
+                    errLabel.style.display = "block";
+                    failedCount++;
+                    if (failedCount >= pages.length) container.innerHTML = '<div class="empty-state">Images unavailable.</div>';
+                    return;
+                  }
+                  this.dataset.retried = "1";
+                  this.src = PROXY_BASE + encodeURIComponent(url);
+                };
+                wrapper.appendChild(img);
+                wrapper.appendChild(errLabel);
+                container.appendChild(wrapper);
+              });
+              window.scrollTo({ top: 0, behavior: "instant" });
+              updateNavButtons();
+              return;
+            }
+          } catch (e) {
+            if (gen !== chapterGen) return;
+          }
+          container.innerHTML = '<div class="empty-state">Failed to load chapter images.</div>';
+          return;
+        }
+
+        // NHentai: construct image URLs from media_id
+        if (currentProvider === "nhentai") {
+          const mediaId = ch._nhentaiMediaId;
+          const page = ch._nhentaiPage;
+          if (mediaId && page) {
+            container.innerHTML = "";
+            const ext = "webp";
+            const url = `https://i.nhentai.net/galleries/${mediaId}/${page}.${ext}`;
+            const wrapper = document.createElement("div");
+            wrapper.className = "reader-page-wrapper";
+            const img = document.createElement("img");
+            img.className = "reader-page-img";
+            img.src = PROXY_BASE + encodeURIComponent(url);
+            img.alt = `Page ${page}`;
+            img.loading = "eager";
+            img.onerror = function() {
+              // Try jpg fallback
+              this.src = PROXY_BASE + encodeURIComponent(`https://i.nhentai.net/galleries/${mediaId}/${page}.jpg`);
+              this.onerror = function() {
+                const errLabel = document.createElement("div");
+                errLabel.className = "reader-page-error";
+                errLabel.textContent = "Failed to load";
+                wrapper.appendChild(errLabel);
+                this.style.display = "none";
+              };
+            };
+            wrapper.appendChild(img);
+            container.appendChild(wrapper);
+            window.scrollTo({ top: 0, behavior: "instant" });
+            updateNavButtons();
+            return;
           }
           container.innerHTML = '<div class="empty-state">Failed to load chapter images.</div>';
           return;
