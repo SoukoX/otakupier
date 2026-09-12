@@ -1216,7 +1216,7 @@ const JIKAN = {
     try {
       const ctrl = new AbortController();
       const timer = setTimeout(() => ctrl.abort(), 12000);
-      let url = `${this._MANGADEX_BASE}/manga?limit=${limit}&offset=${offset}&contentRating[]=pornographic&contentRating[]=erotica&includes[]=cover_art&hasAvailableChapters=true`;
+      let url = `${this._MANGADEX_BASE}/manga?limit=${limit}&offset=${offset}&contentRating[]=pornographic&contentRating[]=erotica&includes[]=cover_art`;
       if (query) url += `&title=${encodeURIComponent(query)}`;
       const res = await fetch(url, { signal: ctrl.signal });
       clearTimeout(timer);
@@ -1245,7 +1245,7 @@ const JIKAN = {
     try {
       const ctrl = new AbortController();
       const timer = setTimeout(() => ctrl.abort(), 20000);
-      const url = `${this._MANGADEX_BASE}/manga?limit=${limit}&contentRating[]=pornographic&contentRating[]=erotica&includes[]=cover_art&hasAvailableChapters=true&order[latestUploadedChapter]=desc`;
+      const url = `${this._MANGADEX_BASE}/manga?limit=${limit}&contentRating[]=pornographic&contentRating[]=erotica&includes[]=cover_art`;
       const res = await fetch(url, { signal: ctrl.signal });
       clearTimeout(timer);
       if (!res.ok) return [];
