@@ -111,6 +111,58 @@
       async function init() {
         $("chapterList").innerHTML = '<div class="loading"><div class="spinner"></div>Searching...</div>';
 
+        // If ID is mdx-*, fetch chapters directly by MangaDex ID
+        if (mangaId.startsWith("mdx-")) {
+          const directId = mangaId.replace("mdx-", "");
+          try {
+            const chData = await proxyFetch(
+              `https://api.mangadex.org/manga/${directId}/feed?translatedLanguage%5B%5D=en&limit=500&order%5Bchapter%5D=asc`
+            );
+            const allChapters = (chData.data || []).filter(ch => ch.attributes && ch.attributes.chapter && !ch.attributes.externalUrl);
+            const seen = new Map();
+            allChapters.forEach(ch => {
+              const chapNum = ch.attributes.chapter;
+              if (!chapNum) return;
+              const key = normKey(chapNum);
+              const existing = seen.get(key);
+              if (!existing) {
+                seen.set(key, ch);
+              } else {
+                const a = existing.attributes;
+                const b = ch.attributes;
+                const aPages = (a.pages || 0);
+                const bPages = (b.pages || 0);
+                if (bPages > aPages) seen.set(key, ch);
+              }
+            });
+            const uniqueChapters = [...seen.values()];
+            uniqueChapters.sort((a, b) => {
+              const aN = parseNum(a.attributes.chapter);
+              const bN = parseNum(b.attributes.chapter);
+              return aN - bN;
+            });
+            if (uniqueChapters.length) {
+              chapters = uniqueChapters;
+              mangadexId = directId;
+              currentProvider = "mangadex";
+              renderChapterList();
+              loadReaderSaveState();
+              if (resumeChapter) {
+                const targetNum = resumeChapter.trim();
+                const targetParsed = parseNum(targetNum);
+                let idx = chapters.findIndex(ch => String(ch.attributes.chapter || "").trim() === targetNum);
+                if (idx < 0 && !isNaN(targetParsed)) {
+                  idx = chapters.findIndex(ch => parseNum(ch.attributes.chapter) === targetParsed);
+                }
+                if (idx >= 0) goToChapter(idx);
+              }
+              return;
+            }
+          } catch (e) {
+            console.error("[Reader] Direct MangaDex fetch failed:", e);
+          }
+        }
+
         const titles = [
           mangaTitle,
           mangaTitle.replace(/[:\-!]/g, " ").replace(/\s+/g, " ").trim(),
