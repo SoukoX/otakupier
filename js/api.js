@@ -1291,26 +1291,80 @@ const JIKAN = {
   // ── Adult manga merged search (ComicK + MangaDex) ───────────────────
   // When adult=true, queries both ComicK (pornographic/erotica) and
   // MangaDex (pornographic/erotica), merges + dedupes by title.
+  // ── Adult manga (MangaDex primary, ComicK fallback) ─────────────────
   async adultMangaSearch(query, limit = 20) {
-    return await this._mangadexAdultSearch(query, limit).catch(() => []);
+    const [mdxResult, comickResult] = await Promise.allSettled([
+      this._mangadexAdultSearch(query, limit).catch(() => []),
+      this.comickMangaSearch(query, limit, true).catch(() => []),
+    ]);
+    const mdx = mdxResult.status === "fulfilled" ? mdxResult.value : [];
+    const comick = comickResult.status === "fulfilled" ? comickResult.value : [];
+    const seen = new Set();
+    const merged = [];
+    for (const m of [...mdx, ...comick]) {
+      const key = (m.title || "").toLowerCase().trim();
+      if (!key || seen.has(key)) continue;
+      seen.add(key);
+      merged.push(m);
+    }
+    return merged.slice(0, limit);
   },
 
   async adultMangaPopular(page = 1, limit = 20) {
-    const data = await this._mangadexAdultPopular(limit).catch(() => []);
+    const [mdxResult, comickResult] = await Promise.allSettled([
+      this._mangadexAdultPopular(limit).catch(() => []),
+      this.comickMangaSearch("harem milf", limit, true).catch(() => []),
+    ]);
+    const mdx = mdxResult.status === "fulfilled" ? mdxResult.value : [];
+    const comick = comickResult.status === "fulfilled" ? comickResult.value : [];
+    const seen = new Set();
+    const merged = [];
+    for (const m of [...mdx, ...comick]) {
+      const key = (m.title || "").toLowerCase().trim();
+      if (!key || seen.has(key)) continue;
+      seen.add(key);
+      merged.push(m);
+    }
     return {
-      data: data.slice(0, limit),
-      pagination: { last_visible_page: 999, items: { total: data.length, per_page: limit, count: Math.min(limit, data.length) } },
+      data: merged.slice(0, limit),
+      pagination: { last_visible_page: 999, items: { total: merged.length, per_page: limit, count: Math.min(limit, merged.length) } },
     };
   },
 
   async adultMangaTrending(limit = 20) {
-    const data = await this._mangadexAdultTrending(limit).catch(() => []);
-    return { data: data.slice(0, limit) };
+    const [mdxResult, comickResult] = await Promise.allSettled([
+      this._mangadexAdultTrending(limit).catch(() => []),
+      this.comickMangaSearch("harem milf", limit, true).catch(() => []),
+    ]);
+    const mdx = mdxResult.status === "fulfilled" ? mdxResult.value : [];
+    const comick = comickResult.status === "fulfilled" ? comickResult.value : [];
+    const seen = new Set();
+    const merged = [];
+    for (const m of [...mdx, ...comick]) {
+      const key = (m.title || "").toLowerCase().trim();
+      if (!key || seen.has(key)) continue;
+      seen.add(key);
+      merged.push(m);
+    }
+    return { data: merged.slice(0, limit) };
   },
 
   async adultMangaNewReleases(limit = 20) {
-    const data = await this._mangadexAdultSearch("", limit, 0).catch(() => []);
-    return { data: data.slice(0, limit) };
+    const [mdxResult, comickResult] = await Promise.allSettled([
+      this._mangadexAdultSearch("", limit, 0).catch(() => []),
+      this.comickMangaSearch("new adult", limit, true).catch(() => []),
+    ]);
+    const mdx = mdxResult.status === "fulfilled" ? mdxResult.value : [];
+    const comick = comickResult.status === "fulfilled" ? comickResult.value : [];
+    const seen = new Set();
+    const merged = [];
+    for (const m of [...mdx, ...comick]) {
+      const key = (m.title || "").toLowerCase().trim();
+      if (!key || seen.has(key)) continue;
+      seen.add(key);
+      merged.push(m);
+    }
+    return { data: merged.slice(0, limit) };
   },
 
   // ── Manga (AniList GraphQL) ──────────────────────────────────────────
