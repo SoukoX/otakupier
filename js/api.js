@@ -1290,11 +1290,21 @@ const JIKAN = {
   },
 
   async adultMangaPopular(page = 1, limit = 20) {
+    const adultQueries = [
+      "harem", "milf", "ecchi", "adult", "romance", "fantasy",
+      "isekai", "school", "office", "seduction", "secret",
+    ];
+    const startIdx = ((page - 1) * limit) % adultQueries.length;
+    const batch = [];
+    for (let i = 0; i < Math.min(limit, 8); i++) {
+      batch.push(adultQueries[(startIdx + i) % adultQueries.length]);
+    }
     const [comickPromise, mdxPromise] = await Promise.allSettled([
-      this.comickPopular(page, limit).catch(() => ({ data: [] })),
+      Promise.all(batch.map(q => this.comickMangaSearch(q, 3, true).catch(() => [])))
+        .then(results => results.flat()),
       this._mangadexAdultPopular(limit).catch(() => []),
     ]);
-    const comickData = comickPromise.status === "fulfilled" ? (comickPromise.value.data || []) : [];
+    const comickData = comickPromise.status === "fulfilled" ? comickPromise.value : [];
     const mdxData = mdxPromise.status === "fulfilled" ? mdxPromise.value : [];
     const seen = new Set();
     const merged = [];
@@ -1311,11 +1321,17 @@ const JIKAN = {
   },
 
   async adultMangaTrending(limit = 20) {
+    const adultQueries = [
+      "harem", "milf", "fantasy", "romance", "school",
+      "office", "isekai", "adult", "ecchi", "seduction",
+    ];
+    const batch = adultQueries.slice(0, Math.min(limit, 10));
     const [comickPromise, mdxPromise] = await Promise.allSettled([
-      this.comickPopular(1, limit).catch(() => ({ data: [] })),
+      Promise.all(batch.map(q => this.comickMangaSearch(q, 2, true).catch(() => [])))
+        .then(results => results.flat()),
       this._mangadexAdultTrending(limit).catch(() => []),
     ]);
-    const comickData = comickPromise.status === "fulfilled" ? (comickPromise.value.data || []) : [];
+    const comickData = comickPromise.status === "fulfilled" ? comickPromise.value : [];
     const mdxData = mdxPromise.status === "fulfilled" ? mdxPromise.value : [];
     const seen = new Set();
     const merged = [];
@@ -1329,11 +1345,17 @@ const JIKAN = {
   },
 
   async adultMangaNewReleases(limit = 20) {
+    const adultQueries = [
+      "harem", "milf", "fantasy", "romance", "school",
+      "adult", "ecchi", "isekai",
+    ];
+    const batch = adultQueries.slice(0, Math.min(limit, 8));
     const [comickPromise, mdxPromise] = await Promise.allSettled([
-      this.comickPopular(2, limit).catch(() => ({ data: [] })),
+      Promise.all(batch.map(q => this.comickMangaSearch(q, 2, true).catch(() => [])))
+        .then(results => results.flat()),
       this._mangadexAdultSearch("", limit, 0).catch(() => []),
     ]);
-    const comickData = comickPromise.status === "fulfilled" ? (comickPromise.value.data || []) : [];
+    const comickData = comickPromise.status === "fulfilled" ? comickPromise.value : [];
     const mdxData = mdxPromise.status === "fulfilled" ? mdxPromise.value : [];
     const seen = new Set();
     const merged = [];
