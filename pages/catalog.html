@@ -1047,27 +1047,16 @@
       const track = document.getElementById("adultHeroSlides");
       if (!track) return;
       try {
-        const hasFunc = typeof JIKAN.adultMangaTrending === "function";
-        if (!hasFunc) { track.innerHTML = '<div class="empty-state">API not loaded.</div>'; return; }
-        let res;
-        try {
-          res = await JIKAN.adultMangaTrending(6);
-        } catch(e2) {
-          track.innerHTML = '<div class="empty-state">Fetch error: ' + e2.message + '</div>';
-          return;
-        }
-        const newList = (res && res.data ? res.data : []).slice(0, 6);
-        if (!newList.length) {
-          track.innerHTML = '<div class="empty-state">No adult content available. (data: ' + JSON.stringify(res).substring(0, 200) + ')</div>';
-          return;
-        }
+        const res = await JIKAN.adultMangaTrending(6);
+        const newList = (res.data || []).slice(0, 6);
+        if (!newList.length) { track.innerHTML = '<div class="empty-state">No adult content available.</div>'; return; }
         let cached = [];
         try { cached = JSON.parse(localStorage.getItem("otk.adultHero") || "[]"); } catch(e) {}
         const merged = mergeHeroEntries(cached, newList);
         try { localStorage.setItem("otk.adultHero", JSON.stringify(merged)); } catch(e) {}
         track.innerHTML = merged.map((m, i) => adultHeroSlide(m, i === 0)).join("");
         initAdultHero(merged.length);
-      } catch (e) { track.innerHTML = '<div class="empty-state">Error: ' + (e.message || e) + '</div>'; }
+      } catch (e) { track.innerHTML = '<div class="empty-state">Could not load adult content.</div>'; }
     }
 
     function adultHeroSlide(m, active) {
