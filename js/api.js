@@ -1186,6 +1186,166 @@ const JIKAN = {
     }
   },
 
+  // ── MangaDex adult content (pornographic + erotica) ─────────────────
+  // MangaDex has 16k+ adult titles. CORS-open, no key. Covers via
+  // includes[]=cover_art. Used as primary source for 18+ manga search.
+  _MANGADEX_BASE: "https://api.mangadex.org",
+  _mangadexCache: new Map(),
+
+  async _mangadexAdultSearch(query, limit = 20, offset = 0) {
+    try {
+      const ctrl = new AbortController();
+      const timer = setTimeout(() => ctrl.abort(), 12000);
+      let url = `${this._MANGADEX_BASE}/manga?limit=${limit}&offset=${offset}&contentRating[]=pornographic&contentRating[]=erotica&includes[]=cover_art&hasAvailableChapters=true`;
+      if (query) url += `&title=${encodeURIComponent(query)}`;
+      const res = await fetch(url, { signal: ctrl.signal, headers: { "User-Agent": "OtakuPier/1.0" } });
+      clearTimeout(timer);
+      if (!res.ok) return [];
+      const body = await res.json();
+      if (!body.data) return [];
+      return body.data.map(m => this._mangadexToManga(m));
+    } catch (e) {
+      return [];
+    }
+  },
+
+  async _mangadexAdultPopular(limit = 20) {
+    const cacheKey = `mdx-adult-pop`;
+    const cached = this._mangadexCache.get(cacheKey);
+    if (cached && Date.now() - cached.at < 30 * 60 * 1000) return cached.val;
+    const results = await this._mangadexAdultSearch("", limit, 0);
+    this._mangadexCache.set(cacheKey, { at: Date.now(), val: results });
+    return results;
+  },
+
+  async _mangadexAdultTrending(limit = 20) {
+    const cacheKey = `mdx-adult-trend`;
+    const cached = this._mangadexCache.get(cacheKey);
+    if (cached && Date.now() - cached.at < 30 * 60 * 1000) return cached.val;
+    try {
+      const ctrl = new AbortController();
+      const timer = setTimeout(() => ctrl.abort(), 12000);
+      const url = `${this._MANGADEX_BASE}/manga?limit=${limit}&contentRating[]=pornographic&contentRating[]=erotica&includes[]=cover_art&hasAvailableChapters=true&order[latestUploadedChapter]=desc`;
+      const res = await fetch(url, { signal: ctrl.signal, headers: { "User-Agent": "OtakuPier/1.0" } });
+      clearTimeout(timer);
+      if (!res.ok) return [];
+      const body = await res.json();
+      const results = (body.data || []).map(m => this._mangadexToManga(m));
+      this._mangadexCache.set(cacheKey, { at: Date.now(), val: results });
+      return results;
+    } catch (e) {
+      return [];
+    }
+  },
+
+  _mangadexToManga(m) {
+    const attr = m.attributes || {};
+    const title = attr.title?.en || attr.title?.["ja-ro"] || Object.values(attr.title || {})[0] || "Unknown";
+    const covers = (m.relationships || []).filter(r => r.type === "cover_art");
+    let cover = "";
+    if (covers.length && covers[0].attributes?.fileName) {
+      cover = `https://mangadex.org/covers/${m.id}/${covers[0].attributes.fileName}.256.jpg`;
+    }
+    const statusMap = { ongoing: "RELEASING", completed: "FINISHED", hiatus: "RELEASING", cancelled: "FINISHED" };
+    const rating = attr.contentRating || "safe";
+    return {
+      id: "mangadex-" + m.id,
+      title,
+      cover,
+      status: statusMap[attr.status] || attr.status || "",
+      summary: (attr.description?.en || "").replace(/<[^>]*>/g, "").slice(0, 250),
+      genres: (attr.tags || []).map(t => t.attributes?.name?.en || "").filter(Boolean),
+      author: "",
+      year: attr.year || null,
+      format: "MANGA",
+      chapters: attr.lastChapter ? parseInt(attr.lastChapter) : null,
+      volumes: attr.lastVolume ? parseInt(attr.lastVolume) : null,
+      altTitles: (attr.altTitles || []).map(a => a.en || Object.values(a)[0]).filter(Boolean).slice(0, 5),
+      _mangadexId: m.id,
+      _source: "mangadex",
+      isAdult: rating === "pornographic" || rating === "erotica",
+      contentRating: rating,
+    };
+  },
+
+  // ── Adult manga merged search (ComicK + MangaDex) ───────────────────
+  // When adult=true, queries both ComicK (pornographic/erotica) and
+  // MangaDex (pornographic/erotica), merges + dedupes by title.
+  async adultMangaSearch(query, limit = 20) {
+    const [comickPromise, mdxPromise] = await Promise.allSettled([
+      this.comickMangaSearch(query, Math.min(limit, 15), true).catch(() => []),
+      this._mangadexAdultSearch(query, Math.min(limit, 15)).catch(() => []),
+    ]);
+    const comickResults = comickPromise.status === "fulfilled" ? comickPromise.value : [];
+    const mdxResults = mdxPromise.status === "fulfilled" ? mdxPromise.value : [];
+    const seen = new Set();
+    const merged = [];
+    for (const m of [...comickResults, ...mdxResults]) {
+      const key = (m.title || "").toLowerCase().trim();
+      if (!key || seen.has(key)) continue;
+      seen.add(key);
+      merged.push(m);
+    }
+    return merged.slice(0, limit);
+  },
+
+  async adultMangaPopular(page = 1, limit = 20) {
+    const [comickPromise, mdxPromise] = await Promise.allSettled([
+      this.comickPopular(page, limit).catch(() => ({ data: [] })),
+      this._mangadexAdultPopular(limit).catch(() => []),
+    ]);
+    const comickData = comickPromise.status === "fulfilled" ? (comickPromise.value.data || []) : [];
+    const mdxData = mdxPromise.status === "fulfilled" ? mdxPromise.value : [];
+    const seen = new Set();
+    const merged = [];
+    for (const m of [...comickData, ...mdxData]) {
+      const key = (m.title || "").toLowerCase().trim();
+      if (!key || seen.has(key)) continue;
+      seen.add(key);
+      merged.push(m);
+    }
+    return {
+      data: merged.slice(0, limit),
+      pagination: { last_visible_page: 999, items: { total: merged.length, per_page: limit, count: Math.min(limit, merged.length) } },
+    };
+  },
+
+  async adultMangaTrending(limit = 20) {
+    const [comickPromise, mdxPromise] = await Promise.allSettled([
+      this.comickPopular(1, limit).catch(() => ({ data: [] })),
+      this._mangadexAdultTrending(limit).catch(() => []),
+    ]);
+    const comickData = comickPromise.status === "fulfilled" ? (comickPromise.value.data || []) : [];
+    const mdxData = mdxPromise.status === "fulfilled" ? mdxPromise.value : [];
+    const seen = new Set();
+    const merged = [];
+    for (const m of [...comickData, ...mdxData]) {
+      const key = (m.title || "").toLowerCase().trim();
+      if (!key || seen.has(key)) continue;
+      seen.add(key);
+      merged.push(m);
+    }
+    return { data: merged.slice(0, limit) };
+  },
+
+  async adultMangaNewReleases(limit = 20) {
+    const [comickPromise, mdxPromise] = await Promise.allSettled([
+      this.comickPopular(2, limit).catch(() => ({ data: [] })),
+      this._mangadexAdultSearch("", limit, 0).catch(() => []),
+    ]);
+    const comickData = comickPromise.status === "fulfilled" ? (comickPromise.value.data || []) : [];
+    const mdxData = mdxPromise.status === "fulfilled" ? mdxPromise.value : [];
+    const seen = new Set();
+    const merged = [];
+    for (const m of [...comickData, ...mdxData]) {
+      const key = (m.title || "").toLowerCase().trim();
+      if (!key || seen.has(key)) continue;
+      seen.add(key);
+      merged.push(m);
+    }
+    return { data: merged.slice(0, limit) };
+  },
+
   // ── Manga (AniList GraphQL) ──────────────────────────────────────────
   // Uses the same AniList GraphQL API already proven for anime (CORS-open,
   // no key). AniList has full manga data: titles, covers, descriptions,
@@ -1257,16 +1417,17 @@ const JIKAN = {
   },
 
   // Manga search: try AniList first (fast, CORS-open), fall back to ComicK.
+  // When adult=true, routes through adultMangaSearch (ComicK + MangaDex adult).
   // Results are merged + deduped by title so the grid has the best coverage.
   async mangaSearch(query, limit = 20, adult = false) {
+    if (adult) return this.adultMangaSearch(query, limit);
     const sources = await Promise.allSettled([
-      this._aniMangaQuery(this._MANGA_SEARCH_Q, { s: query, p: 1, per: limit, adult: !!adult })
+      this._aniMangaQuery(this._MANGA_SEARCH_Q, { s: query, p: 1, per: limit, adult: false })
         .then(d => this._aniMangaToList(d)),
-      this.comickMangaSearch(query, Math.min(limit, 10), adult).catch(() => []),
+      this.comickMangaSearch(query, Math.min(limit, 10), false).catch(() => []),
     ]);
     const aniResults = sources[0].status === "fulfilled" ? sources[0].value : [];
     const comickResults = sources[1].status === "fulfilled" ? sources[1].value : [];
-    // Merge: AniList first (better metadata), then ComicK (fills gaps)
     const seen = new Set();
     const merged = [];
     for (const m of [...aniResults, ...comickResults]) {
@@ -1279,7 +1440,9 @@ const JIKAN = {
   },
 
   // Popular manga: try AniList first, fall back to ComicK.
+  // When adult=true, routes through adultMangaPopular (ComicK + MangaDex adult).
   async mangaPopular(page = 1, limit = 20, adult = false) {
+    if (adult) return this.adultMangaPopular(page, limit);
     const aniPromise = this._aniMangaQuery(`query($p: Int, $per: Int, $adult: Boolean) {
       Page(page: $p, perPage: $per) {
         media(type: MANGA, isAdult: $adult, sort: POPULARITY_DESC) {
@@ -1395,6 +1558,12 @@ const JIKAN = {
   },
 
   async mangaByGenre(genreId, page = 1, limit = 20, adult = false) {
+    if (adult) {
+      // For adult genre browsing, use adult search with genre name as query fallback
+      const entry = this._MANGA_GENRE_MAP[Number(genreId)];
+      const query = entry ? entry.name : "";
+      return this.adultMangaSearch(query, limit);
+    }
     const entry = this._MANGA_GENRE_MAP[Number(genreId)];
     if (!entry) return { data: [] };
 
@@ -1436,6 +1605,7 @@ const JIKAN = {
 
   // ── Manga catalog rows (merged AniList + ComicK) ─────────────────────
   async mangaTrending(page = 1, adult = false) {
+    if (adult) return this.adultMangaTrending(20);
     const aniPromise = this._aniMangaQuery(`query($p: Int, $per: Int, $adult: Boolean) {
       Page(page: $p, perPage: $per) {
         media(type: MANGA, isAdult: $adult, sort: TRENDING_DESC) {
@@ -1467,6 +1637,7 @@ const JIKAN = {
   },
 
   async mangaNewReleases(page = 1, adult = false) {
+    if (adult) return this.adultMangaNewReleases(20);
     const aniPromise = this._aniMangaQuery(`query($p: Int, $per: Int, $adult: Boolean) {
       Page(page: $p, perPage: $per) {
         media(type: MANGA, isAdult: $adult, sort: START_DATE_DESC) {
@@ -1518,6 +1689,7 @@ const JIKAN = {
   },
 
   async mangaTopRated(page = 1, adult = false) {
+    if (adult) return this.adultMangaPopular(page, 20);
     try {
       const q = `query($p: Int, $per: Int, $adult: Boolean) {
         Page(page: $p, perPage: $per) {
