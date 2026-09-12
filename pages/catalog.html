@@ -1047,20 +1047,25 @@
       const track = document.getElementById("adultHeroSlides");
       if (!track) return;
       try {
+        const hasFunc = typeof JIKAN.adultMangaTrending === "function";
+        if (!hasFunc) { track.innerHTML = '<div class="empty-state">API not loaded.</div>'; return; }
         const res = await JIKAN.adultMangaTrending(6);
-        const newList = (res.data || []).slice(0, 6);
+        const newList = (res && res.data ? res.data : []).slice(0, 6);
         if (!newList.length) {
-          // Retry once after short delay (CDN/API cold start)
-          await new Promise(r => setTimeout(r, 2000));
-          const retry = await JIKAN.adultMangaTrending(6);
-          const retryList = (retry.data || []).slice(0, 6);
-          if (!retryList.length) { track.innerHTML = '<div class="empty-state">No adult content available.</div>'; return; }
-          let cached = [];
-          try { cached = JSON.parse(localStorage.getItem("otk.adultHero") || "[]"); } catch(e) {}
-          const merged = mergeHeroEntries(cached, retryList);
-          try { localStorage.setItem("otk.adultHero", JSON.stringify(merged)); } catch(e) {}
-          track.innerHTML = merged.map((m, i) => adultHeroSlide(m, i === 0)).join("");
-          initAdultHero(merged.length);
+          // Try direct MangaDex as fallback
+          try {
+            const fallback = await JIKAN._mangadexAdultTrending(6);
+            if (fallback && fallback.length) {
+              let cached = [];
+              try { cached = JSON.parse(localStorage.getItem("otk.adultHero") || "[]"); } catch(e) {}
+              const merged = mergeHeroEntries(cached, fallback);
+              try { localStorage.setItem("otk.adultHero", JSON.stringify(merged)); } catch(e) {}
+              track.innerHTML = merged.map((m, i) => adultHeroSlide(m, i === 0)).join("");
+              initAdultHero(merged.length);
+              return;
+            }
+          } catch(e2) {}
+          track.innerHTML = '<div class="empty-state">No adult content available.</div>';
           return;
         }
         let cached = [];
