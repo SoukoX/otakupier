@@ -215,6 +215,52 @@
       </div>
     </section>
 
+    <!-- Adult (18+) hero slideshow -->
+    <section class="cat-hero" id="adultHero" aria-label="Adult manga" style="display:none;">
+      <div class="cat-hero-track" id="adultHeroSlides"></div>
+      <button class="cat-hero-arrow prev" id="adultHeroPrev" aria-label="Previous slide">&lsaquo;</button>
+      <button class="cat-hero-arrow next" id="adultHeroNext" aria-label="Next slide">&rsaquo;</button>
+      <div class="cat-hero-dots" id="adultHeroDots"></div>
+      <button class="cat-hero-collapse" id="adultHeroCollapse" aria-label="Hide highlights" title="Hide highlights">&ndash;</button>
+    </section>
+    <button class="cat-hero-restore" id="adultHeroRestore" hidden>Show highlights</button>
+
+    <!-- Adult (18+) scroll rows -->
+    <section class="cat-rows" id="adultRows" style="display:none;">
+      <div class="row-section">
+        <div class="row-head">
+          <h2>Trending 18+</h2>
+        </div>
+        <div class="sc-row-wrap">
+          <button class="sc-row-btn prev" aria-label="Scroll left"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg></button>
+          <button class="sc-row-btn next" aria-label="Scroll right"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6l6 6-6 6"/></svg></button>
+          <div class="scroll-row" id="adultRowTrending"><div class="skeleton-row"></div></div>
+        </div>
+      </div>
+
+      <div class="row-section">
+        <div class="row-head">
+          <h2>New 18+ Releases</h2>
+        </div>
+        <div class="sc-row-wrap">
+          <button class="sc-row-btn prev" aria-label="Scroll left"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg></button>
+          <button class="sc-row-btn next" aria-label="Scroll right"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6l6 6-6 6"/></svg></button>
+          <div class="scroll-row" id="adultRowNew"><div class="skeleton-row"></div></div>
+        </div>
+      </div>
+
+      <div class="row-section">
+        <div class="row-head">
+          <h2>Popular 18+</h2>
+        </div>
+        <div class="sc-row-wrap">
+          <button class="sc-row-btn prev" aria-label="Scroll left"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg></button>
+          <button class="sc-row-btn next" aria-label="Scroll right"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6l6 6-6 6"/></svg></button>
+          <div class="scroll-row" id="adultRowPopular"><div class="skeleton-row"></div></div>
+        </div>
+      </div>
+    </section>
+
     <!-- Full browse / search grid with pagination -->
     <div class="catalog-body">
       <div class="catalog-results-head">
@@ -251,16 +297,23 @@
       state.page = 1;
       const btn = document.getElementById("adultToggle");
       if (btn) btn.classList.toggle("is-active", state.adult);
-      document.getElementById("searchBox").placeholder = state.adult ? "Search adult manga & manhwa..." : (catType === "manga" ? "Search manga..." : "Search anime...");
+      document.getElementById("searchBox").placeholder = state.adult ? "Search 18+ manga & manhwa..." : (catType === "manga" ? "Search manga..." : "Search anime...");
       if (state.adult) {
         catType = "manga";
         document.querySelectorAll(".cat-type-btn").forEach(b => b.classList.toggle("active", b.dataset.type === "manga"));
         document.getElementById("catHero").style.display = "none";
         document.getElementById("catRows").style.display = "none";
+        document.getElementById("mangaHero").style.display = "none";
+        document.getElementById("mangaRows").style.display = "none";
+        document.getElementById("adultHero").style.display = "";
+        document.getElementById("adultRows").style.display = "";
+        loadAdultHero();
+        loadAdultRows();
+      } else {
+        document.getElementById("adultHero").style.display = "none";
+        document.getElementById("adultRows").style.display = "none";
         document.getElementById("mangaHero").style.display = "";
         document.getElementById("mangaRows").style.display = "";
-        const adultBtn = document.getElementById("adultToggle");
-        if (adultBtn) adultBtn.style.display = "";
         loadMangaHero();
         loadMangaRows();
       }
@@ -270,21 +323,28 @@
     // ── Anime / Manga toggle ──
     function switchCatType(type) {
       catType = type;
+      state.adult = false;
+      const adultBtn = document.getElementById("adultToggle");
+      if (adultBtn) { adultBtn.classList.remove("is-active"); adultBtn.style.display = type === "manga" ? "" : "none"; }
       document.querySelectorAll(".cat-type-btn").forEach(b => b.classList.toggle("active", b.dataset.type === type));
       state.page = 1;
       document.getElementById("searchBox").placeholder = type === "manga" ? "Search manga..." : "Search anime...";
-      const adultBtn = document.getElementById("adultToggle");
-      if (adultBtn) adultBtn.style.display = type === "manga" ? "" : "none";
       const animeHero = document.getElementById("catHero");
       const animeRows = document.getElementById("catRows");
       const mangaHero = document.getElementById("mangaHero");
       const mangaRows = document.getElementById("mangaRows");
+      const adultHeroEl = document.getElementById("adultHero");
+      const adultRowsEl = document.getElementById("adultRows");
       const animeRestore = document.getElementById("heroRestore");
       const mangaRestore = document.getElementById("mangaHeroRestore");
+      const adultRestore = document.getElementById("adultHeroRestore");
       if (type === "manga") {
         animeHero.style.display = "none";
         animeRows.style.display = "none";
         if (animeRestore) animeRestore.hidden = true;
+        adultHeroEl.style.display = "none";
+        adultRowsEl.style.display = "none";
+        if (adultRestore) adultRestore.hidden = true;
         mangaHero.style.display = "";
         mangaRows.style.display = "";
         loadMangaHero();
@@ -294,7 +354,10 @@
         animeRows.style.display = "";
         mangaHero.style.display = "none";
         mangaRows.style.display = "none";
+        adultHeroEl.style.display = "none";
+        adultRowsEl.style.display = "none";
         if (mangaRestore) mangaRestore.hidden = true;
+        if (adultRestore) adultRestore.hidden = true;
         loadHero();
         loadRows();
       }
@@ -342,6 +405,11 @@
       if (catType === "anime") {
         document.getElementById("catHero").style.display = "none";
         document.getElementById("catRows").style.display = "none";
+      } else if (state.adult) {
+        document.getElementById("mangaHero").style.display = "none";
+        document.getElementById("mangaRows").style.display = "none";
+        document.getElementById("adultHero").style.display = "none";
+        document.getElementById("adultRows").style.display = "none";
       } else {
         document.getElementById("mangaHero").style.display = "none";
         document.getElementById("mangaRows").style.display = "none";
@@ -361,7 +429,9 @@
       suggestTimer = setTimeout(async () => {
         try {
           if (catType === "manga") {
-            const items = await JIKAN.mangaSearch(q, 8);
+            const items = state.adult
+              ? await JIKAN.adultMangaSearch(q, 8)
+              : await JIKAN.mangaSearch(q, 8);
             renderMangaSuggest(items, q);
           } else {
             const items = await JIKAN.suggest(q);
@@ -477,13 +547,17 @@
           const g = state.genre || "";
           let results;
           if (q) {
-            const searchRes = await JIKAN.mangaSearch(q, 20, state.adult);
+            const searchRes = state.adult
+              ? await JIKAN.adultMangaSearch(q, 20)
+              : await JIKAN.mangaSearch(q, 20, false);
             results = Array.isArray(searchRes) ? searchRes : (searchRes.data || []);
           } else if (g) {
             const genreRes = await JIKAN.mangaByGenre(g, state.page, 20, state.adult);
             results = Array.isArray(genreRes) ? genreRes : (genreRes.data || []);
           } else {
-            const popRes = await JIKAN.mangaPopular(state.page, 20, state.adult);
+            const popRes = state.adult
+              ? await JIKAN.adultMangaPopular(state.page, 20)
+              : await JIKAN.mangaPopular(state.page, 20, false);
             results = Array.isArray(popRes) ? popRes : (popRes.data || []);
           }
           grid.innerHTML = "";
@@ -642,14 +716,23 @@
         document.getElementById("catRows").style.display = "";
         loadHero();
         loadRows();
+      } else if (state.adult) {
+        document.getElementById("mangaHero").style.display = "none";
+        document.getElementById("mangaRows").style.display = "none";
+        document.getElementById("adultHero").style.display = "";
+        document.getElementById("adultRows").style.display = "";
+        loadAdultHero();
+        loadAdultRows();
       } else {
         document.getElementById("mangaHero").style.display = "";
         document.getElementById("mangaRows").style.display = "";
+        document.getElementById("adultHero").style.display = "none";
+        document.getElementById("adultRows").style.display = "none";
         loadMangaHero();
         loadMangaRows();
       }
       loadCatalog();
-      try { history.replaceState(null, "", "catalog?type=" + catType); } catch (_) {}
+      try { history.replaceState(null, "", "catalog?type=" + catType + (state.adult ? "&adult=1" : "")); } catch (_) {}
     }
 
     async function loadHero() {
@@ -958,6 +1041,92 @@
       loadMangaRow("mangaRowRated", () => JIKAN.mangaTopRated(1, state.adult));
     }
 
+    async function loadAdultHero() {
+      const track = document.getElementById("adultHeroSlides");
+      if (!track) return;
+      try {
+        const res = await JIKAN.adultMangaTrending(6);
+        const list = (res.data || []).slice(0, 6);
+        if (!list.length) { track.innerHTML = '<div class="empty-state">No adult content available.</div>'; return; }
+        let cached = [];
+        try { cached = JSON.parse(localStorage.getItem("otk.adultHero") || "[]"); } catch(e) {}
+        const merged = mergeHeroEntries(cached, list);
+        try { localStorage.setItem("otk.adultHero", JSON.stringify(merged)); } catch(e) {}
+        track.innerHTML = merged.map((m, i) => adultHeroSlide(m, i === 0)).join("");
+        initAdultHero(merged.length);
+      } catch (e) { track.innerHTML = '<div class="empty-state">Could not load adult content.</div>'; }
+    }
+
+    function adultHeroSlide(m, active) {
+      const href = pageHref("manga") + "?id=" + encodeURIComponent(m.id);
+      const img = m.cover || JIKAN.PLACEHOLDER;
+      const fmt = (m.format || "Manga").replace(/_/g, " ");
+      const genres = (m.genres || []).slice(0, 3).map(g => typeof g === "string" ? g : g.name || "").filter(Boolean);
+      return `<div class="cat-hero-slide${active ? " active" : ""}" style="background-image:url('${JIKAN.esc(img)}')">` +
+        `<div class="cat-hero-overlay"><div class="cat-hero-content">` +
+        `<div class="cat-hero-meta">` +
+        (genres.length ? `<span class="cat-hero-genres">${JIKAN.esc(genres.join(" / "))}</span>` : "") +
+        `</div>` +
+        `<h2 class="cat-hero-title">${JIKAN.esc(m.title)}</h2>` +
+        `<p class="cat-hero-summary">${JIKAN.esc((m.summary || "").slice(0, 180))}</p>` +
+        `<a class="btn cat-hero-btn" href="${href}">View Details</a>` +
+        `</div></div></div>`;
+    }
+
+    function mergeHeroEntries(cached, fresh) {
+      const seen = new Set();
+      const out = [];
+      for (const m of [...fresh, ...cached]) {
+        const key = (m.title || "").toLowerCase().trim();
+        if (!key || seen.has(key)) continue;
+        seen.add(key);
+        out.push(m);
+      }
+      return out.slice(0, 10);
+    }
+
+    function initAdultHero(count) {
+      if (!count) return;
+      const slidesEl = document.getElementById("adultHeroSlides");
+      const dotsEl = document.getElementById("adultHeroDots");
+      if (!slidesEl || !dotsEl) return;
+      const slides = slidesEl.querySelectorAll(".cat-hero-slide");
+      if (!slides.length) return;
+      let idx = 0;
+      let timer = null;
+      dotsEl.innerHTML = slides.map((_, i) => `<button class="cat-hero-dot${i === 0 ? " active" : ""}" data-i="${i}"></button>`).join("");
+      const show = (n) => {
+        idx = (n + slides.length) % slides.length;
+        slides.forEach((s, i) => s.classList.toggle("active", i === idx));
+        dotsEl.querySelectorAll(".cat-hero-dot").forEach((d, k) => d.classList.toggle("active", k === idx));
+      };
+      const start = () => { clearInterval(timer); if (!document.hidden) timer = setInterval(() => show(idx + 1), 8000); };
+      const stop = () => clearInterval(timer);
+      document.getElementById("adultHeroPrev").addEventListener("click", () => { show(idx - 1); start(); });
+      document.getElementById("adultHeroNext").addEventListener("click", () => { show(idx + 1); start(); });
+      dotsEl.addEventListener("click", (e) => { const b = e.target.closest(".cat-hero-dot"); if (b) { show(Number(b.dataset.i)); start(); } });
+      const hero = document.getElementById("adultHero");
+      hero.addEventListener("mouseenter", stop);
+      hero.addEventListener("mouseleave", start);
+      start();
+    }
+
+    async function loadAdultRows() {
+      const loadAdultRow = (id, fetcher) => {
+        const row = document.getElementById(id);
+        if (!row) return;
+        fetcher().then((res) => {
+          row.innerHTML = "";
+          const list = Array.isArray(res) ? res : (res?.data || []);
+          list.slice(0, 20).forEach((m) => row.appendChild(JIKAN.mangaStreamCard(m)));
+          row.dispatchEvent(new Event("scroll"));
+        }).catch(() => { row.innerHTML = '<div class="empty-state">Could not load.</div>'; });
+      };
+      loadAdultRow("adultRowTrending", () => JIKAN.adultMangaTrending(20).then(r => r.data || []));
+      loadAdultRow("adultRowNew", () => JIKAN.adultMangaNewReleases(20).then(r => r.data || []));
+      loadAdultRow("adultRowPopular", () => JIKAN.adultMangaPopular(1, 20).then(r => r.data || []));
+    }
+
     function setupScrollRow(el) {
       if (!el || el.dataset.scwired) return;
       el.dataset.scwired = "1";
@@ -1013,12 +1182,24 @@ updateEdges();
 
     document.addEventListener("DOMContentLoaded", () => {
       // Initialize toggle state from URL
+      if (params.get("adult") === "1") {
+        state.adult = true;
+        const adultBtn = document.getElementById("adultToggle");
+        if (adultBtn) { adultBtn.style.display = ""; adultBtn.classList.add("is-active"); }
+      }
       if (catType === "manga") {
         document.querySelectorAll(".cat-type-btn").forEach(b => b.classList.toggle("active", b.dataset.type === "manga"));
         document.getElementById("catHero").style.display = "none";
         document.getElementById("catRows").style.display = "none";
-        document.getElementById("mangaHero").style.display = "";
-        document.getElementById("mangaRows").style.display = "";
+        if (state.adult) {
+          document.getElementById("mangaHero").style.display = "none";
+          document.getElementById("mangaRows").style.display = "none";
+          document.getElementById("adultHero").style.display = "";
+          document.getElementById("adultRows").style.display = "";
+        } else {
+          document.getElementById("mangaHero").style.display = "";
+          document.getElementById("mangaRows").style.display = "";
+        }
         document.getElementById("heroRestore").hidden = true;
         const adultBtn = document.getElementById("adultToggle");
         if (adultBtn) adultBtn.style.display = "";
@@ -1029,6 +1210,8 @@ updateEdges();
         document.getElementById("catRows").style.display = "none";
         document.getElementById("mangaHero").style.display = "none";
         document.getElementById("mangaRows").style.display = "none";
+        document.getElementById("adultHero").style.display = "none";
+        document.getElementById("adultRows").style.display = "none";
       }
       loadGenres();
       showBrowse();
