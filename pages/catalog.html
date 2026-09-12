@@ -279,9 +279,9 @@
   <footer id="siteFooter"></footer>
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <script src="../js/config.js?v=26"></script>
-  <script src="../js/api.js?v=26"></script>
-  <script src="../js/app.js?v=26"></script>
+  <script src="../js/config.js?v=27"></script>
+  <script src="../js/api.js?v=27"></script>
+  <script src="../js/app.js?v=27"></script>
   <script>
     const params = new URLSearchParams(window.location.search);
     let catType = params.get("type") || "anime";
@@ -1049,7 +1049,20 @@
       try {
         const res = await JIKAN.adultMangaTrending(6);
         const newList = (res.data || []).slice(0, 6);
-        if (!newList.length) { track.innerHTML = '<div class="empty-state">No adult content available.</div>'; return; }
+        if (!newList.length) {
+          // Retry once after short delay (CDN/API cold start)
+          await new Promise(r => setTimeout(r, 2000));
+          const retry = await JIKAN.adultMangaTrending(6);
+          const retryList = (retry.data || []).slice(0, 6);
+          if (!retryList.length) { track.innerHTML = '<div class="empty-state">No adult content available.</div>'; return; }
+          let cached = [];
+          try { cached = JSON.parse(localStorage.getItem("otk.adultHero") || "[]"); } catch(e) {}
+          const merged = mergeHeroEntries(cached, retryList);
+          try { localStorage.setItem("otk.adultHero", JSON.stringify(merged)); } catch(e) {}
+          track.innerHTML = merged.map((m, i) => adultHeroSlide(m, i === 0)).join("");
+          initAdultHero(merged.length);
+          return;
+        }
         let cached = [];
         try { cached = JSON.parse(localStorage.getItem("otk.adultHero") || "[]"); } catch(e) {}
         const merged = mergeHeroEntries(cached, newList);
