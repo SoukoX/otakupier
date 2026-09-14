@@ -116,7 +116,7 @@
           const directId = mangaId.replace("mdx-", "");
           try {
             const chData = await proxyFetch(
-              `https://api.mangadex.org/manga/${directId}/feed?translatedLanguage%5B%5D=en&limit=500&order%5Bchapter%5D=asc`
+              `https://api.mangadex.org/manga/${directId}/feed?translatedLanguage%5B%5D=en&limit=500&order%5Bchapter%5D=asc&contentRating%5B%5D=pornographic&contentRating%5B%5D=erotica&contentRating%5B%5D=suggestive&contentRating%5B%5D=safe`
             );
             const allChapters = (chData.data || []).filter(ch => ch.attributes && ch.attributes.chapter && !ch.attributes.externalUrl);
             const seen = new Map();
