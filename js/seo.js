@@ -102,6 +102,7 @@ const SEO = {
     this._set('meta[name="twitter:description"]', clean);
     this._set('meta[name="twitter:image"]', img);
     this.setCanonical(url);
+    this.setHreflang(url);
     this._injectJsonLd(anime, url);
   },
 
@@ -189,6 +190,7 @@ const SEO = {
     this._set('meta[name="twitter:description"]', clean);
     this._set('meta[name="twitter:image"]', img);
     this.setCanonical(url);
+    this.setHreflang(url);
     this._injectMangaJsonLd(manga, url, t);
   },
 
@@ -209,6 +211,149 @@ const SEO = {
       "datePublished": manga.year ? String(manga.year) : undefined,
       "publisher": { "@type": "Organization", "name": "OtakuPier" },
     };
+    Object.keys(obj).forEach((k) => obj[k] === undefined && delete obj[k]);
+    const script = document.createElement("script");
+    script.type = "application/ld+json";
+    script.id = "seo-jsonld";
+    script.textContent = JSON.stringify(obj).replace(/</g, "\\u003c");
+    document.head.appendChild(script);
+  },
+
+  // Dynamic hreflang: update both <link rel="alternate"> tags for per-item pages
+  setHreflang(url) {
+    document.querySelectorAll('link[rel="alternate"][hreflang]').forEach(el => {
+      el.setAttribute("href", url);
+    });
+  },
+
+  // Set meta tags for club detail pages
+  setClubMeta(club, id) {
+    if (!club) return;
+    const name = club.name || "Club";
+    const desc = (club.description || "Join this community club on OtakuPier.").slice(0, 200);
+    const url = `${this.BASE}/pages/club?id=${encodeURIComponent(id)}`;
+
+    document.title = `${name} - Club | OtakuPier`;
+    this._set('meta[name="description"]', desc);
+    this._set('meta[property="og:type"]', "website");
+    this._set('meta[property="og:site_name"]', "OtakuPier");
+    this._set('meta[property="og:title"]', `${name} - OtakuPier`);
+    this._set('meta[property="og:description"]', desc);
+    this._set('meta[property="og:url"]', url);
+    this._set('meta[property="og:image"]', `${this.BASE}/images/og-image.png`);
+    this._set('meta[name="twitter:card"]', "summary_large_image");
+    this._set('meta[name="twitter:title"]', `${name} - OtakuPier`);
+    this._set('meta[name="twitter:description"]`, desc);
+    this._set('meta[name="twitter:image"]', `${this.BASE}/images/og-image.png`);
+    this.setCanonical(url);
+    this.setHreflang(url);
+    this._injectClubJsonLd(club, url);
+  },
+
+  _injectClubJsonLd(club, url) {
+    const existing = document.getElementById("seo-jsonld");
+    if (existing) existing.remove();
+    const obj = {
+      "@context": "https://schema.org",
+      "@type": "Organization",
+      "name": club.name || "Club",
+      "url": url,
+      "description": this._clean(club.description, 500) || undefined,
+    };
+    Object.keys(obj).forEach((k) => obj[k] === undefined && delete obj[k]);
+    const script = document.createElement("script");
+    script.type = "application/ld+json";
+    script.id = "seo-jsonld";
+    script.textContent = JSON.stringify(obj).replace(/</g, "\\u003c");
+    document.head.appendChild(script);
+  },
+
+  // Set meta tags for forum thread detail pages
+  setForumThreadMeta(thread, id) {
+    if (!thread) return;
+    const title = thread.title || "Forum Thread";
+    const desc = (thread.body || "").replace(/\n/g, " ").slice(0, 200) || "Join the discussion on OtakuPier forums.";
+    const url = `${this.BASE}/pages/forum-thread?id=${encodeURIComponent(id)}`;
+
+    document.title = `${title} - Forum Thread | OtakuPier`;
+    this._set('meta[name="description"]', desc);
+    this._set('meta[property="og:type"]', "article");
+    this._set('meta[property="og:site_name"]', "OtakuPier");
+    this._set('meta[property="og:title"]', `${title} - OtakuPier`);
+    this._set('meta[property="og:description"]', desc);
+    this._set('meta[property="og:url"]', url);
+    this._set('meta[property="og:image"]', `${this.BASE}/images/og-image.png`);
+    this._set('meta[name="twitter:card"]', "summary_large_image");
+    this._set('meta[name="twitter:title"]', `${title} - OtakuPier`);
+    this._set('meta[name="twitter:description"]', desc);
+    this._set('meta[name="twitter:image"]', `${this.BASE}/images/og-image.png`);
+    this.setCanonical(url);
+    this.setHreflang(url);
+    this._injectForumThreadJsonLd(thread, url);
+  },
+
+  _injectForumThreadJsonLd(thread, url) {
+    const existing = document.getElementById("seo-jsonld");
+    if (existing) existing.remove();
+    const obj = {
+      "@context": "https://schema.org",
+      "@type": "DiscussionForumPosting",
+      "headline": thread.title || "Forum Thread",
+      "url": url,
+      "description": this._clean(thread.body, 500) || undefined,
+      "datePublished": thread.created_at || undefined,
+      "publisher": { "@type": "Organization", "name": "OtakuPier" },
+    };
+    Object.keys(obj).forEach((k) => obj[k] === undefined && delete obj[k]);
+    const script = document.createElement("script");
+    script.type = "application/ld+json";
+    script.id = "seo-jsonld";
+    script.textContent = JSON.stringify(obj).replace(/</g, "\\u003c");
+    document.head.appendChild(script);
+  },
+
+  // Set meta tags + JSON-LD for character detail pages
+  setCharacterMeta(character, id) {
+    if (!character) return;
+    const name = character.name || "Character";
+    const desc = this._clean(character.about, 200) || "Character profile on OtakuPier — biography, voice actors and anime appearances.";
+    const url = `${this.BASE}/pages/character?id=${encodeURIComponent(id)}`;
+    const img = character.images?.jpg?.image_url || `${this.BASE}/images/og-image.png`;
+
+    document.title = `${name} - Character Profile | OtakuPier`;
+    this._set('meta[name="description"]', desc);
+    this._set('meta[property="og:type"]', "profile");
+    this._set('meta[property="og:site_name"]', "OtakuPier");
+    this._set('meta[property="og:title"]', `${name} - OtakuPier`);
+    this._set('meta[property="og:description"]', desc);
+    this._set('meta[property="og:url"]', url);
+    this._set('meta[property="og:image"]', img);
+    this._set('meta[property="og:image:alt"]', name);
+    this._set('meta[name="twitter:card"]', "summary_large_image");
+    this._set('meta[name="twitter:title"]', `${name} - OtakuPier`);
+    this._set('meta[name="twitter:description"]', desc);
+    this._set('meta[name="twitter:image"]', img);
+    this.setCanonical(url);
+    this.setHreflang(url);
+    this._injectCharacterJsonLd(character, url);
+  },
+
+  _injectCharacterJsonLd(character, url) {
+    const existing = document.getElementById("seo-jsonld");
+    if (existing) existing.remove();
+    const img = character.images?.jpg?.image_url || "";
+    const va = character.voices?.find(v => v.language === "Japanese");
+    const obj = {
+      "@context": "https://schema.org",
+      "@type": "Person",
+      "name": character.name || undefined,
+      "alternateName": character.name_kanji || undefined,
+      "url": url,
+      "image": img || undefined,
+      "description": this._clean(character.about, 500) || undefined,
+      "sameAs": character.url || undefined,
+    };
+    if (va?.person?.name) obj["actor"] = { "@type": "Person", "name": va.person.name };
     Object.keys(obj).forEach((k) => obj[k] === undefined && delete obj[k]);
     const script = document.createElement("script");
     script.type = "application/ld+json";
