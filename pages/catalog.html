@@ -1050,16 +1050,18 @@
         try {
           const aniRes = await JIKAN.mangaTrending(1, true);
           const aniData = (aniRes.data || []).slice(0, 6);
-          list.push(...aniData);
+          for (const m of aniData) {
+            if (m && m.id && m.title) list.push(m);
+          }
         } catch(e) { console.warn("[AdultHero] AniList failed:", e); }
         // MangaDex is additive — only add if AniList didn't fill all 6 slots
         if (list.length < 6) {
           try {
             const mdxRes = await JIKAN._mangadexAdultTrending(6 - list.length);
             const seen = new Set(list.map(m => (m.title || "").toLowerCase().trim()));
-            for (const m of mdxRes) {
+            for (const m of (mdxRes || [])) {
               const key = (m.title || "").toLowerCase().trim();
-              if (!key || seen.has(key)) continue;
+              if (!key || seen.has(key) || !m.id) continue;
               seen.add(key);
               list.push(m);
             }
@@ -1069,8 +1071,9 @@
           // Last resort: show cached data
           let cached = [];
           try { cached = JSON.parse(localStorage.getItem("otk.adultHero") || "[]"); } catch(e) {}
+          cached = cached.filter(m => m && m.id && m.title);
           if (cached.length) {
-            track.innerHTML = cached.map((m, i) => adultHeroSlide(m, i === 0)).join("");
+            track.innerHTML = cached.slice(0, 6).map((m, i) => adultHeroSlide(m, i === 0)).join("");
             initAdultHero(cached.length);
             return;
           }
