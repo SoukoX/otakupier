@@ -46,10 +46,10 @@
    <footer id="siteFooter"></footer>
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-   <script src="../js/config.js?v=25"></script>
-   <script src="../js/api.js?v=25"></script>
-   <script src="../js/seo.js?v=25"></script>
-   <script src="../js/app.js?v=25"></script>
+   <script src="../js/config.js?v=30"></script>
+   <script src="../js/api.js?v=30"></script>
+   <script src="../js/seo.js?v=30"></script>
+   <script src="../js/app.js?v=30"></script>
   <script>
     const id = new URLSearchParams(window.location.search).get("id");
 
@@ -58,15 +58,7 @@
       try {
         const res = await JIKAN.character(id);
         const c = res.data;
-        document.title = `${c.name} - OtakuPier`;
-        SEO.setDefaultMeta(`${c.name} - Character Profile | OtakuPier`, (c.about || "").replace(/\n/g," ").slice(0,200));
-        SEO.setCanonical(`${window.location.origin}/pages/character?id=${id}`);
-        SEO._set('meta[property="og:title"]', `${c.name} - OtakuPier`);
-        SEO._set('meta[property="og:description"]', (c.about || "").replace(/\n/g," ").slice(0,200));
-        if (c.images?.jpg?.image_url) SEO._set('meta[property="og:image"]', c.images.jpg.image_url);
-        SEO._set('meta[name="twitter:title"]', `${c.name} - OtakuPier`);
-        SEO._set('meta[name="twitter:description"]`, (c.about || "").replace(/\n/g," ").slice(0,200));
-        if (c.images?.jpg?.image_url) SEO._set('meta[name="twitter:image"]', c.images.jpg.image_url);
+        SEO.setCharacterMeta(c, id);
 
         const va = c.voices?.find((v) => v.language === "Japanese");
         const animes = (c.anime || []).slice(0, 12);
