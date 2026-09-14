@@ -1212,6 +1212,38 @@ const JIKAN = {
     return results;
   },
 
+  async _mangadexAdultPopular(limit = 20) {
+    try {
+      const ctrl = new AbortController();
+      const timer = setTimeout(() => ctrl.abort(), 15000);
+      let url = `${this._MANGADEX_BASE}/manga?limit=${limit}&offset=0&contentRating[]=pornographic&contentRating[]=erotica&includes[]=cover_art&order[followedCount]=desc`;
+      const res = await fetch(url, { signal: ctrl.signal });
+      clearTimeout(timer);
+      if (!res.ok) return [];
+      const body = await res.json();
+      if (!body.data) return [];
+      return body.data.map(m => this._mangadexToManga(m));
+    } catch (e) {
+      return [];
+    }
+  },
+
+  async _mangadexAdultNewReleases(limit = 20) {
+    try {
+      const ctrl = new AbortController();
+      const timer = setTimeout(() => ctrl.abort(), 15000);
+      let url = `${this._MANGADEX_BASE}/manga?limit=${limit}&offset=0&contentRating[]=pornographic&contentRating[]=erotica&includes[]=cover_art&order[latestUploadedChapter]=desc`;
+      const res = await fetch(url, { signal: ctrl.signal });
+      clearTimeout(timer);
+      if (!res.ok) return [];
+      const body = await res.json();
+      if (!body.data) return [];
+      return body.data.map(m => this._mangadexToManga(m));
+    } catch (e) {
+      return [];
+    }
+  },
+
   _mangadexToManga(m) {
     const attr = m.attributes || {};
     const title = attr.title?.en || attr.title?.ja || Object.values(attr.title || {})[0] || "";
@@ -1277,21 +1309,74 @@ const JIKAN = {
     }
   },
 
-  // ── Adult manga — just reuse manga functions with adult=true ──────────
+  // ── Adult manga — merge AniList (isAdult:true) + ComicK + MangaDex adult content ──
   async adultMangaSearch(query, limit = 20) {
-    return await this.mangaSearch(query, limit, true);
+    const sources = await Promise.allSettled([
+      this._aniMangaQuery(this._MANGA_SEARCH_Q, { s: query, p: 1, per: limit, adult: true })
+        .then(d => this._aniMangaToList(d)),
+      this.comickMangaSearch(query, Math.min(limit, 10), true).catch(() => []),
+      this._mangadexAdultSearch(query, Math.min(limit, 10)).catch(() => []),
+    ]);
+    const aniResults = sources[0].status === "fulfilled" ? sources[0].value : [];
+    const comickResults = sources[1].status === "fulfilled" ? sources[1].value : [];
+    const mdxResults = sources[2].status === "fulfilled" ? sources[2].value : [];
+    const seen = new Set();
+    const merged = [];
+    for (const m of [...aniResults, ...comickResults, ...mdxResults]) {
+      const key = (m.title || "").toLowerCase().trim();
+      if (!key || seen.has(key)) continue;
+      seen.add(key);
+      merged.push(m);
+    }
+    return merged.slice(0, limit);
   },
 
   async adultMangaPopular(page = 1, limit = 20) {
-    return await this.mangaPopular(page, limit, true);
+    const aniRes = await this.mangaPopular(page, limit, true).catch(() => ({ data: [] }));
+    const mdxResults = await this._mangadexAdultPopular(limit).catch(() => []);
+    const aniData = aniRes.data || [];
+    const merged = [...aniData];
+    const seen = new Set(aniData.map(m => (m.title || "").toLowerCase().trim()));
+    for (const m of mdxResults) {
+      const key = (m.title || "").toLowerCase().trim();
+      if (!key || seen.has(key)) continue;
+      seen.add(key);
+      merged.push(m);
+    }
+    return {
+      data: merged.slice(0, limit),
+      pagination: { last_visible_page: 999, items: { total: merged.length, per_page: limit, count: Math.min(limit, merged.length) } },
+    };
   },
 
   async adultMangaTrending(limit = 20) {
-    return await this.mangaTrending(1, true);
+    const aniRes = await this.mangaTrending(1, true).catch(() => ({ data: [] }));
+    const mdxResults = await this._mangadexAdultTrending(limit).catch(() => []);
+    const aniData = aniRes.data || [];
+    const merged = [...aniData];
+    const seen = new Set(aniData.map(m => (m.title || "").toLowerCase().trim()));
+    for (const m of mdxResults) {
+      const key = (m.title || "").toLowerCase().trim();
+      if (!key || seen.has(key)) continue;
+      seen.add(key);
+      merged.push(m);
+    }
+    return { data: merged.slice(0, limit) };
   },
 
   async adultMangaNewReleases(limit = 20) {
-    return await this.mangaNewReleases(1, true);
+    const aniRes = await this.mangaNewReleases(1, true).catch(() => ({ data: [] }));
+    const mdxResults = await this._mangadexAdultNewReleases(limit).catch(() => []);
+    const aniData = aniRes.data || [];
+    const merged = [...aniData];
+    const seen = new Set(aniData.map(m => (m.title || "").toLowerCase().trim()));
+    for (const m of mdxResults) {
+      const key = (m.title || "").toLowerCase().trim();
+      if (!key || seen.has(key)) continue;
+      seen.add(key);
+      merged.push(m);
+    }
+    return { data: merged.slice(0, limit) };
   },
 
   // ── Manga (AniList GraphQL) ──────────────────────────────────────────
@@ -1340,7 +1425,8 @@ const JIKAN = {
     return (page.media || [])
       .filter(m => {
         const fmt = (m.format || "").toUpperCase();
-        return fmt === "MANGA" || fmt === "MANHWA" || !m.format;
+        return fmt === "MANGA" || fmt === "MANHWA" || fmt === "MANHUA" ||
+          fmt === "DOUJINSHI" || fmt === "ONE_SHOT" || fmt === "OEL" || !m.format;
       })
       .map(m => {
         const title = m.title?.english || m.title?.romaji || "";
