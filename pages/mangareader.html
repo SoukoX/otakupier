@@ -66,6 +66,7 @@
       const params = new URLSearchParams(window.location.search);
       const mangaTitle = params.get("title") || "Manga";
       const mangaId = params.get("id") || "";
+      const isAdult = params.get("adult") === "1";
       const resumeChapter = params.get("ch") || "";
       let mangadexId = null;
       let currentProvider = "mangadex";
@@ -115,8 +116,11 @@
         if (mangaId.startsWith("mdx-")) {
           const directId = mangaId.replace("mdx-", "");
           try {
+            const directRating = isAdult
+              ? "contentRating%5B%5D=pornographic&contentRating%5B%5D=erotica&contentRating%5B%5D=suggestive&contentRating%5B%5D=safe"
+              : "contentRating%5B%5D=suggestive&contentRating%5B%5D=safe";
             const chData = await proxyFetch(
-              `https://api.mangadex.org/manga/${directId}/feed?translatedLanguage%5B%5D=en&limit=500&order%5Bchapter%5D=asc&contentRating%5B%5D=pornographic&contentRating%5B%5D=erotica&contentRating%5B%5D=suggestive&contentRating%5B%5D=safe`
+              `https://api.mangadex.org/manga/${directId}/feed?translatedLanguage%5B%5D=en&limit=500&order%5Bchapter%5D=asc&${directRating}`
             );
             const allChapters = (chData.data || []).filter(ch => ch.attributes && ch.attributes.chapter && !ch.attributes.externalUrl);
             const seen = new Map();
@@ -233,7 +237,7 @@
       async function fetchMangaDexChapters(titles) {
         for (const title of titles) {
           try {
-            const data = await proxyFetch(`https://api.mangadex.org/manga?title=${encodeURIComponent(title)}&limit=10&includes[]=cover_art&contentRating[]=pornographic&contentRating[]=erotica&contentRating[]=suggestive`);
+            const data = await proxyFetch(`https://api.mangadex.org/manga?title=${encodeURIComponent(title)}&limit=10&includes[]=cover_art&contentRating[]=suggestive&contentRating[]=safe`);
             if (data && data.data && data.data.length) {
               const lower = mangaTitle.toLowerCase();
               const normLower = norm(mangaTitle);
@@ -260,15 +264,18 @@
                   }
                   return { manga: m, score: best };
                 })
-                .filter(x => x.score >= 80)
+                .filter(x => x.score >= 100)
                 .sort((a, b) => b.score - a.score);
 
               if (scored.length) {
                 for (const candidate of scored) {
                   const mangaId = candidate.manga.id;
                   try {
+                    const chRating = isAdult
+                      ? "contentRating%5B%5D=pornographic&contentRating%5B%5D=erotica&contentRating%5B%5D=suggestive&contentRating%5B%5D=safe"
+                      : "contentRating%5B%5D=suggestive&contentRating%5B%5D=safe";
                     const chData = await proxyFetch(
-                      `https://api.mangadex.org/manga/${mangaId}/feed?translatedLanguage%5B%5D=en&limit=500&order%5Bchapter%5D=asc&contentRating%5B%5D=pornographic&contentRating%5B%5D=erotica&contentRating%5B%5D=suggestive&contentRating%5B%5D=safe`
+                      `https://api.mangadex.org/manga/${mangaId}/feed?translatedLanguage%5B%5D=en&limit=500&order%5Bchapter%5D=asc&${chRating}`
                     );
                     const allChapters = (chData.data || []).filter(ch => ch.attributes && ch.attributes.chapter && !ch.attributes.externalUrl);
                     const seen = new Map();
