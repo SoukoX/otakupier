@@ -236,24 +236,31 @@
             const data = await proxyFetch(`https://api.mangadex.org/manga?title=${encodeURIComponent(title)}&limit=10&includes[]=cover_art&contentRating[]=pornographic&contentRating[]=erotica&contentRating[]=suggestive`);
             if (data && data.data && data.data.length) {
               const lower = mangaTitle.toLowerCase();
+              const normLower = norm(mangaTitle);
               const scored = data.data
                 .map(m => {
                   const attrs = m.attributes || {};
                   const en = (attrs.title?.en || "").toLowerCase();
                   const jar = (attrs.title?.["ja-ro"] || "").toLowerCase();
                   const ko = (attrs.title?.ko || "").toLowerCase();
-                  // Also check altTitles (Korean, English, etc.)
                   const alts = (attrs.altTitles || []).map(a => (a.en || a["ja-ro"] || a.ko || "")).filter(Boolean).map(s => s.toLowerCase());
                   const allTitles = [en, jar, ko, ...alts].filter(Boolean);
                   let best = 0;
                   for (const t of allTitles) {
-                    if (t === lower) { best = 200; break; }
-                    if (best < 100 && (t.includes(lower) || lower.includes(t))) best = 100;
-                    if (best < 80 && (t.endsWith(lower) || t.startsWith(lower))) best = 80;
+                    const normT = norm(t);
+                    if (normT === normLower || t === lower) { best = 200; break; }
+                    if (best < 100 && (normT.includes(normLower) || normLower.includes(normT))) {
+                      const shorter = normT.length < normLower.length ? normT : normLower;
+                      const longer = normT.length >= normLower.length ? normT : normLower;
+                      if (shorter.length > 3 && longer.includes(shorter)) {
+                        best = Math.max(best, 100);
+                      }
+                    }
+                    if (best < 80 && (normT.endsWith(normLower) || normT.startsWith(normLower))) best = 80;
                   }
                   return { manga: m, score: best };
                 })
-                .filter(x => x.score > 0)
+                .filter(x => x.score >= 80)
                 .sort((a, b) => b.score - a.score);
 
               if (scored.length) {
@@ -261,7 +268,7 @@
                   const mangaId = candidate.manga.id;
                   try {
                     const chData = await proxyFetch(
-                      `https://api.mangadex.org/manga/${mangaId}/feed?translatedLanguage%5B%5D=en&limit=500&order%5Bchapter%5D=asc`
+                      `https://api.mangadex.org/manga/${mangaId}/feed?translatedLanguage%5B%5D=en&limit=500&order%5Bchapter%5D=asc&contentRating%5B%5D=pornographic&contentRating%5B%5D=erotica&contentRating%5B%5D=suggestive&contentRating%5B%5D=safe`
                     );
                     const allChapters = (chData.data || []).filter(ch => ch.attributes && ch.attributes.chapter && !ch.attributes.externalUrl);
                     const seen = new Map();
@@ -685,7 +692,7 @@
           if (data && data.baseUrl && data.chapter) {
             const full = data.chapter.data || [];
             const saver = data.chapter.dataSaver || [];
-            const pages = full.length ? full : saver;
+            const pages = [...new Set(full.length ? full : saver)];
             const basePath = full.length ? "data" : "data-saver";
             if (pages.length) {
               container.innerHTML = "";
