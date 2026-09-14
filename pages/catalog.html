@@ -1262,6 +1262,7 @@ updateEdges();
       loadGenres();
       showBrowse();
       document.querySelectorAll(".scroll-row").forEach(setupScrollRow);
+      try { SEO.pingCurrentPage(); } catch(e) {}
     });
     // Restore adult state when page is loaded from bfcache (back button)
     window.addEventListener("pageshow", function(e) {
