@@ -1115,15 +1115,23 @@
       const img = m.cover || JIKAN.PLACEHOLDER;
       const fmt = (m.format || "Manga").replace(/_/g, " ");
       const genres = (m.genres || []).slice(0, 3).map(g => typeof g === "string" ? g : g.name || "").filter(Boolean);
-      return `<div class="cat-hero-slide${active ? " active" : ""}" style="background-image:url('${JIKAN.esc(img)}')">` +
-        `<div class="cat-hero-overlay"><div class="cat-hero-content">` +
-        `<div class="cat-hero-meta">` +
-        (genres.length ? `<span class="cat-hero-genres">${JIKAN.esc(genres.join(" / "))}</span>` : "") +
-        `</div>` +
-        `<h2 class="cat-hero-title">${JIKAN.esc(m.title)}</h2>` +
-        `<p class="cat-hero-summary">${JIKAN.esc((m.summary || "").slice(0, 180))}</p>` +
-        `<a class="btn cat-hero-btn" href="${href}">View Details</a>` +
-        `</div></div></div>`;
+      return `<div class="cat-hero-slide${active ? " active" : ""}" data-i="${m.id}">
+        <div class="cat-hero-bg" data-src="${JIKAN.esc(img)}"${active ? ` style="background-image:url('${JIKAN.esc(img)}')"` : ""}></div>
+        <div class="cat-hero-overlay"></div>
+        <div class="cat-hero-content">
+          <div class="cat-hero-cover"><img data-src="${JIKAN.esc(img)}"${active ? ` src="${JIKAN.esc(img)}"` : ` src="${JIKAN.PLACEHOLDER}"`} alt="${JIKAN.esc(m.title)}" onerror="this.onerror=null;this.src=JIKAN.PLACEHOLDER"></div>
+          <div class="cat-hero-info">
+            <span class="cat-hero-badge">${JIKAN.esc(fmt)}</span>
+            <h2 class="cat-hero-title">${JIKAN.esc(m.title)}</h2>
+            <div class="cat-hero-tags">${genres.map(g => `<span>${JIKAN.esc(g)}</span>`).join("")}</div>
+            <div class="cat-hero-meta">${m.chapters ? m.chapters + " chapters" : ""}</div>
+            <div class="cat-hero-actions">
+              <a class="btn btn-primary btn-glow" href="${href}">View Details</a>
+              <a class="btn btn-outline" href="${href}">📖 Read Now</a>
+            </div>
+          </div>
+        </div>
+      </div>`;
     }
 
     function mergeHeroEntries(cached, fresh) {
@@ -1150,7 +1158,16 @@
       dotsEl.innerHTML = slides.map((_, i) => `<button class="cat-hero-dot${i === 0 ? " active" : ""}" data-i="${i}"></button>`).join("");
       const show = (n) => {
         idx = (n + slides.length) % slides.length;
-        slides.forEach((s, i) => s.classList.toggle("active", i === idx));
+        slides.forEach((s, i) => {
+          const on = i === idx;
+          s.classList.toggle("active", on);
+          if (on) {
+            const bg = s.querySelector(".cat-hero-bg");
+            if (bg && bg.dataset.src && !bg.style.backgroundImage) bg.style.backgroundImage = `url('${bg.dataset.src}')`;
+            const img = s.querySelector(".cat-hero-cover img");
+            if (img && img.dataset.src && img.src !== img.dataset.src) img.src = img.dataset.src;
+          }
+        });
         dotsEl.querySelectorAll(".cat-hero-dot").forEach((d, k) => d.classList.toggle("active", k === idx));
       };
       const start = () => { clearInterval(timer); if (!document.hidden) timer = setInterval(() => show(idx + 1), 8000); };
