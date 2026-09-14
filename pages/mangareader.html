@@ -183,30 +183,65 @@
         const md = mdData.status === "fulfilled" ? mdData.value : null;
         const wc = wcData.status === "fulfilled" ? wcData.value : null;
 
-        // Pick the provider with more chapters
+        // Verify provider returned the correct manga (not a random one)
+        function titleMatches(providerResult) {
+          if (!providerResult || !providerResult.title) return false;
+          const provLower = providerResult.title.toLowerCase().trim();
+          const searchLower = mangaTitle.toLowerCase().trim();
+          if (provLower === searchLower) return true;
+          const normP = norm(providerResult.title);
+          const normS = norm(mangaTitle);
+          if (normP === normS) return true;
+          // Allow if one is a prefix/suffix of the other
+          if (normP.includes(normS) || normS.includes(normP)) return true;
+          return false;
+        }
+
+        // Pick best provider — prefer exact title match, then most chapters
         let chosen = null;
         if (md && wc) {
-          chosen = md.count >= wc.count ? md : wc;
+          const mdOk = titleMatches(md);
+          const wcOk = titleMatches(wc);
+          if (mdOk && wcOk) chosen = md.count >= wc.count ? md : wc;
+          else if (mdOk) chosen = md;
+          else if (wcOk) chosen = wc;
+          else chosen = md.count >= wc.count ? md : wc;
         } else {
           chosen = md || wc;
         }
 
-        // If MangaDex + WeebCentral have 0 chapters, try ManhwaUS + NHentai
-        if (!chosen || chosen.count === 0) {
+        // If MangaDex + WeebCentral have 0 chapters, try ManhwaUS + NHentai (adult only)
+        if ((!chosen || chosen.count === 0) && isAdult) {
           const [mhData, nhData] = await Promise.allSettled([
             fetchManhwaUsChapters(titles),
             fetchNhentaiChapters(titles),
           ]);
           const mh = mhData.status === "fulfilled" ? mhData.value : null;
           const nh = nhData.status === "fulfilled" ? nhData.value : null;
+          const mhOk = titleMatches(mh);
+          const nhOk = titleMatches(nh);
           if (mh && nh) {
-            chosen = mh.count >= nh.count ? mh : nh;
+            if (mhOk && nhOk) chosen = mh.count >= nh.count ? mh : nh;
+            else if (mhOk) chosen = mh;
+            else if (nhOk) chosen = nh;
+            else chosen = mh.count >= nh.count ? mh : nh;
+          } else if (mhOk && mh) {
+            chosen = mh;
+          } else if (nhOk && nh) {
+            chosen = nh;
           } else {
             chosen = mh || nh;
           }
         }
 
         if (chosen && chosen.count > 0) {
+          // Final guard: reject if provider title doesn't match what user requested
+          if (!titleMatches(chosen)) {
+            $("chapterList").innerHTML = '<div class="empty-state">' +
+              '<p>Could not find <strong>' + esc(mangaTitle) + '</strong> on any provider.</p>' +
+              '<p style="margin-top:8px;font-size:0.85em;">The manga may not have readable chapters available yet.</p></div>';
+            return;
+          }
           chapters = chosen.chapters;
           currentProvider = chosen.provider;
           if (chosen.title) $("mangaTitle").textContent = chosen.title;
@@ -339,7 +374,7 @@
           }
         }
 
-        if (!bestMatch || bestScore < 40) return null;
+        if (!bestMatch || bestScore < 80) return null;
 
         const wcManga = bestMatch;
 
@@ -377,10 +412,15 @@
           `https://manhwaus.net/webtoon/${slug}/`,
           ...titles.map(t => `https://manhwaus.net/?s=${encodeURIComponent(t)}`),
         ];
+        const normLower = norm(mangaTitle);
         for (const url of urls) {
           try {
             const html = await proxyFetchText(url);
             if (!html) continue;
+            // Verify the page title matches our manga
+            const pageTitle = (html.match(/<title[^>]*>([^<]+)<\/title>/i) || [])[1] || "";
+            const normPage = norm(pageTitle);
+            if (normPage && normLower && !normPage.includes(normLower) && !normLower.includes(normPage)) continue;
             // Try to find chapter links on a series page
             const chapMatches = [...html.matchAll(/href="\/webtoon\/[^"]*\/(chapter-[\w-]+)\/"[^>]*>/g)];
             if (chapMatches.length) {
@@ -436,7 +476,7 @@
               return { gallery: g, score };
             }).sort((a, b) => b.score - a.score);
 
-            if (scored.length && scored[0].score > 20) {
+            if (scored.length && scored[0].score >= 100) {
               const g = scored[0].gallery;
               const pages = g.num_pages || 0;
               if (!pages) continue;
