@@ -732,7 +732,7 @@
         loadMangaRows();
       }
       loadCatalog();
-      try { history.replaceState(null, "", "catalog?type=" + catType + (state.adult ? "&adult=1" : "")); } catch (_) {}
+      try { history.replaceState(null, "", "catalog.html?type=" + catType + (state.adult ? "&adult=1" : "")); } catch (_) {}
     }
 
     async function loadHero() {
@@ -1054,7 +1054,7 @@
         try { localStorage.setItem("otk.adultHero", JSON.stringify(merged)); } catch(e) {}
         track.innerHTML = merged.map((m, i) => adultHeroSlide(m, i === 0)).join("");
         initAdultHero(merged.length);
-      } catch (e) { track.innerHTML = '<div class="empty-state">Could not load adult content.</div>'; }
+      } catch (e) { console.error("[loadAdultHero]", e); track.innerHTML = '<div class="empty-state">Could not load adult content.</div>'; }
     }
 
     function adultHeroSlide(m, active) {
@@ -1216,6 +1216,17 @@ updateEdges();
       loadGenres();
       showBrowse();
       document.querySelectorAll(".scroll-row").forEach(setupScrollRow);
+    });
+    // Restore adult state when page is loaded from bfcache (back button)
+    window.addEventListener("pageshow", function(e) {
+      if (!e.persisted) return;
+      const p = new URLSearchParams(window.location.search);
+      if (p.get("adult") === "1" && !state.adult) {
+        state.adult = true;
+        const adultBtn = document.getElementById("adultToggle");
+        if (adultBtn) { adultBtn.style.display = ""; adultBtn.classList.add("is-active"); }
+        showBrowse();
+      }
     });
   </script>
 </body>
