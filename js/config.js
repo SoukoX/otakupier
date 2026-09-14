@@ -12,6 +12,10 @@ const CONFIG = {
   // (MAL upstream issues). Same MAL ids (idMal), CORS-open, huge coverage.
   ANILIST_BASE: "https://graphql.anilist.co",
 
+  // CORS proxy for MangaDex API (their API supports CORS but some browsers
+  // block cross-origin requests from GitHub Pages). Used as fallback in api.js.
+  MANGADEX_PROXY: "https://otakupier.ankitchand533.workers.dev?url=",
+
   // CAPTCHA (bot protection) for login/signup forms.
   // Provider: "turnstile" (Cloudflare) or "hcaptcha".
   // CAPTCHA_SITE_KEY is the PUBLIC site key from your provider dashboard.
