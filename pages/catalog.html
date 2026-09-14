@@ -1045,15 +1045,41 @@
       const track = document.getElementById("adultHeroSlides");
       if (!track) return;
       try {
-        const res = await JIKAN.adultMangaTrending(6);
-        const list = (res.data || []).slice(0, 6);
-        if (!list.length) { track.innerHTML = '<div class="empty-state">No adult content available.</div>'; return; }
-        let cached = [];
-        try { cached = JSON.parse(localStorage.getItem("otk.adultHero") || "[]"); } catch(e) {}
-        const merged = mergeHeroEntries(cached, list);
-        try { localStorage.setItem("otk.adultHero", JSON.stringify(merged)); } catch(e) {}
-        track.innerHTML = merged.map((m, i) => adultHeroSlide(m, i === 0)).join("");
-        initAdultHero(merged.length);
+        const list = [];
+        // AniList is the primary source (CORS-open, reliable)
+        try {
+          const aniRes = await JIKAN.mangaTrending(1, true);
+          const aniData = (aniRes.data || []).slice(0, 6);
+          list.push(...aniData);
+        } catch(e) { console.warn("[AdultHero] AniList failed:", e); }
+        // MangaDex is additive — only add if AniList didn't fill all 6 slots
+        if (list.length < 6) {
+          try {
+            const mdxRes = await JIKAN._mangadexAdultTrending(6 - list.length);
+            const seen = new Set(list.map(m => (m.title || "").toLowerCase().trim()));
+            for (const m of mdxRes) {
+              const key = (m.title || "").toLowerCase().trim();
+              if (!key || seen.has(key)) continue;
+              seen.add(key);
+              list.push(m);
+            }
+          } catch(e) { console.warn("[AdultHero] MangaDex failed:", e); }
+        }
+        if (!list.length) {
+          // Last resort: show cached data
+          let cached = [];
+          try { cached = JSON.parse(localStorage.getItem("otk.adultHero") || "[]"); } catch(e) {}
+          if (cached.length) {
+            track.innerHTML = cached.map((m, i) => adultHeroSlide(m, i === 0)).join("");
+            initAdultHero(cached.length);
+            return;
+          }
+          track.innerHTML = '<div class="empty-state">No adult content available.</div>';
+          return;
+        }
+        try { localStorage.setItem("otk.adultHero", JSON.stringify(list.slice(0, 6))); } catch(e) {}
+        track.innerHTML = list.slice(0, 6).map((m, i) => adultHeroSlide(m, i === 0)).join("");
+        initAdultHero(Math.min(list.length, 6));
       } catch (e) { console.error("[loadAdultHero]", e); track.innerHTML = '<div class="empty-state">Could not load adult content.</div>'; }
     }
 
