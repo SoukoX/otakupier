@@ -44,10 +44,10 @@
   <footer id="siteFooter"></footer>
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <script src="../js/config.js?v=25"></script>
-  <script src="../js/api.js?v=25"></script>
-  <script src="../js/seo.js?v=25"></script>
-  <script src="../js/app.js?v=25"></script>
+  <script src="../js/config.js?v=30"></script>
+  <script src="../js/api.js?v=30"></script>
+  <script src="../js/seo.js?v=30"></script>
+  <script src="../js/app.js?v=30"></script>
   <script>
     const clubId = new URLSearchParams(window.location.search).get("id");
     let club = null;
@@ -60,11 +60,8 @@
         const { data: c, error } = await supabase.from("clubs").select("*").eq("id", clubId).single();
         if (error || !c) { main.innerHTML = `<div class="empty-state">Club not found.</div>`; return; }
         club = c;
-        document.title = `${c.name} - OtakuPier`;
-        SEO.setDefaultMeta(`${c.name} - Club | OtakuPier`, (c.description || "Join this community club on OtakuPier.").slice(0,200));
-        SEO.setCanonical(`${window.location.origin}/pages/club?id=${clubId}`);
-        SEO._set('meta[property="og:title"]', `${c.name} - OtakuPier`);
-        SEO._set('meta[property="og:description"]`, (c.description || "Join this community club on OtakuPier.").slice(0,200));
+        SEO.setClubMeta(c, clubId);
+        try { SEO.pingCurrentPage(); } catch(e) {}
         const owner = await fetchProfile(c.created_by);
         if (owner) {
           const perks = await spendingsMap([c.created_by]);
