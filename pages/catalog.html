@@ -279,9 +279,9 @@
   <footer id="siteFooter"></footer>
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <script src="../js/config.js?v=28"></script>
-  <script src="../js/api.js?v=28"></script>
-  <script src="../js/app.js?v=28"></script>
+  <script src="../js/config.js?v=30"></script>
+  <script src="../js/api.js?v=30"></script>
+  <script src="../js/app.js?v=30"></script>
   <script>
     const params = new URLSearchParams(window.location.search);
     let catType = params.get("type") || "anime";
@@ -1046,15 +1046,33 @@
       if (!track) return;
       try {
         const list = [];
-        // AniList is the primary source (CORS-open, reliable)
+        // AniList adult manga trending — direct call, no middlemen
         try {
-          const aniRes = await JIKAN.mangaTrending(1, true);
-          const aniData = (aniRes.data || []).slice(0, 6);
-          for (const m of aniData) {
-            if (m && m.id && m.title) list.push(m);
+          const res = await fetch("https://graphql.anilist.co", {
+            method: "POST",
+            headers: { "Content-Type": "application/json", Accept: "application/json" },
+            body: JSON.stringify({
+              query: `query { Page(page:1,perPage:8) { media(type:MANGA,isAdult:true,sort:TRENDING_DESC) { id title { romaji english } coverImage { large } status format genres description(asHtml:false) chapters } } }`
+            })
+          });
+          const body = await res.json();
+          const media = body?.data?.Page?.media || [];
+          for (const m of media) {
+            if (!m || !m.id) continue;
+            const title = m.title?.english || m.title?.romaji || "";
+            if (!title) continue;
+            list.push({
+              id: m.id, title,
+              cover: m.coverImage?.large || "",
+              status: m.status || "",
+              summary: (m.description || "").replace(/<[^>]*>/g, "").slice(0, 180),
+              genres: m.genres || [],
+              format: m.format || "Manga",
+              chapters: m.chapters || null,
+            });
           }
         } catch(e) { console.warn("[AdultHero] AniList failed:", e); }
-        // MangaDex is additive — only add if AniList didn't fill all 6 slots
+        // MangaDex adult is additive
         if (list.length < 6) {
           try {
             const mdxRes = await JIKAN._mangadexAdultTrending(6 - list.length);
@@ -1068,7 +1086,6 @@
           } catch(e) { console.warn("[AdultHero] MangaDex failed:", e); }
         }
         if (!list.length) {
-          // Last resort: show cached data
           let cached = [];
           try { cached = JSON.parse(localStorage.getItem("otk.adultHero") || "[]"); } catch(e) {}
           cached = cached.filter(m => m && m.id && m.title);
