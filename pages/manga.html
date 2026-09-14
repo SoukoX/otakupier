@@ -104,7 +104,7 @@
         return '<span class="genre-tag">' + JIKAN.esc(name) + '</span>';
       }).join("");
       const altTitles = m.altTitles && m.altTitles.length ? m.altTitles.slice(0, 5).join("; ") : "";
-      const readerUrl = pageHref("mangareader") + "?id=" + encodeURIComponent(m.id) + "&title=" + encodeURIComponent(m.title);
+      const readerUrl = pageHref("mangareader") + "?id=" + encodeURIComponent(m.id) + "&title=" + encodeURIComponent(m.title) + (m.isAdult ? "&adult=1" : "");
       const img = m.cover || JIKAN.PLACEHOLDER;
 
       // Related manga (all manga-type relations)
