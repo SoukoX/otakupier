@@ -1189,18 +1189,38 @@ const JIKAN = {
   // ── MangaDex adult content (CORS-open, no key) ──────────────────────
   // MangaDex has 16k+ adult titles with covers via includes[]=cover_art.
   _MANGADEX_BASE: "https://api.mangadex.org",
+  // MangaDex direct fetch with CORS proxy fallback for browser context
+  async _mdxFetch(path, timeout = 15000) {
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), timeout);
+    try {
+      const res = await fetch(`${this._MANGADEX_BASE}${path}`, { signal: ctrl.signal });
+      clearTimeout(timer);
+      if (!res.ok) return null;
+      return await res.json();
+    } catch (e) {
+      clearTimeout(timer);
+      // Retry via CORS proxy
+      try {
+        const ctrl2 = new AbortController();
+        const timer2 = setTimeout(() => ctrl2.abort(), timeout);
+        const proxyUrl = CONFIG.MANGADEX_PROXY + encodeURIComponent(`${this._MANGADEX_BASE}${path}`);
+        const res2 = await fetch(proxyUrl, { signal: ctrl2.signal });
+        clearTimeout(timer2);
+        if (!res2.ok) return null;
+        return await res2.json();
+      } catch (e2) {
+        return null;
+      }
+    }
+  },
 
   async _mangadexAdultSearch(query, limit = 20, offset = 0) {
     try {
-      const ctrl = new AbortController();
-      const timer = setTimeout(() => ctrl.abort(), 15000);
-      let url = `${this._MANGADEX_BASE}/manga?limit=${limit}&offset=${offset}&contentRating[]=pornographic&contentRating[]=erotica&includes[]=cover_art`;
-      if (query) url += `&title=${encodeURIComponent(query)}`;
-      const res = await fetch(url, { signal: ctrl.signal });
-      clearTimeout(timer);
-      if (!res.ok) return [];
-      const body = await res.json();
-      if (!body.data) return [];
+      let path = `/manga?limit=${limit}&offset=${offset}&contentRating[]=pornographic&contentRating[]=erotica&includes[]=cover_art`;
+      if (query) path += `&title=${encodeURIComponent(query)}`;
+      const body = await this._mdxFetch(path);
+      if (!body || !body.data) return [];
       return body.data.map(m => this._mangadexToManga(m));
     } catch (e) {
       return [];
@@ -1214,14 +1234,9 @@ const JIKAN = {
 
   async _mangadexAdultPopular(limit = 20) {
     try {
-      const ctrl = new AbortController();
-      const timer = setTimeout(() => ctrl.abort(), 15000);
-      let url = `${this._MANGADEX_BASE}/manga?limit=${limit}&offset=0&contentRating[]=pornographic&contentRating[]=erotica&includes[]=cover_art&order[followedCount]=desc`;
-      const res = await fetch(url, { signal: ctrl.signal });
-      clearTimeout(timer);
-      if (!res.ok) return [];
-      const body = await res.json();
-      if (!body.data) return [];
+      const path = `/manga?limit=${limit}&offset=0&contentRating[]=pornographic&contentRating[]=erotica&includes[]=cover_art&order[followedCount]=desc`;
+      const body = await this._mdxFetch(path);
+      if (!body || !body.data) return [];
       return body.data.map(m => this._mangadexToManga(m));
     } catch (e) {
       return [];
@@ -1230,14 +1245,9 @@ const JIKAN = {
 
   async _mangadexAdultNewReleases(limit = 20) {
     try {
-      const ctrl = new AbortController();
-      const timer = setTimeout(() => ctrl.abort(), 15000);
-      let url = `${this._MANGADEX_BASE}/manga?limit=${limit}&offset=0&contentRating[]=pornographic&contentRating[]=erotica&includes[]=cover_art&order[latestUploadedChapter]=desc`;
-      const res = await fetch(url, { signal: ctrl.signal });
-      clearTimeout(timer);
-      if (!res.ok) return [];
-      const body = await res.json();
-      if (!body.data) return [];
+      const path = `/manga?limit=${limit}&offset=0&contentRating[]=pornographic&contentRating[]=erotica&includes[]=cover_art&order[latestUploadedChapter]=desc`;
+      const body = await this._mdxFetch(path);
+      if (!body || !body.data) return [];
       return body.data.map(m => this._mangadexToManga(m));
     } catch (e) {
       return [];
@@ -1332,51 +1342,57 @@ const JIKAN = {
   },
 
   async adultMangaPopular(page = 1, limit = 20) {
-    const aniRes = await this.mangaPopular(page, limit, true).catch(() => ({ data: [] }));
-    const mdxResults = await this._mangadexAdultPopular(limit).catch(() => []);
-    const aniData = aniRes.data || [];
-    const merged = [...aniData];
-    const seen = new Set(aniData.map(m => (m.title || "").toLowerCase().trim()));
-    for (const m of mdxResults) {
-      const key = (m.title || "").toLowerCase().trim();
-      if (!key || seen.has(key)) continue;
-      seen.add(key);
-      merged.push(m);
-    }
-    return {
-      data: merged.slice(0, limit),
-      pagination: { last_visible_page: 999, items: { total: merged.length, per_page: limit, count: Math.min(limit, merged.length) } },
-    };
+    try {
+      const aniRes = await this.mangaPopular(page, limit, true).catch(() => ({ data: [] }));
+      const mdxResults = await this._mangadexAdultPopular(limit).catch(() => []);
+      const aniData = aniRes.data || [];
+      const merged = [...aniData];
+      const seen = new Set(aniData.map(m => (m.title || "").toLowerCase().trim()));
+      for (const m of mdxResults) {
+        const key = (m.title || "").toLowerCase().trim();
+        if (!key || seen.has(key)) continue;
+        seen.add(key);
+        merged.push(m);
+      }
+      return {
+        data: merged.slice(0, limit),
+        pagination: { last_visible_page: 999, items: { total: merged.length, per_page: limit, count: Math.min(limit, merged.length) } },
+      };
+    } catch (e) { console.error("[adultMangaPopular]", e); return { data: [], pagination: { last_visible_page: 1, items: { total: 0, per_page: limit, count: 0 } } }; }
   },
 
   async adultMangaTrending(limit = 20) {
-    const aniRes = await this.mangaTrending(1, true).catch(() => ({ data: [] }));
-    const mdxResults = await this._mangadexAdultTrending(limit).catch(() => []);
-    const aniData = aniRes.data || [];
-    const merged = [...aniData];
-    const seen = new Set(aniData.map(m => (m.title || "").toLowerCase().trim()));
-    for (const m of mdxResults) {
-      const key = (m.title || "").toLowerCase().trim();
-      if (!key || seen.has(key)) continue;
-      seen.add(key);
-      merged.push(m);
-    }
-    return { data: merged.slice(0, limit) };
+    try {
+      const aniRes = await this.mangaTrending(1, true).catch(() => ({ data: [] }));
+      const mdxResults = await this._mangadexAdultTrending(limit).catch(() => []);
+      const aniData = aniRes.data || [];
+      const merged = [...aniData];
+      const seen = new Set(aniData.map(m => (m.title || "").toLowerCase().trim()));
+      for (const m of mdxResults) {
+        const key = (m.title || "").toLowerCase().trim();
+        if (!key || seen.has(key)) continue;
+        seen.add(key);
+        merged.push(m);
+      }
+      return { data: merged.slice(0, limit) };
+    } catch (e) { console.error("[adultMangaTrending]", e); return { data: [] }; }
   },
 
   async adultMangaNewReleases(limit = 20) {
-    const aniRes = await this.mangaNewReleases(1, true).catch(() => ({ data: [] }));
-    const mdxResults = await this._mangadexAdultNewReleases(limit).catch(() => []);
-    const aniData = aniRes.data || [];
-    const merged = [...aniData];
-    const seen = new Set(aniData.map(m => (m.title || "").toLowerCase().trim()));
-    for (const m of mdxResults) {
-      const key = (m.title || "").toLowerCase().trim();
-      if (!key || seen.has(key)) continue;
-      seen.add(key);
-      merged.push(m);
-    }
-    return { data: merged.slice(0, limit) };
+    try {
+      const aniRes = await this.mangaNewReleases(1, true).catch(() => ({ data: [] }));
+      const mdxResults = await this._mangadexAdultNewReleases(limit).catch(() => []);
+      const aniData = aniRes.data || [];
+      const merged = [...aniData];
+      const seen = new Set(aniData.map(m => (m.title || "").toLowerCase().trim()));
+      for (const m of mdxResults) {
+        const key = (m.title || "").toLowerCase().trim();
+        if (!key || seen.has(key)) continue;
+        seen.add(key);
+        merged.push(m);
+      }
+      return { data: merged.slice(0, limit) };
+    } catch (e) { console.error("[adultMangaNewReleases]", e); return { data: [] }; }
   },
 
   // ── Manga (AniList GraphQL) ──────────────────────────────────────────
