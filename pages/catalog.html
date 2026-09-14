@@ -1091,16 +1091,22 @@
           try { cached = JSON.parse(localStorage.getItem("otk.adultHero") || "[]"); } catch(e) {}
           cached = cached.filter(m => m && m.id && m.title);
           if (cached.length) {
-            track.innerHTML = cached.slice(0, 6).map((m, i) => adultHeroSlide(m, i === 0)).join("");
-            initAdultHero(cached.length);
+            track.innerHTML = cached.slice(0, 6).map((m, i) => {
+              try { return adultHeroSlide(m, i === 0); }
+              catch(e2) { console.error("[AdultHero] cached slide error:", e2, m); return ""; }
+            }).join("");
+            try { initAdultHero(cached.length); } catch(e) { console.error("[AdultHero] init error:", e); }
             return;
           }
           track.innerHTML = '<div class="empty-state">No adult content available.</div>';
           return;
         }
         try { localStorage.setItem("otk.adultHero", JSON.stringify(list.slice(0, 6))); } catch(e) {}
-        track.innerHTML = list.slice(0, 6).map((m, i) => adultHeroSlide(m, i === 0)).join("");
-        initAdultHero(Math.min(list.length, 6));
+        track.innerHTML = list.slice(0, 6).map((m, i) => {
+          try { return adultHeroSlide(m, i === 0); }
+          catch(e2) { console.error("[AdultHero] slide error:", e2, m); return ""; }
+        }).join("");
+        try { initAdultHero(Math.min(list.length, 6)); } catch(e) { console.error("[AdultHero] init error:", e); }
       } catch (e) { console.error("[loadAdultHero]", e); track.innerHTML = '<div class="empty-state">Could not load adult content.</div>'; }
     }
 
