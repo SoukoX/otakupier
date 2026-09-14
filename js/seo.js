@@ -243,7 +243,7 @@ const SEO = {
     this._set('meta[property="og:image"]', `${this.BASE}/images/og-image.png`);
     this._set('meta[name="twitter:card"]', "summary_large_image");
     this._set('meta[name="twitter:title"]', `${name} - OtakuPier`);
-    this._set('meta[name="twitter:description"]`, desc);
+    this._set('meta[name="twitter:description"]', desc);
     this._set('meta[name="twitter:image"]', `${this.BASE}/images/og-image.png`);
     this.setCanonical(url);
     this.setHreflang(url);
