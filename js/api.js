@@ -1136,12 +1136,16 @@ const JIKAN = {
       batch.push(popularQueries[(startIdx + i) % popularQueries.length]);
     }
     try {
-      const results = await Promise.allSettled(
+      // Timebox the whole batch to 12s so ComicK slowness doesn't block manga rows
+      const batchPromise = Promise.allSettled(
         batch.map(q => this.comickSearch(q, 1).then(r => r[0]))
       );
+      const timeoutPromise = new Promise((_, rej) => setTimeout(() => rej(new Error("timeout")), 12000));
+      const results = await Promise.race([batchPromise, timeoutPromise]);
       const manga = results
         .filter(s => s.status === "fulfilled" && s.value)
         .map(s => this._comickToManga(s.value))
+        .filter(m => m && m._comickHid)
         .filter((m, i, arr) => arr.findIndex(x => x._comickHid === m._comickHid) === i);
       const val = { data: manga, pagination: { last_visible_page: 5, items: { total: 100, per_page: limit, count: manga.length } } };
       this._comickCache.set(cacheKey, { at: Date.now(), val });
@@ -1196,6 +1200,18 @@ const JIKAN = {
     try {
       const res = await fetch(`${this._MANGADEX_BASE}${path}`, { signal: ctrl.signal });
       clearTimeout(timer);
+      if (res.status === 429) {
+        // Rate limited — wait and retry once
+        await new Promise(r => setTimeout(r, 2000));
+        const ctrl2 = new AbortController();
+        const timer2 = setTimeout(() => ctrl2.abort(), timeout);
+        try {
+          const res2 = await fetch(`${this._MANGADEX_BASE}${path}`, { signal: ctrl2.signal });
+          clearTimeout(timer2);
+          if (!res2.ok) return null;
+          return await res2.json();
+        } catch (e2) { return null; }
+      }
       if (!res.ok) return null;
       return await res.json();
     } catch (e) {
@@ -1319,7 +1335,7 @@ const JIKAN = {
     }
   },
 
-  // ── Adult manga — merge AniList (isAdult:true) + ComicK + MangaDex adult content ──
+  // ── Adult manga — merge AniList (isAdult:true) + MangaDex adult content ──
   async adultMangaSearch(query, limit = 20) {
     const sources = await Promise.allSettled([
       this._aniMangaQuery(this._MANGA_SEARCH_Q, { s: query, p: 1, per: limit, adult: true })
@@ -1333,6 +1349,7 @@ const JIKAN = {
     const seen = new Set();
     const merged = [];
     for (const m of [...aniResults, ...comickResults, ...mdxResults]) {
+      if (!m || !m.id) continue;
       const key = (m.title || "").toLowerCase().trim();
       if (!key || seen.has(key)) continue;
       seen.add(key);
@@ -1345,10 +1362,11 @@ const JIKAN = {
     try {
       const aniRes = await this.mangaPopular(page, limit, true).catch(() => ({ data: [] }));
       const mdxResults = await this._mangadexAdultPopular(limit).catch(() => []);
-      const aniData = aniRes.data || [];
+      const aniData = (aniRes.data || []).filter(m => m && m.id);
       const merged = [...aniData];
       const seen = new Set(aniData.map(m => (m.title || "").toLowerCase().trim()));
       for (const m of mdxResults) {
+        if (!m || !m.id) continue;
         const key = (m.title || "").toLowerCase().trim();
         if (!key || seen.has(key)) continue;
         seen.add(key);
@@ -1365,10 +1383,11 @@ const JIKAN = {
     try {
       const aniRes = await this.mangaTrending(1, true).catch(() => ({ data: [] }));
       const mdxResults = await this._mangadexAdultTrending(limit).catch(() => []);
-      const aniData = aniRes.data || [];
+      const aniData = (aniRes.data || []).filter(m => m && m.id);
       const merged = [...aniData];
       const seen = new Set(aniData.map(m => (m.title || "").toLowerCase().trim()));
       for (const m of mdxResults) {
+        if (!m || !m.id) continue;
         const key = (m.title || "").toLowerCase().trim();
         if (!key || seen.has(key)) continue;
         seen.add(key);
@@ -1382,10 +1401,11 @@ const JIKAN = {
     try {
       const aniRes = await this.mangaNewReleases(1, true).catch(() => ({ data: [] }));
       const mdxResults = await this._mangadexAdultNewReleases(limit).catch(() => []);
-      const aniData = aniRes.data || [];
+      const aniData = (aniRes.data || []).filter(m => m && m.id);
       const merged = [...aniData];
       const seen = new Set(aniData.map(m => (m.title || "").toLowerCase().trim()));
       for (const m of mdxResults) {
+        if (!m || !m.id) continue;
         const key = (m.title || "").toLowerCase().trim();
         if (!key || seen.has(key)) continue;
         seen.add(key);
@@ -1480,6 +1500,7 @@ const JIKAN = {
     const seen = new Set();
     const merged = [];
     for (const m of [...aniResults, ...comickResults]) {
+      if (!m || !m.id) continue;
       const key = (m.title || "").toLowerCase().trim();
       if (!key || seen.has(key)) continue;
       seen.add(key);
@@ -1503,7 +1524,10 @@ const JIKAN = {
       }
     }`, { p: page, per: limit, adult: !!adult }).then(d => this._aniMangaToList(d)).catch(() => []);
 
-    const comickPromise = this.comickPopular(page, limit).catch(() => ({ data: [] }));
+    // Skip ComicK for adult — ComicK popular returns non-adult content
+    const comickPromise = adult
+      ? Promise.resolve({ data: [] })
+      : this.comickPopular(page, limit).catch(() => ({ data: [] }));
 
     const [aniRes, comickRes] = await Promise.allSettled([aniPromise, comickPromise]);
     const aniResults = aniRes.status === "fulfilled" ? aniRes.value : [];
@@ -1512,6 +1536,7 @@ const JIKAN = {
     const seen = new Set();
     const merged = [];
     for (const m of [...aniResults, ...comickResults]) {
+      if (!m || !m.id) continue;
       const key = (m.title || "").toLowerCase().trim();
       if (!key || seen.has(key)) continue;
       seen.add(key);
@@ -1664,7 +1689,10 @@ const JIKAN = {
       }
     }`, { p: page, per: 20, adult: !!adult }).then(d => ({ data: this._aniMangaToList(d) })).catch(() => ({ data: [] }));
 
-    const comickPromise = this.comickPopular(page, 10).catch(() => ({ data: [] }));
+    // Skip ComicK for adult — ComicK popular returns non-adult content
+    const comickPromise = adult
+      ? Promise.resolve({ data: [] })
+      : this.comickPopular(page, 10).catch(() => ({ data: [] }));
 
     const [aniRes, comickRes] = await Promise.allSettled([aniPromise, comickPromise]);
     const aniData = aniRes.status === "fulfilled" ? aniRes.value.data : [];
@@ -1673,6 +1701,7 @@ const JIKAN = {
     const seen = new Set();
     const merged = [];
     for (const m of [...aniData, ...comickData]) {
+      if (!m || !m.id) continue;
       const key = (m.title || "").toLowerCase().trim();
       if (!key || seen.has(key)) continue;
       seen.add(key);
@@ -1695,7 +1724,10 @@ const JIKAN = {
       }
     }`, { p: page, per: 20, adult: !!adult }).then(d => ({ data: this._aniMangaToList(d) })).catch(() => ({ data: [] }));
 
-    const comickPromise = this.comickPopular(page + 5, 10).catch(() => ({ data: [] }));
+    // Skip ComicK for adult — ComicK popular returns non-adult content
+    const comickPromise = adult
+      ? Promise.resolve({ data: [] })
+      : this.comickPopular(page + 5, 10).catch(() => ({ data: [] }));
 
     const [aniRes, comickRes] = await Promise.allSettled([aniPromise, comickPromise]);
     const aniData = aniRes.status === "fulfilled" ? aniRes.value.data : [];
@@ -1704,6 +1736,7 @@ const JIKAN = {
     const seen = new Set();
     const merged = [];
     for (const m of [...aniData, ...comickData]) {
+      if (!m || !m.id) continue;
       const key = (m.title || "").toLowerCase().trim();
       if (!key || seen.has(key)) continue;
       seen.add(key);
@@ -1754,6 +1787,7 @@ const JIKAN = {
 
   // Streaming-style card for manga scroll rows.
   mangaStreamCard(m) {
+    if (!m || !m.id) return document.createElement("span");
     const href = pageHref("manga") + "?id=" + encodeURIComponent(m.id);
     const img = m.cover || JIKAN.PLACEHOLDER;
     const fmt = (m.format || "Manga").replace(/_/g, " ");
@@ -1771,12 +1805,12 @@ const JIKAN = {
     el.href = href;
     el.innerHTML = `
       <div class="sc-poster">
-        <img src="${this.esc(img)}" alt="${this.esc(m.title)}" loading="lazy"
+        <img src="${this.esc(img)}" alt="${this.esc(m.title || "")}" loading="lazy"
              onerror="this.onerror=null;this.src=JIKAN.PLACEHOLDER">
         <span class="sc-fmt ${fmtClass}">${this.esc(fmt)}</span>
         <div class="sc-overlay">
           <span class="sc-play">📖</span>
-          <span class="sc-overlay-title">${this.esc(m.title)}</span>
+          <span class="sc-overlay-title">${this.esc(m.title || "")}</span>
           ${statusLine ? `<span class="sc-status">${this.esc(statusLine)}</span>` : ""}
         </div>
       </div>`;
