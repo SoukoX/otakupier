@@ -471,19 +471,21 @@
     function renderMangaSuggest(items, q) {
       const box = document.getElementById("searchSuggest");
       if (!box) return;
-      if (!items.length) { hideSuggest(); return; }
-      box.innerHTML = items.map((m, i) => {
+      if (!items || !items.length) { hideSuggest(); return; }
+      box.innerHTML = items.filter(m => m && m.id).map((m, i) => {
         const href = pageHref("manga") + "?id=" + encodeURIComponent(m.id);
         const cover = m.cover || JIKAN.PLACEHOLDER;
+        const genres = m.genres || [];
+        const firstGenre = genres.length ? JIKAN.esc(typeof genres[0] === "string" ? genres[0] : genres[0].name || "") : "";
         return `<a class="suggest-item" data-i="${i}" href="${href}">
 <img class="suggest-img" src="${JIKAN.esc(cover)}"
-                 alt="${JIKAN.esc(m.title)}" loading="lazy"
+                 alt="${JIKAN.esc(m.title || "")}" loading="lazy"
                  onerror="mangaImgError(this)">
           <span class="suggest-body">
-            <span class="suggest-title">${JIKAN.esc(m.title)}</span>
+            <span class="suggest-title">${JIKAN.esc(m.title || "")}</span>
             <span class="suggest-meta">${JIKAN.esc(m.status || "Manga")}${m.author ? " · " + JIKAN.esc(m.author) : ""}</span>
           </span>
-          <span class="suggest-score">${m.genres && m.genres.length ? JIKAN.esc(typeof m.genres[0] === "string" ? m.genres[0] : m.genres[0].name || "") : ""}</span>
+          <span class="suggest-score">${firstGenre}</span>
         </a>`;
       }).join("");
       box.hidden = false;
@@ -667,6 +669,7 @@
     }
 
     function mangaCard(m) {
+      if (!m || !m.id) return "";
       const href = pageHref("manga") + "?id=" + encodeURIComponent(m.id);
       const cover = m.cover || JIKAN.PLACEHOLDER;
       const fmt = (m.format || "Manga").replace(/_/g, " ");
@@ -676,17 +679,17 @@
         : m.status || "";
       const fmtClass = /manhwa/i.test(fmt) ? "fmt-manhwa" : /manhua/i.test(fmt) ? "fmt-manhua" : "fmt-manga";
       const isAdult = m.isAdult || m._isAdult ||
-        (m.genres && m.genres.some(g => /hentai|ecchi|adult/i.test(g))) ||
+        (m.genres && m.genres.some(g => /hentai|ecchi|adult/i.test(typeof g === "string" ? g : g.name || ""))) ||
         (m.format && /hentai/i.test(m.format)) ||
         (m.contentRating && /pornographic|erotica/i.test(m.contentRating));
       return '<a class="card stream-card manga-card" href="' + href + '">' +
-        '<div class="card-poster"><img src="' + JIKAN.esc(cover) + '" alt="' + JIKAN.esc(m.title) + '" loading="lazy" onerror="mangaImgError(this)">' +
+        '<div class="card-poster"><img src="' + JIKAN.esc(cover) + '" alt="' + JIKAN.esc(m.title || "") + '" loading="lazy" onerror="mangaImgError(this)">' +
         '<span class="card-fmt-badge ' + fmtClass + '">' + JIKAN.esc(fmt) + '</span>' +
         (isAdult ? '<span class="card-badge adult-badge">18+</span>' : '') +
         (statusLabel ? '<span class="card-badge">' + JIKAN.esc(statusLabel) + '</span>' : '') +
         '</div>' +
         '<div class="card-body">' +
-          '<div class="card-title">' + JIKAN.esc(m.title) + '</div>' +
+          '<div class="card-title">' + JIKAN.esc(m.title || "") + '</div>' +
           '<div class="card-meta-row">' +
             (m.genres && m.genres.length ? '<span class="card-genres">' + JIKAN.esc(typeof m.genres[0] === "string" ? m.genres[0] : m.genres[0].name || "") + '</span>' : '') +
             (m.chapters ? '<span class="card-chapters">' + m.chapters + ' ch</span>' : '') +
@@ -1030,12 +1033,21 @@
       const loadMangaRow = (id, fetcher) => {
         const row = document.getElementById(id);
         if (!row) return;
-        fetcher(1).then((res) => {
+        fetcher().then((res) => {
           row.innerHTML = "";
           const list = Array.isArray(res) ? res : (res?.data || []);
-          list.slice(0, 20).forEach((m) => row.appendChild(JIKAN.mangaStreamCard(m)));
+          list.slice(0, 20).forEach((m) => {
+            if (!m || !m.id) return;
+            row.appendChild(JIKAN.mangaStreamCard(m));
+          });
           row.dispatchEvent(new Event("scroll"));
-        }).catch(() => { row.innerHTML = `<div class="empty-state">Could not load.</div>`; });
+          if (!row.children.length) {
+            row.innerHTML = '<div class="empty-state">No results.</div>';
+          }
+        }).catch((err) => {
+          console.error("[MangaRow]", id, err);
+          row.innerHTML = '<div class="empty-state">Could not load.</div>';
+        });
       };
       loadMangaRow("mangaRowTrending", () => JIKAN.mangaTrending(1, state.adult));
       loadMangaRow("mangaRowNew", () => JIKAN.mangaNewReleases(1, state.adult));
@@ -1058,21 +1070,23 @@
               query: `query { Page(page:1,perPage:8) { media(type:MANGA,isAdult:true,sort:TRENDING_DESC) { id title { romaji english } coverImage { large } status format genres description(asHtml:false) chapters } } }`
             })
           });
-          const body = await res.json();
-          const media = body?.data?.Page?.media || [];
-          for (const m of media) {
-            if (!m || !m.id) continue;
-            const title = m.title?.english || m.title?.romaji || "";
-            if (!title) continue;
-            list.push({
-              id: m.id, title,
-              cover: m.coverImage?.large || "",
-              status: m.status || "",
-              summary: (m.description || "").replace(/<[^>]*>/g, "").slice(0, 180),
-              genres: m.genres || [],
-              format: m.format || "Manga",
-              chapters: m.chapters || null,
-            });
+          if (res.ok) {
+            const body = await res.json();
+            const media = body?.data?.Page?.media || [];
+            for (const m of media) {
+              if (!m || !m.id) continue;
+              const title = m.title?.english || m.title?.romaji || "";
+              if (!title) continue;
+              list.push({
+                id: m.id, title,
+                cover: m.coverImage?.large || "",
+                status: m.status || "",
+                summary: (m.description || "").replace(/<[^>]*>/g, "").slice(0, 180),
+                genres: m.genres || [],
+                format: m.format || "Manga",
+                chapters: m.chapters || null,
+              });
+            }
           }
         } catch(e) { console.warn("[AdultHero] AniList failed:", e); }
         // MangaDex adult is additive
@@ -1233,9 +1247,18 @@
         fetcher().then((res) => {
           row.innerHTML = "";
           const list = Array.isArray(res) ? res : (res?.data || []);
-          list.slice(0, 20).forEach((m) => row.appendChild(JIKAN.mangaStreamCard(m)));
+          list.slice(0, 20).forEach((m) => {
+            if (!m || !m.id) return;
+            row.appendChild(JIKAN.mangaStreamCard(m));
+          });
           row.dispatchEvent(new Event("scroll"));
-        }).catch(() => { row.innerHTML = '<div class="empty-state">Could not load.</div>'; });
+          if (!row.children.length) {
+            row.innerHTML = '<div class="empty-state">No results.</div>';
+          }
+        }).catch((err) => {
+          console.error("[AdultRow]", id, err);
+          row.innerHTML = '<div class="empty-state">Could not load.</div>';
+        });
       };
       loadAdultRow("adultRowTrending", () => JIKAN.adultMangaTrending(20).then(r => r.data || []));
       loadAdultRow("adultRowNew", () => JIKAN.adultMangaNewReleases(20).then(r => r.data || []));
