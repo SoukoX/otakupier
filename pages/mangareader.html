@@ -406,22 +406,39 @@
 
       // ── ManhwaUS provider ──
       async function fetchManhwaUsChapters(titles) {
-        const slug = mangaTitle.toLowerCase()
+        // Generate multiple slug variations from all known titles
+        const toSlug = (t) => t.toLowerCase()
           .replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
-        const urls = [
-          `https://manhwaus.net/webtoon/${slug}/`,
-          ...titles.map(t => `https://manhwaus.net/?s=${encodeURIComponent(t)}`),
-        ];
+        const slug = toSlug(mangaTitle);
+        const allSlugs = [slug, ...titles.map(toSlug)];
+        // Also try common suffix/infix variations (-ing, -er, -in-, etc.)
+        const extraSlugs = [];
+        for (const s of allSlugs) {
+          if (s.includes("-hunter")) extraSlugs.push(s.replace("-hunter", "-hunting"));
+          if (s.includes("-hunting")) extraSlugs.push(s.replace("-hunting", "-hunter"));
+          if (s.includes("another-world") && !s.includes("-in-another-world")) {
+            extraSlugs.push(s.replace("another-world", "in-another-world"));
+          }
+          if (s.includes("-in-another-world")) {
+            extraSlugs.push(s.replace("-in-another-world", "-another-world"));
+          }
+          // Try dropping common prefixes like "the", "a", "an"
+          const dropped = s.replace(/^(the|a|an)-/, "");
+          if (dropped !== s) extraSlugs.push(dropped);
+        }
+        const trySlugs = [...new Set([...allSlugs, ...extraSlugs])];
+
         const normLower = norm(mangaTitle);
-        for (const url of urls) {
+        // Try direct slug URLs first (faster than search)
+        for (const s of trySlugs) {
+          const url = `https://manhwaus.net/webtoon/${s}/`;
           try {
             const html = await proxyFetchText(url);
             if (!html) continue;
-            // Verify the page title matches our manga
             const pageTitle = (html.match(/<title[^>]*>([^<]+)<\/title>/i) || [])[1] || "";
+            if (pageTitle.toLowerCase().includes("not found")) continue;
             const normPage = norm(pageTitle);
             if (normPage && normLower && !normPage.includes(normLower) && !normLower.includes(normPage)) continue;
-            // Try to find chapter links on a series page
             const chapMatches = [...html.matchAll(/href="\/webtoon\/[^"]*\/(chapter-[\w-]+)\/"[^>]*>/g)];
             if (chapMatches.length) {
               const seen = new Set();
@@ -443,7 +460,7 @@
                   count: chaps.length,
                   chapters: sortChapters(chaps),
                   title: mangaTitle,
-                  _manhwausBase: `https://manhwaus.net/webtoon/${slug}/`,
+                  _manhwausBase: `https://manhwaus.net/webtoon/${s}/`,
                 };
               }
             }
