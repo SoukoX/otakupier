@@ -25,6 +25,20 @@
   <meta name="twitter:title" content="Character Details - OtakuPier">
   <meta name="twitter:description" content="Character profiles on OtakuPier — biographies, voice actors and every anime they appear in.">
   <meta name="twitter:image" content="https://otakupier.2bd.net/images/og-image.png">
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "Person",
+    "name": "Character Profile - OtakuPier",
+    "description": "Character profiles on OtakuPier — biographies, voice actors and every anime they appear in.",
+    "url": "https://otakupier.2bd.net/pages/character",
+    "isPartOf": {
+      "@type": "WebSite",
+      "name": "OtakuPier",
+      "url": "https://otakupier.2bd.net/"
+    }
+  }
+  </script>
   <link rel="preconnect" href="https://api.jikan.moe">
   <link rel="preconnect" href="https://cdn.jsdelivr.net">
   <link rel="preconnect" href="https://graphql.anilist.co">
@@ -37,11 +51,38 @@
 <body>
   <nav class="navbar" id="navbar"></nav>
 
+  <noscript>
+    <main class="container" style="padding:40px 20px; max-width:900px; margin:0 auto;">
+      <h1>Character Profiles - OtakuPier</h1>
+      <p style="color:var(--text-dim); margin:16px 0;">Character profiles on OtakuPier — biographies, voice actors, and every anime they appear in.</p>
+      <h2 style="margin-top:28px;">Character Info</h2>
+      <ul style="margin:12px 0; line-height:2;">
+        <li><strong>Biography</strong> — Full character background and description</li>
+        <li><strong>Voice actors</strong> — Japanese and other language VAs</li>
+        <li><strong>Anime appearances</strong> — Every series the character appears in</li>
+        <li><strong>Character image</strong> — Official character artwork</li>
+      </ul>
+      <p style="margin-top:24px;"><a href="https://otakupier.2bd.net/pages/catalog">Browse the catalog</a> to find anime and characters.</p>
+    </main>
+  </noscript>
+
 <main class="container" id="main">
      <div class="loading"><div class="spinner"></div>Loading character...</div>
    </main>
 
-   <h1 style="display:none;">Character Profiles - OtakuPier</h1>
+   <h1 class="sr-only">Character Profiles - OtakuPier</h1>
+
+   <section class="seo-content container">
+     <h2>Character biographies, voice actors, and anime appearances</h2>
+     <p>Character pages on OtakuPier show the full biography, Japanese voice actor, and every anime the character appears in. Browse by character name or discover new shows through the cast.</p>
+     <ul>
+       <li><strong>Biography</strong> — background, personality, and story role</li>
+       <li><strong>Voice actors</strong> — Japanese and other language VAs</li>
+       <li><strong>Anime appearances</strong> — every series the character features in</li>
+       <li><strong>Character image</strong> — official artwork and portraits</li>
+     </ul>
+     <p>Explore more characters in the <a href="../pages/catalog">anime catalog</a> or discuss your favorites on the <a href="../pages/forums">forums</a>.</p>
+   </section>
 
    <footer id="siteFooter"></footer>
 
