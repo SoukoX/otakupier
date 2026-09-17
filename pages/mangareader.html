@@ -55,7 +55,7 @@
     </div>
   </div>
 
-  <h1 style="display:none;">Read Manga - OtakuPier</h1>
+  <h1 class="sr-only">Read Manga - OtakuPier</h1>
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="../js/config.js?v=30"></script>
@@ -197,40 +197,37 @@
           return false;
         }
 
-        // Pick best provider — prefer exact title match, then most chapters
-        let chosen = null;
-        if (md && wc) {
-          const mdOk = titleMatches(md);
-          const wcOk = titleMatches(wc);
-          if (mdOk && wcOk) chosen = md.count >= wc.count ? md : wc;
-          else if (mdOk) chosen = md;
-          else if (wcOk) chosen = wc;
-          else chosen = md.count >= wc.count ? md : wc;
-        } else {
-          chosen = md || wc;
+        // For adult manga, also try ManhwaUS (often has 2-3x more chapters than MangaDex)
+        let mh = null;
+        if (isAdult) {
+          const mhData = await Promise.allSettled([fetchManhwaUsChapters(titles)]);
+          mh = mhData[0].status === "fulfilled" ? mhData[0].value : null;
         }
 
-        // If MangaDex + WeebCentral have 0 chapters, try ManhwaUS + NHentai (adult only)
+        // Pick best provider — prefer exact title match, then most chapters
+        let chosen = null;
+        const candidates = [md, wc, mh].filter(c => c && c.count > 0);
+        if (candidates.length) {
+          // Prefer exact title match
+          const exact = candidates.filter(c => titleMatches(c));
+          if (exact.length) {
+            chosen = exact.reduce((a, b) => a.count >= b.count ? a : b);
+          } else {
+            chosen = candidates.reduce((a, b) => a.count >= b.count ? a : b);
+          }
+        }
+
+        // If MangaDex + WeebCentral + ManhwaUS all failed, try NHentai (adult only)
         if ((!chosen || chosen.count === 0) && isAdult) {
-          const [mhData, nhData] = await Promise.allSettled([
-            fetchManhwaUsChapters(titles),
+          const [nhData] = await Promise.allSettled([
             fetchNhentaiChapters(titles),
           ]);
-          const mh = mhData.status === "fulfilled" ? mhData.value : null;
           const nh = nhData.status === "fulfilled" ? nhData.value : null;
-          const mhOk = titleMatches(mh);
           const nhOk = titleMatches(nh);
-          if (mh && nh) {
-            if (mhOk && nhOk) chosen = mh.count >= nh.count ? mh : nh;
-            else if (mhOk) chosen = mh;
-            else if (nhOk) chosen = nh;
-            else chosen = mh.count >= nh.count ? mh : nh;
-          } else if (mhOk && mh) {
-            chosen = mh;
-          } else if (nhOk && nh) {
+          if (nhOk && nh) {
             chosen = nh;
-          } else {
-            chosen = mh || nh;
+          } else if (nh) {
+            chosen = nh;
           }
         }
 
@@ -272,7 +269,10 @@
       async function fetchMangaDexChapters(titles) {
         for (const title of titles) {
           try {
-            const data = await proxyFetch(`https://api.mangadex.org/manga?title=${encodeURIComponent(title)}&limit=10&includes[]=cover_art&contentRating[]=suggestive&contentRating[]=safe`);
+            const searchRating = isAdult
+              ? "contentRating%5B%5D=pornographic&contentRating%5B%5D=erotica&contentRating%5B%5D=suggestive&contentRating%5B%5D=safe"
+              : "contentRating%5B%5D=suggestive&contentRating%5B%5D=safe";
+            const data = await proxyFetch(`https://api.mangadex.org/manga?title=${encodeURIComponent(title)}&limit=10&includes[]=cover_art&${searchRating}`);
             if (data && data.data && data.data.length) {
               const lower = mangaTitle.toLowerCase();
               const normLower = norm(mangaTitle);
