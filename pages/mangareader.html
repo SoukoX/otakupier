@@ -167,6 +167,8 @@
           }
         }
 
+        console.log("[Reader] mangaTitle:", mangaTitle, "isAdult:", isAdult, "mangaId:", mangaId);
+
         const titles = [
           mangaTitle,
           mangaTitle.replace(/[:\-!]/g, " ").replace(/\s+/g, " ").trim(),
@@ -182,6 +184,7 @@
 
         const md = mdData.status === "fulfilled" ? mdData.value : null;
         const wc = wcData.status === "fulfilled" ? wcData.value : null;
+        console.log("[Reader] md:", md ? md.count : "null", "wc:", wc ? wc.count : "null");
 
         // Verify provider returned the correct manga (not a random one)
         function titleMatches(providerResult) {
@@ -200,8 +203,13 @@
         // For adult manga, also try ManhwaUS (often has 2-3x more chapters than MangaDex)
         let mh = null;
         if (isAdult) {
+          console.log("[Reader] Trying ManhwaUS...");
           const mhData = await Promise.allSettled([fetchManhwaUsChapters(titles)]);
           mh = mhData[0].status === "fulfilled" ? mhData[0].value : null;
+          if (mhData[0].status === "rejected") console.error("[Reader] ManhwaUS error:", mhData[0].reason);
+          console.log("[Reader] mh:", mh ? mh.count : "null");
+        } else {
+          console.log("[Reader] isAdult=false, skipping ManhwaUS");
         }
 
         // Pick best provider — prefer exact title match, then most chapters
@@ -230,6 +238,8 @@
             chosen = nh;
           }
         }
+
+        console.log("[Reader] chosen:", chosen ? `${chosen.provider} (${chosen.count} ch)` : "null");
 
         if (chosen && chosen.count > 0) {
           // Final guard: reject if provider title doesn't match what user requested
@@ -337,7 +347,7 @@
                         mangadexId: mangaId,
                       };
                     }
-                  } catch (_) { continue; }
+          } catch (_) { console.log("[ManhwaUS] Error on slug:", s, _); continue; }
                 }
               }
             }
@@ -427,6 +437,7 @@
           if (dropped !== s) extraSlugs.push(dropped);
         }
         const trySlugs = [...new Set([...allSlugs, ...extraSlugs])];
+        console.log("[ManhwaUS] Trying slugs:", trySlugs);
 
         const normLower = norm(mangaTitle);
         // Try direct slug URLs first (faster than search)
@@ -448,7 +459,7 @@
             const coreSearchV = normVariant(coreSearch);
             const matchesCore = corePage.includes(coreSearch) || coreSearch.includes(corePage)
               || corePageV.includes(coreSearchV) || coreSearchV.includes(corePageV);
-            if (!matchesCore) continue;
+            if (!matchesCore) { console.log("[ManhwaUS] Title mismatch:", pageTitle, "->", corePageV, "!=", coreSearchV); continue; }
             const chapMatches = [...html.matchAll(/href="\/webtoon\/[^"]*\/(chapter-[\w-]+)\/"[^>]*>/g)];
             if (chapMatches.length) {
               const seen = new Set();
@@ -465,6 +476,7 @@
                 });
               }
               if (chaps.length) {
+                console.log("[ManhwaUS] Found", chaps.length, "chapters on slug:", s);
                 return {
                   provider: "manhwaus",
                   count: chaps.length,
