@@ -892,8 +892,18 @@
             if (gen !== chapterGen) return;
             // ManhwaUS uses data-src for lazy loading and src for immediate; filter out non-manga images
             const imgMatches = [...html.matchAll(/(?:src|data-src)=['"](https?:\/\/[^'"]+\.(?:jpg|jpeg|png|webp))['"]/gi)];
-            const pages = imgMatches.map(m => m[1])
-              .filter(u => !u.includes("thumbnail") && !u.includes("logo") && !u.includes("avatar") && !u.includes("manhwaus-logo") && !u.includes("removebg"));
+            let pages = imgMatches.map(m => m[1])
+              .filter(u => !u.includes("thumbnail") && !u.includes("logo") && !u.includes("avatar") && !u.includes("manhwaus-logo") && !u.includes("removebg") && !u.includes("banner") && !u.includes("icon"));
+            // Also try data-srcset for modern lazy-loading
+            if (!pages.length) {
+              const srcsetMatches = [...html.matchAll(/data-srcset=['"](https?:\/\/[^'"]+\.(?:jpg|jpeg|png|webp)[^'"]*)['"]/gi)];
+              pages = srcsetMatches.map(m => m[1].split(" ")[0]).filter(u => u && !u.includes("thumbnail") && !u.includes("logo"));
+            }
+            // Also try background-image style
+            if (!pages.length) {
+              const bgMatches = [...html.matchAll(/background-image:\s*url\(['"]?(https?:\/\/[^'")]+\.(?:jpg|jpeg|png|webp))['"]?\)/gi)];
+              pages = bgMatches.map(m => m[1]).filter(u => !u.includes("thumbnail") && !u.includes("logo"));
+            }
             if (pages.length) {
               container.innerHTML = "";
               let failedCount = 0;
@@ -929,6 +939,7 @@
               return;
             }
           } catch (e) {
+            console.error("[Reader] ManhwaUS image load failed:", e);
             if (gen !== chapterGen) return;
           }
           container.innerHTML = '<div class="empty-state">Failed to load chapter images.</div>';
@@ -941,8 +952,15 @@
             const html = await proxyFetchText(ch._hentai20Url);
             if (gen !== chapterGen) return;
             // hentai20 images are on img.hentai1.io or similar CDN domains
-            const imgMatches = [...html.matchAll(/src=["'](https?:\/\/img\.[^"']+\.(?:jpg|jpeg|png|webp))["']/gi)];
-            const pages = imgMatches.map(m => m[1]).filter(u => !u.includes("thumbnail") && !u.includes("logo") && !u.includes("avatar") && !u.includes("removebg"));
+            let imgMatches = [...html.matchAll(/src=["'](https?:\/\/img\.[^"']+\.(?:jpg|jpeg|png|webp))["']/gi)];
+            let pages = imgMatches.map(m => m[1]).filter(u => !u.includes("thumbnail") && !u.includes("logo") && !u.includes("avatar") && !u.includes("removebg"));
+            // Broader fallback: any image from hentai1.io/hentai20 CDN
+            if (!pages.length) {
+              imgMatches = [...html.matchAll(/(?:src|data-src)=["'](https?:\/\/[^"']+\.(?:jpg|jpeg|png|webp))["']/gi)];
+              pages = imgMatches.map(m => m[1]).filter(u => 
+                (u.includes("hentai1.io") || u.includes("hentai20") || u.includes("cdn")) && 
+                !u.includes("thumbnail") && !u.includes("logo") && !u.includes("banner"));
+            }
             if (pages.length) {
               container.innerHTML = "";
               let failedCount = 0;
@@ -978,6 +996,7 @@
               return;
             }
           } catch (e) {
+            console.error("[Reader] Hentai20 image load failed:", e);
             if (gen !== chapterGen) return;
           }
           container.innerHTML = '<div class="empty-state">Failed to load chapter images.</div>';
@@ -1022,10 +1041,19 @@
 
         // MangaDex: fetch pages via CORS proxy
         try {
-          const chapNum = ch.attributes.chapter;
-          const data = await proxyFetch(
-            `https://api.mangadex.org/at-home/server/${ch.id}`
-          );
+          let data = null;
+          // Retry at-home server once if first call fails (MangaDex CDN can be flaky)
+          for (let attempt = 0; attempt < 2; attempt++) {
+            try {
+              data = await proxyFetch(
+                `https://api.mangadex.org/at-home/server/${ch.id}`
+              );
+              if (data && data.baseUrl && data.chapter) break;
+            } catch (e) {
+              if (attempt === 0) await new Promise(r => setTimeout(r, 1000));
+              else throw e;
+            }
+          }
           if (gen !== chapterGen) return;
           if (data && data.baseUrl && data.chapter) {
             const full = data.chapter.data || [];
@@ -1078,7 +1106,65 @@
             }
           }
         } catch (e) {
+          console.error("[Reader] MangaDex at-home failed:", e);
           if (gen !== chapterGen) return;
+        }
+        // MangaDex failed — try WeebCentral as fallback for this chapter
+        if (gen !== chapterGen) return;
+        try {
+          container.innerHTML = '<div class="reader-loading"><div class="spinner"></div><span>Trying WeebCentral...</span></div>';
+          const wcPagesData = await proxyFetch(
+            `https://manga-scrape-api.vercel.app/api/scrape/search?query=${encodeURIComponent(mangaTitle)}&provider=weebcentral`
+          );
+          const wcResults = Array.isArray(wcPagesData) ? wcPagesData : (wcPagesData.results || wcPagesData.data || []);
+          if (wcResults.length && gen === chapterGen) {
+            const bestWc = wcResults[0];
+            const wcChData = await proxyFetch(
+              `https://manga-scrape-api.vercel.app/api/scrape/pages?id=${bestWc.id}&chapterNumber=${ch.attributes.chapter}&provider=weebcentral`
+            );
+            const rawPages = Array.isArray(wcChData) ? wcChData : (wcChData.pages || wcChData.data || []);
+            const fallbackPages = rawPages
+              .sort((a, b) => (a.order || 0) - (b.order || 0))
+              .map(p => p.url || p.originalUrl || p)
+              .filter(url => typeof url === "string" && url.startsWith("http"));
+            if (fallbackPages.length && gen === chapterGen) {
+              container.innerHTML = "";
+              let failedCount = 0;
+              fallbackPages.forEach((url, pi) => {
+                const wrapper = document.createElement("div");
+                wrapper.className = "reader-page-wrapper";
+                const img = document.createElement("img");
+                img.className = "reader-page-img";
+                img.src = url;
+                img.alt = `Page ${pi + 1}`;
+                img.loading = pi < 3 ? "eager" : "lazy";
+                const errLabel = document.createElement("div");
+                errLabel.className = "reader-page-error";
+                errLabel.style.display = "none";
+                errLabel.textContent = "Failed to load";
+                img.onerror = function() {
+                  if (this.dataset.retried === "2") {
+                    this.style.display = "none";
+                    errLabel.style.display = "block";
+                    failedCount++;
+                    return;
+                  }
+                  this.dataset.retried = String(parseInt(this.dataset.retried || "0") + 1);
+                  const retry = parseInt(this.dataset.retried);
+                  if (retry === 1) this.src = PROXY_BASE + encodeURIComponent(url);
+                  else this.style.display = "none";
+                };
+                wrapper.appendChild(img);
+                wrapper.appendChild(errLabel);
+                container.appendChild(wrapper);
+              });
+              window.scrollTo({ top: 0, behavior: "instant" });
+              updateNavButtons();
+              return;
+            }
+          }
+        } catch (e) {
+          console.error("[Reader] WeebCentral fallback failed:", e);
         }
         if (gen !== chapterGen) return;
         container.innerHTML = '<div class="empty-state">Chapter not available.</div>';
