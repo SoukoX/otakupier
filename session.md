@@ -78,6 +78,26 @@ Manga Reading  → MangaDex API (with proxy fallbacks)
 - Verify before pushing
 - Run `push_update.py` from `/home/ac/` for deployment
 
+### Adult Manga Provider Fixes (Sep 18 2026)
+- **Hentai20.io added** as new adult manga provider in mangareader.html
+  - Slug-based URL matching with variations (hunter/hunting, raw/uncensored)
+  - Search fallback when slug matching fails
+  - Image extraction from img.hentai1.io CDN
+- **ManhwaUS improved** with search fallback when slug matching fails
+  - Added -raw/-uncensored suffix stripping
+  - Search endpoint `/webtoon/` links parsed for chapter extraction
+  - Better title matching with core-word overlap
+- **Provider selection updated** — ManhwaUS now preferred for all adult manga (most chapters)
+  - Selection order: ManhwaUS → Hentai20 → MangaDex → WeebCentral → NHentai
+  - Adult manga: ManhwaUS always tried first (2-3x more chapters)
+- **ManhwaUS image loading** improved — better filtering of non-manga images (logos, thumbnails, removebg)
+- **Root cause fix: `isAdult` missing from detail APIs**
+  - `_mangadexDetail()` now returns `isAdult` based on contentRating
+  - `comickMangaDetail()` now returns `isAdult` based on content_rating
+  - AniList `mangaDetail()` now returns `isAdult`
+  - catalog.html hero "Read Now" now passes `&adult=1` for adult manga
+  - Without these, the reader never tried ManhwaUS/Hentai20 because `isAdult` was always false
+
 ## Other Site Features (Already Working)
 - Anime catalog with hero slider, scroll rows, genre filter, pagination
 - Anime detail pages with relations, characters, recommendations
