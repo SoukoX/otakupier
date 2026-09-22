@@ -948,7 +948,7 @@
             <div class="cat-hero-meta">${JIKAN.esc(status || m.format || "Manga")}</div>
             <div class="cat-hero-actions">
               <a class="btn btn-primary btn-glow" href="${pageHref("manga")}?id=${m.id}">View Details</a>
-              <a class="btn btn-outline" href="${pageHref("mangareader")}?id=${m.id}&title=${encodeURIComponent(m.title)}">📖 Read Now</a>
+              <a class="btn btn-outline" href="${pageHref("mangareader")}?id=${m.id}&title=${encodeURIComponent(m.title)}${m.isAdult ? '&adult=1' : ''}">📖 Read Now</a>
             </div>
           </div>
         </div>
