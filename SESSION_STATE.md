@@ -82,6 +82,11 @@ Run: `python3 /home/ac/push_update.py "fix: Google indexing — visible SEO cont
 ### Files changed (Sep 17 — adult manga fix)
 - `pages/mangareader.html` — Fixed MangaDex search to include adult content ratings (pornographic, erotica) when `isAdult=true`; changed provider selection to always try ManhwaUS for adult manga and pick provider with most chapters
 
+### Files changed (Sep 18 — adult manga providers)
+- `pages/mangareader.html` — Added Hentai20.io provider; improved ManhwaUS with search fallback + slug variations; provider selection now prefers ManhwaUS for adult manga; Hentai20 image loading handler added; isAdult made mutable for auto-detect
+- `js/api.js` — Fixed `_mangadexDetail()`, `comickMangaDetail()`, and AniList `mangaDetail()` to return `isAdult` flag (was missing, causing reader to not know manga is adult)
+- `pages/catalog.html` — Fixed hero "Read Now" link to pass `&adult=1` for adult manga
+
 ### Still pending from prior sessions
 1. **RE-RUN `supabase_schema.sql`** in Supabase SQL Editor (RP system, watch_links admin policy, review replies, 5-link cap)
 2. **Turn off "Confirm email"** in Supabase (or set up custom SMTP)
