@@ -941,17 +941,17 @@
             if (gen !== chapterGen) return;
             // ManhwaUS uses data-src for lazy loading and src for immediate; filter out non-manga images
             const imgMatches = [...html.matchAll(/(?:src|data-src)=['"](https?:\/\/[^'"]+\.(?:jpg|jpeg|png|webp))['"]/gi)];
-            let pages = imgMatches.map(m => m[1])
-              .filter(u => !u.includes("thumbnail") && !u.includes("logo") && !u.includes("avatar") && !u.includes("manhwaus-logo") && !u.includes("removebg") && !u.includes("banner") && !u.includes("icon"));
+            let pages = [...new Set(imgMatches.map(m => m[1])
+              .filter(u => !u.includes("thumbnail") && !u.includes("logo") && !u.includes("avatar") && !u.includes("manhwaus-logo") && !u.includes("removebg") && !u.includes("banner") && !u.includes("icon")))];
             // Also try data-srcset for modern lazy-loading
             if (!pages.length) {
               const srcsetMatches = [...html.matchAll(/data-srcset=['"](https?:\/\/[^'"]+\.(?:jpg|jpeg|png|webp)[^'"]*)['"]/gi)];
-              pages = srcsetMatches.map(m => m[1].split(" ")[0]).filter(u => u && !u.includes("thumbnail") && !u.includes("logo"));
+              pages = [...new Set(srcsetMatches.map(m => m[1].split(" ")[0]).filter(u => u && !u.includes("thumbnail") && !u.includes("logo")))];
             }
             // Also try background-image style
             if (!pages.length) {
               const bgMatches = [...html.matchAll(/background-image:\s*url\(['"]?(https?:\/\/[^'")]+\.(?:jpg|jpeg|png|webp))['"]?\)/gi)];
-              pages = bgMatches.map(m => m[1]).filter(u => !u.includes("thumbnail") && !u.includes("logo"));
+              pages = [...new Set(bgMatches.map(m => m[1]).filter(u => !u.includes("thumbnail") && !u.includes("logo")))];
             }
             if (pages.length) {
               container.innerHTML = "";
@@ -1002,13 +1002,13 @@
             if (gen !== chapterGen) return;
             // hentai20 images are on img.hentai1.io or similar CDN domains
             let imgMatches = [...html.matchAll(/src=["'](https?:\/\/img\.[^"']+\.(?:jpg|jpeg|png|webp))["']/gi)];
-            let pages = imgMatches.map(m => m[1]).filter(u => !u.includes("thumbnail") && !u.includes("logo") && !u.includes("avatar") && !u.includes("removebg"));
+            let pages = [...new Set(imgMatches.map(m => m[1]).filter(u => !u.includes("thumbnail") && !u.includes("logo") && !u.includes("avatar") && !u.includes("removebg")))];
             // Broader fallback: any image from hentai1.io/hentai20 CDN
             if (!pages.length) {
               imgMatches = [...html.matchAll(/(?:src|data-src)=["'](https?:\/\/[^"']+\.(?:jpg|jpeg|png|webp))["']/gi)];
-              pages = imgMatches.map(m => m[1]).filter(u => 
+              pages = [...new Set(imgMatches.map(m => m[1]).filter(u => 
                 (u.includes("hentai1.io") || u.includes("hentai20") || u.includes("cdn")) && 
-                !u.includes("thumbnail") && !u.includes("logo") && !u.includes("banner"));
+                !u.includes("thumbnail") && !u.includes("logo") && !u.includes("banner")))];
             }
             if (pages.length) {
               container.innerHTML = "";
