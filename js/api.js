@@ -1182,6 +1182,7 @@ const JIKAN = {
         chapters: d.last_chapter || null,
         volumes: d.last_volume || null,
         altTitles: d.md_titles?.map(t => t.title).filter(Boolean) || [],
+        isAdult: d.content_rating === "pornographic" || d.content_rating === "erotica" || d.content_rating === "suggestive",
         _comickHid: hid,
         _comickSlug: d.slug,
       };
@@ -1329,6 +1330,7 @@ const JIKAN = {
         volumes: null,
         altTitles: (attr.altTitles || []).map(t => Object.values(t)[0]).filter(Boolean).slice(0, 5),
         relations: [],
+        isAdult: attr.contentRating === "pornographic" || attr.contentRating === "erotica" || attr.contentRating === "suggestive",
       };
     } catch (e) {
       return null;
@@ -1586,6 +1588,7 @@ const JIKAN = {
         chapters: m.chapters,
         volumes: m.volumes,
         altTitles: [m.title?.romaji, m.title?.native].filter(t => t && t !== title),
+        isAdult: !!m.isAdult,
         relations: (m.relations?.edges || []).map(r => ({
           id: r.node?.id,
           title: r.node?.title?.english || r.node?.title?.romaji || "",
