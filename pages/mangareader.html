@@ -214,7 +214,7 @@
           if (adultResults[1].status === "rejected") console.error("[Reader] Hentai20 error:", adultResults[1].reason);
           console.log("[Reader] mh:", mh ? mh.count : "null", "h20:", h20 ? h20.count : "null");
         } else {
-          console.log("[Reader] isAdult=false, skipping adult providers");
+          console.log("[Reader] isAdult=false, skipping adult providers for initial search");
         }
 
         // Pick best provider — MangaDex is primary for non-adult,
@@ -248,6 +248,30 @@
                 ? exact.reduce((a, b) => a.count >= b.count ? a : b)
                 : candidates.reduce((a, b) => a.count >= b.count ? a : b);
             }
+          }
+        }
+
+        // CRITICAL FALLBACK: When MangaDex + WeebCentral both fail (common for
+        // Korean manhwa which aren't on those platforms), always try ManhwaUS +
+        // Hentai20 regardless of the isAdult flag. This ensures adult manhwa
+        // like Secret Class, MILF Hunter, etc. are never stranded with "No chapters".
+        if (!chosen || chosen.count === 0) {
+          console.log("[Reader] All primary providers failed, trying adult providers as fallback...");
+          const adultFallback = await Promise.allSettled([
+            fetchManhwaUsChapters(titles),
+            fetchHentai20Chapters(titles),
+          ]);
+          const mhFb = adultFallback[0].status === "fulfilled" ? adultFallback[0].value : null;
+          const h20Fb = adultFallback[1].status === "fulfilled" ? adultFallback[1].value : null;
+          console.log("[Reader] fallback mh:", mhFb ? mhFb.count : "null", "h20:", h20Fb ? h20Fb.count : "null");
+          const fbCandidates = [mhFb, h20Fb].filter(c => c && c.count > 0);
+          if (fbCandidates.length) {
+            // Prefer exact title match, then most chapters
+            const exactFb = fbCandidates.filter(c => titleMatches(c));
+            chosen = exactFb.length
+              ? exactFb.reduce((a, b) => a.count >= b.count ? a : b)
+              : fbCandidates.reduce((a, b) => a.count >= b.count ? a : b);
+            isAdult = true; // Mark as adult so the reader knows
           }
         }
 
@@ -591,9 +615,13 @@
             if (pageTitle.toLowerCase().includes("not found") || pageTitle.toLowerCase().includes("404")) continue;
             // Lenient title match — strip words FIRST (while spaces exist), then normalize
             const stripWords = (s) => s.replace(/\b(the|a|an|read|manhwa|manga|webtoon|18\+?)\b/gi, "").replace(/\s+/g, " ").trim();
+            const normVariant = (s) => s.replace(/hunting/g, "hunter").replace(/reading/g, "reader");
             const corePage = stripWords(pageTitle).toLowerCase().replace(/[^a-z0-9]/g, "");
             const coreSearch = stripWords(mangaTitle).toLowerCase().replace(/[^a-z0-9]/g, "");
-            const matchesCore = corePage.includes(coreSearch) || coreSearch.includes(corePage);
+            const corePageV = normVariant(corePage);
+            const coreSearchV = normVariant(coreSearch);
+            const matchesCore = corePage.includes(coreSearch) || coreSearch.includes(corePage)
+              || corePageV.includes(coreSearchV) || coreSearchV.includes(corePageV);
             if (!matchesCore) continue;
             // Extract chapter links: hentai20 uses pattern {slug}-chapter-{num}/
             const chapMatches = [...html.matchAll(/href="[^"]*\/([\w-]+)-chapter-([\d.]+)\/"[^>]*>/g)];
@@ -631,13 +659,34 @@
           if (!html) return null;
           // Find matching manga page from search results
           const mangaLinks = [...html.matchAll(/href="(https:\/\/hentai20\.io\/manga\/[^"]+)"/g)];
-          for (const link of mangaLinks) {
+          // Dedupe links and try up to 5
+          const seenUrls = new Set();
+          const uniqueLinks = mangaLinks.filter(l => {
+            if (seenUrls.has(l[1])) return false;
+            seenUrls.add(l[1]);
+            return true;
+          }).slice(0, 5);
+          for (const link of uniqueLinks) {
             const mangaUrl = link[1];
+            // Quick check: if URL slug contains search keywords, it's likely a match
+            const urlSlug = mangaUrl.split("/manga/")[1]?.replace(/\/$/, "") || "";
+            const normVariant = (s) => s.replace(/hunting/g, "hunter").replace(/reading/g, "reader");
+            const slugMatch = normVariant(urlSlug).includes(normVariant(normLower.replace(/[^a-z0-9]/g, "")));
+            if (!slugMatch) {
+              // Still fetch to check title, but only if slug looks close
+              const slugWords = urlSlug.split("-");
+              const searchWords = normLower.split(/\s+/).filter(Boolean);
+              const overlap = slugWords.filter(w => searchWords.some(sw => sw.startsWith(w.slice(0, 4)))).length;
+              if (overlap < 2) continue;
+            }
             const mangaHtml = await proxyFetchText(mangaUrl);
             if (!mangaHtml) continue;
             const mTitle = (mangaHtml.match(/<title[^>]*>([^<]+)<\/title>/i) || [])[1] || "";
             const normM = norm(mTitle);
-            if (!normM.includes(normLower) && !normLower.includes(normM)) continue;
+            const normMV = normVariant(normM);
+            const normSearchV = normVariant(normLower);
+            if (!normM.includes(normLower) && !normLower.includes(normM) &&
+                !normMV.includes(normSearchV) && !normSearchV.includes(normMV)) continue;
             const chapMatches = [...mangaHtml.matchAll(/href="[^"]*\/([\w-]+)-chapter-([\d.]+)\/"[^>]*>/g)];
             if (chapMatches.length) {
               const seen = new Set();
