@@ -65,6 +65,7 @@
   </script>
   <link rel="preconnect" href="https://api.jikan.moe">
   <link rel="preconnect" href="https://graphql.anilist.co">
+  <link rel="preconnect" href="https://mangakatana.com">
   <link rel="preconnect" href="https://cdn.jsdelivr.net">
   <link rel="preconnect" href="https://api.mangadex.org">
   <link rel="stylesheet" href="../css/style.css?v=25">
@@ -948,7 +949,7 @@
             <div class="cat-hero-meta">${JIKAN.esc(status || m.format || "Manga")}</div>
             <div class="cat-hero-actions">
               <a class="btn btn-primary btn-glow" href="${pageHref("manga")}?id=${m.id}">View Details</a>
-              <a class="btn btn-outline" href="${pageHref("mangareader")}?id=${m.id}&title=${encodeURIComponent(m.title)}${m.isAdult ? '&adult=1' : ''}">📖 Read Now</a>
+              <a class="btn btn-outline" href="${pageHref("mangareader")}?id=${m.id}&title=${encodeURIComponent(m.title)}${m.isAdult ? '&adult=1' : ''}${m.format ? '&format=' + encodeURIComponent(m.format) : ''}">📖 Read Now</a>
             </div>
           </div>
         </div>
