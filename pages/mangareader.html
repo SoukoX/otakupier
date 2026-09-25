@@ -96,16 +96,16 @@
             method: "POST",
             headers: { "Content-Type": "application/json", Accept: "application/json" },
             body: JSON.stringify({
-              query: `query($s: String) { Page(page:1, perPage:1) { media(search: $s, type: MANGA) { id format } } }`,
+              query: `query($s: String) { Page(page:1, perPage:1) { media(search: $s, type: MANGA) { id format countryOfOrigin genres } } }`,
               variables: { s: mangaTitle }
             })
           });
           const data = await res.json();
           const media = data?.data?.Page?.media?.[0];
-          if (media && media.format) {
-            manhwaDetected = media.format === "MANHWA";
+          if (media) {
+            manhwaDetected = media.format === "MANHWA" || media.countryOfOrigin === "KR";
             isManhwa = manhwaDetected;
-            console.log("[Reader] Auto-detected format:", media.format, "isManhwa:", isManhwa);
+            console.log("[Reader] Auto-detected format:", media.format, "country:", media.countryOfOrigin, "isManhwa:", isManhwa);
           }
         } catch (e) {
           console.warn("[Reader] Manhwa auto-detect failed:", e);
