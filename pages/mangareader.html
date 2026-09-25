@@ -88,17 +88,18 @@
       let isManhwa = mangaFormat.toUpperCase() === "MANHWA";
       let manhwaDetected = false;
 
-      // Auto-detect manhwa from AniList if no format param passed
+      // Auto-detect manhwa from AniList if no format param passed (non-blocking)
       async function detectManhwaFromAniList() {
         if (mangaFormat) return; // Already have format from URL
         try {
-          const res = await fetch(`https://graphql.anilist.co`, {
+          const query = `query($s: String) { Page(page:1, perPage:1) { media(search: $s, type: MANGA) { id format countryOfOrigin genres } } }`;
+          const body = JSON.stringify({ query, variables: { s: mangaTitle } });
+          const res = await fetch("https://graphql.anilist.co", {
             method: "POST",
             headers: { "Content-Type": "application/json", Accept: "application/json" },
-            body: JSON.stringify({
-              query: `query($s: String) { Page(page:1, perPage:1) { media(search: $s, type: MANGA) { id format countryOfOrigin genres } } }`,
-              variables: { s: mangaTitle }
-            })
+            body,
+            // Short timeout so it doesn't block
+            signal: AbortSignal.timeout(5000)
           });
           const data = await res.json();
           const media = data?.data?.Page?.media?.[0];
@@ -209,10 +210,17 @@
         await detectManhwaFromAniList();
 
         // Collect results from MangaDex + WeebCentral + MangaKatan (no rendering yet)
+        // Use Promise.allSettled with individual timeouts so one slow provider doesn't block
+        const fetchWithTimeout = (fn, timeout = 15000) =>
+          Promise.race([
+            fn(),
+            new Promise((_, reject) => setTimeout(() => reject(new Error("Timeout")), timeout))
+          ]);
+
         const [mdData, wcData, mkData] = await Promise.allSettled([
-          fetchMangaDexChapters(titles),
-          fetchWeebCentralChapters(),
-          fetchMangaKatanChapters(titles),
+          fetchWithTimeout(() => fetchMangaDexChapters(titles)),
+          fetchWithTimeout(() => fetchWeebCentralChapters()),
+          fetchWithTimeout(() => fetchMangaKatanChapters(titles)),
         ]);
 
         const md = mdData.status === "fulfilled" ? mdData.value : null;
