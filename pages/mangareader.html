@@ -141,7 +141,8 @@
 
       // ── Step 1: Find manga — search MangaDex + WeebCentral in parallel, pick best ──
       async function init() {
-        $("chapterList").innerHTML = '<div class="loading"><div class="spinner"></div>Searching...</div>';
+        try {
+          $("chapterList").innerHTML = '<div class="loading"><div class="spinner"></div>Searching...</div>';
 
         // If ID is mdx-*, fetch chapters directly by MangaDex ID
         if (mangaId.startsWith("mdx-")) {
@@ -378,6 +379,12 @@
           $("chapterList").innerHTML = '<div class="empty-state">' +
             '<p>No chapters found.</p>' +
             '<p style="margin-top:8px;font-size:0.85em;">This manga may not have readable chapters available yet.</p></div>';
+        }
+        } catch (e) {
+          console.error("[Reader] init error:", e);
+          $("chapterList").innerHTML = '<div class="empty-state">' +
+            '<p>Error loading chapters: ' + e.message + '</p>' +
+            '<p style="margin-top:8px;font-size:0.85em;">Check console for details.</p></div>';
         }
       }
 
