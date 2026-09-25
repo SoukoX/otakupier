@@ -208,15 +208,17 @@
         // Auto-detect manhwa from AniList if no format param
         await detectManhwaFromAniList();
 
-        // Collect results from MangaDex + WeebCentral (no rendering yet)
-        const [mdData, wcData] = await Promise.allSettled([
+        // Collect results from MangaDex + WeebCentral + MangaKatan (no rendering yet)
+        const [mdData, wcData, mkData] = await Promise.allSettled([
           fetchMangaDexChapters(titles),
           fetchWeebCentralChapters(),
+          fetchMangaKatanChapters(titles),
         ]);
 
         const md = mdData.status === "fulfilled" ? mdData.value : null;
         const wc = wcData.status === "fulfilled" ? wcData.value : null;
-        console.log("[Reader] md:", md ? md.count : "null", "wc:", wc ? wc.count : "null");
+        const mk = mkData.status === "fulfilled" ? mkData.value : null;
+        console.log("[Reader] md:", md ? md.count : "null", "wc:", wc ? wc.count : "null", "mk:", mk ? mk.count : "null");
 
         // Verify provider returned the correct manga (not a random one)
         function titleMatches(providerResult) {
@@ -249,22 +251,9 @@
           if (adultResults[1].status === "rejected") console.error("[Reader] Hentai20 error:", adultResults[1].reason);
           console.log("[Reader] mh:", mh ? mh.count : "null", "h20:", h20 ? h20.count : "null");
         } else if (isManhwa) {
-          console.log("[Reader] Non-adult manhwa detected, trying MangaKatan...");
-          const mkResult = await Promise.allSettled([
-            fetchMangaKatanChapters(titles),
-          ]);
-          mk = mkResult[0].status === "fulfilled" ? mkResult[0].value : null;
-          if (mkResult[0].status === "rejected") console.error("[Reader] MangaKatan error:", mkResult[0].reason);
-          console.log("[Reader] mk:", mk ? mk.count : "null");
+          console.log("[Reader] Non-adult manhwa detected, MangaKatan already fetched");
         } else {
-          // Try MangaKatan for all non-adult manga too (many manhwa not tagged as such)
-          console.log("[Reader] Non-adult manga, trying MangaKatan as secondary...");
-          const mkResult = await Promise.allSettled([
-            fetchMangaKatanChapters(titles),
-          ]);
-          mk = mkResult[0].status === "fulfilled" ? mkResult[0].value : null;
-          if (mkResult[0].status === "rejected") console.error("[Reader] MangaKatan error:", mkResult[0].reason);
-          console.log("[Reader] mk:", mk ? mk.count : "null");
+          console.log("[Reader] Non-adult manga, MangaKatan already fetched");
         }
 
         // Pick best provider
