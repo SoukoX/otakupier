@@ -10,6 +10,7 @@
   <link rel="icon" type="image/x-icon" href="../favicon.ico">
   <link rel="stylesheet" href="../css/style.css?v=27">
   <link rel="preconnect" href="https://manga-scrape-api.vercel.app">
+  <link rel="preconnect" href="https://mangakatana.com">
   <link rel="dns-prefetch" href="https://soukox.goatcounter.com">
 <script data-goatcounter="https://soukox.goatcounter.com/count"
           async src="//gc.zgo.at/count.js"></script>
@@ -81,6 +82,35 @@
 
       $("mangaTitle").textContent = mangaTitle;
       document.title = mangaTitle + " - Read Manga | OtakuPier";
+
+      // Get format from URL params (passed from manga.html)
+      const mangaFormat = params.get("format") || "";
+      let isManhwa = mangaFormat.toUpperCase() === "MANHWA";
+      let manhwaDetected = false;
+
+      // Auto-detect manhwa from AniList if no format param passed
+      async function detectManhwaFromAniList() {
+        if (mangaFormat) return; // Already have format from URL
+        try {
+          const res = await fetch(`https://graphql.anilist.co`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json", Accept: "application/json" },
+            body: JSON.stringify({
+              query: `query($s: String) { Page(page:1, perPage:1) { media(search: $s, type: MANGA) { id format } } }`,
+              variables: { s: mangaTitle }
+            })
+          });
+          const data = await res.json();
+          const media = data?.data?.Page?.media?.[0];
+          if (media && media.format) {
+            manhwaDetected = media.format === "MANHWA";
+            isManhwa = manhwaDetected;
+            console.log("[Reader] Auto-detected format:", media.format, "isManhwa:", isManhwa);
+          }
+        } catch (e) {
+          console.warn("[Reader] Manhwa auto-detect failed:", e);
+        }
+      }
 
       // ── Sidebar ──
       function updateSidebar() {
@@ -175,6 +205,9 @@
           mangaTitle.split(":")[0].trim(),
         ].filter(Boolean);
 
+        // Auto-detect manhwa from AniList if no format param
+        await detectManhwaFromAniList();
+
         // Collect results from MangaDex + WeebCentral (no rendering yet)
         const [mdData, wcData] = await Promise.allSettled([
           fetchMangaDexChapters(titles),
@@ -200,8 +233,10 @@
         }
 
         // For adult manga, try ManhwaUS + Hentai20 (often more chapters than MangaDex)
+        // For non-adult manhwa, try MangaKatan
         let mh = null;
         let h20 = null;
+        let mk = null;
         if (isAdult) {
           console.log("[Reader] Trying ManhwaUS + Hentai20...");
           const adultResults = await Promise.allSettled([
@@ -213,14 +248,31 @@
           h20 = adultResults[1].status === "fulfilled" ? adultResults[1].value : null;
           if (adultResults[1].status === "rejected") console.error("[Reader] Hentai20 error:", adultResults[1].reason);
           console.log("[Reader] mh:", mh ? mh.count : "null", "h20:", h20 ? h20.count : "null");
+        } else if (isManhwa) {
+          console.log("[Reader] Non-adult manhwa detected, trying MangaKatan...");
+          const mkResult = await Promise.allSettled([
+            fetchMangaKatanChapters(titles),
+          ]);
+          mk = mkResult[0].status === "fulfilled" ? mkResult[0].value : null;
+          if (mkResult[0].status === "rejected") console.error("[Reader] MangaKatan error:", mkResult[0].reason);
+          console.log("[Reader] mk:", mk ? mk.count : "null");
         } else {
-          console.log("[Reader] isAdult=false, skipping adult providers for initial search");
+          // Try MangaKatan for all non-adult manga too (many manhwa not tagged as such)
+          console.log("[Reader] Non-adult manga, trying MangaKatan as secondary...");
+          const mkResult = await Promise.allSettled([
+            fetchMangaKatanChapters(titles),
+          ]);
+          mk = mkResult[0].status === "fulfilled" ? mkResult[0].value : null;
+          if (mkResult[0].status === "rejected") console.error("[Reader] MangaKatan error:", mkResult[0].reason);
+          console.log("[Reader] mk:", mk ? mk.count : "null");
         }
 
-        // Pick best provider — MangaDex is primary for non-adult,
-        // ManhwaUS is primary for adult (usually has 2-3x more chapters).
+        // Pick best provider
+        // Non-adult manhwa: MangaKatan primary, MangaDex secondary
+        // Non-adult manga: MangaKatan primary (if has chapters), MangaDex secondary, WeebCentral tertiary
+        // Adult: ManhwaUS primary, Hentai20 secondary, MangaDex fallback
         let chosen = null;
-        const candidates = [mh, h20, md, wc].filter(c => c && c.count > 0);
+        const candidates = [mk, mh, h20, md, wc].filter(c => c && c.count > 0);
         if (candidates.length) {
           if (isAdult) {
             // Adult manga: prefer ManhwaUS (most chapters), then Hentai20, then MangaDex
@@ -235,9 +287,25 @@
                 ? exact.reduce((a, b) => a.count >= b.count ? a : b)
                 : candidates.reduce((a, b) => a.count >= b.count ? a : b);
             }
+          } else if (isManhwa) {
+            // Non-adult manhwa: prefer MangaKatan, then MangaDex, then WeebCentral
+            if (mk && mk.count > 0) {
+              chosen = mk;
+            } else if (md && md.count > 0) {
+              chosen = md;
+            } else if (wc && wc.count > 0) {
+              chosen = wc;
+            } else {
+              const exact = candidates.filter(c => titleMatches(c));
+              chosen = exact.length
+                ? exact.reduce((a, b) => a.count >= b.count ? a : b)
+                : candidates.reduce((a, b) => a.count >= b.count ? a : b);
+            }
           } else {
-            // Non-adult manga: MangaDex is primary, WeebCentral is secondary
-            if (md && md.count > 0) {
+            // Non-adult manga: prefer MangaKatan if it has chapters (many manhwa not tagged), then MangaDex, then WeebCentral
+            if (mk && mk.count > 0) {
+              chosen = mk;
+            } else if (md && md.count > 0) {
               chosen = md;
             } else if (wc && wc.count > 0) {
               chosen = wc;
@@ -256,22 +324,24 @@
         // Hentai20 regardless of the isAdult flag. This ensures adult manhwa
         // like Secret Class, MILF Hunter, etc. are never stranded with "No chapters".
         if (!chosen || chosen.count === 0) {
-          console.log("[Reader] All primary providers failed, trying adult providers as fallback...");
-          const adultFallback = await Promise.allSettled([
-            fetchManhwaUsChapters(titles),
-            fetchHentai20Chapters(titles),
-          ]);
-          const mhFb = adultFallback[0].status === "fulfilled" ? adultFallback[0].value : null;
-          const h20Fb = adultFallback[1].status === "fulfilled" ? adultFallback[1].value : null;
-          console.log("[Reader] fallback mh:", mhFb ? mhFb.count : "null", "h20:", h20Fb ? h20Fb.count : "null");
-          const fbCandidates = [mhFb, h20Fb].filter(c => c && c.count > 0);
-          if (fbCandidates.length) {
-            // Prefer exact title match, then most chapters
-            const exactFb = fbCandidates.filter(c => titleMatches(c));
+          console.log("[Reader] All primary providers failed, trying fallback providers...");
+          const fallbackProviders = isAdult
+            ? [fetchManhwaUsChapters(titles), fetchHentai20Chapters(titles)]
+            : [fetchMangaKatanChapters(titles), fetchManhwaUsChapters(titles), fetchHentai20Chapters(titles)];
+          const fallbackResults = await Promise.allSettled(fallbackProviders);
+          const fallbackValues = fallbackResults
+            .filter(r => r.status === "fulfilled")
+            .map(r => r.value)
+            .filter(v => v && v.count > 0);
+          console.log("[Reader] fallback providers:", fallbackValues.map(v => v?.provider + "(" + v?.count + ")"));
+          if (fallbackValues.length) {
+            const exactFb = fallbackValues.filter(c => titleMatches(c));
             chosen = exactFb.length
               ? exactFb.reduce((a, b) => a.count >= b.count ? a : b)
-              : fbCandidates.reduce((a, b) => a.count >= b.count ? a : b);
-            isAdult = true; // Mark as adult so the reader knows
+              : fallbackValues.reduce((a, b) => a.count >= b.count ? a : b);
+            if (!isAdult && (chosen.provider === "manhwaus" || chosen.provider === "hentai20")) {
+              isAdult = true; // Mark as adult so the reader knows
+            }
           }
         }
 
@@ -717,6 +787,124 @@
         return null;
       }
 
+      // ── MangaKatan provider (for manhwa) ──
+      async function fetchMangaKatanChapters(titles) {
+        const toSlug = (t) => t.toLowerCase()
+          .replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
+        const slug = toSlug(mangaTitle);
+        const allSlugs = [slug, ...titles.map(toSlug)];
+        // Try common variations for manhwa
+        const extraSlugs = [];
+        for (const s of allSlugs) {
+          // Try dropping common suffixes
+          const dropped = s.replace(/-raw$/, "").replace(/-uncensored$/, "");
+          if (dropped !== s) extraSlugs.push(dropped);
+          // Try manhwa-specific variations
+          extraSlugs.push(s + "-manhwa");
+          extraSlugs.push(s + "-webtoon");
+          extraSlugs.push(s.replace(/-manhwa$/, "")); // in case title already has it
+          extraSlugs.push(s.replace(/-webtoon$/, ""));
+          // Try without "the" prefix
+          if (s.startsWith("the-")) extraSlugs.push(s.replace("the-", ""));
+        }
+        const trySlugs = [...new Set([...allSlugs, ...extraSlugs])];
+
+        const normLower = norm(mangaTitle);
+        for (const s of trySlugs) {
+          const url = `https://mangakatana.com/manga/${s}/`;
+          try {
+            const html = await proxyFetchText(url);
+            if (!html) continue;
+            const pageTitle = (html.match(/<title[^>]*>([^<]+)<\/title>/i) || [])[1] || "";
+            if (pageTitle.toLowerCase().includes("not found") || pageTitle.toLowerCase().includes("404")) continue;
+            // Lenient title match
+            const stripWords = (str) => str.replace(/\b(the|a|an|read|manhwa|manga|webtoon|18\+?)\b/gi, "").replace(/\s+/g, " ").trim();
+            const corePage = stripWords(pageTitle).toLowerCase().replace(/[^a-z0-9]/g, "");
+            const coreSearch = stripWords(mangaTitle).toLowerCase().replace(/[^a-z0-9]/g, "");
+            const matchesCore = corePage.includes(coreSearch) || coreSearch.includes(corePage);
+            if (!matchesCore) continue;
+            // Extract chapter links: mangakatana uses pattern /c<num> (e.g., /manga/lookism.693/c626 or https://mangakatana.com/manga/lookism.693/c626)
+            const chapMatches = [...html.matchAll(/href="(?:https?:\/\/mangakatana\.com)?\/manga\/[^"]*\/c([\d.]+)(?:[^"]*)"[^>]*>/g)];
+            if (chapMatches.length) {
+              const seen = new Set();
+              const chaps = [];
+              for (const m of chapMatches) {
+                const chNum = m[1];
+                if (seen.has(chNum)) continue;
+                seen.add(chNum);
+                chaps.push({
+                  attributes: { chapter: chNum, title: "", volume: null },
+                  _mangakatanaUrl: `https://mangakatana.com${m[0].match(/href="([^"]+)"/)[1]}`,
+                  _provider: "mangakatana",
+                });
+              }
+              if (chaps.length) {
+                console.log("[MangaKatan] Found", chaps.length, "chapters on slug:", s);
+                return {
+                  provider: "mangakatana",
+                  count: chaps.length,
+                  chapters: sortChapters(chaps),
+                  title: mangaTitle,
+                  _mangakatanaBase: `https://mangakatana.com/manga/${s}/`,
+                };
+              }
+            }
+          } catch (_) { continue; }
+        }
+
+        // Fallback: search MangaKatan by query
+        try {
+          console.log("[MangaKatan] Slug matching failed, trying search...");
+          const searchUrl = `https://mangakatana.com/?search=${encodeURIComponent(mangaTitle)}&search_by=m_name`;
+          const html = await proxyFetchText(searchUrl);
+          if (!html) return null;
+          // Find matching manga page from search results (handles both relative and absolute URLs)
+          const mangaLinks = [...html.matchAll(/href="(?:https?:\/\/mangakatana\.com)?(\/manga\/[^"]+)"/g)];
+          const seenUrls = new Set();
+          for (const link of mangaLinks) {
+            const mangaPath = link[1];
+            if (seenUrls.has(mangaPath)) continue;
+            seenUrls.add(mangaPath);
+            const fullUrl = `https://mangakatana.com${mangaPath}`;
+            try {
+              const mangaHtml = await proxyFetchText(fullUrl);
+              if (!mangaHtml) continue;
+              const mTitle = (mangaHtml.match(/<title[^>]*>([^<]+)<\/title>/i) || [])[1] || "";
+              const stripWords = (str) => str.replace(/\b(the|a|an|read|manhwa|manga|webtoon|18\+?)\b/gi, "").replace(/\s+/g, " ").trim();
+              const coreM = stripWords(mTitle).toLowerCase().replace(/[^a-z0-9]/g, "");
+              const coreS = stripWords(mangaTitle).toLowerCase().replace(/[^a-z0-9]/g, "");
+              if (!coreM.includes(coreS) && !coreS.includes(coreM)) continue;
+              const chapMatches = [...mangaHtml.matchAll(/href="(?:https?:\/\/mangakatana\.com)?\/manga\/[^"]*\/c([\d.]+)(?:[^"]*)"[^>]*>/g)];
+              if (chapMatches.length) {
+                const seen = new Set();
+                const chaps = [];
+                for (const m of chapMatches) {
+                  const chNum = m[1];
+                  if (seen.has(chNum)) continue;
+                  seen.add(chNum);
+                  chaps.push({
+                    attributes: { chapter: chNum, title: "", volume: null },
+                    _mangakatanaUrl: `https://mangakatana.com${m[0].match(/href="([^"]+)"/)[1]}`,
+                    _provider: "mangakatana",
+                  });
+                }
+                if (chaps.length) {
+                  console.log("[MangaKatan] Found", chaps.length, "chapters via search");
+                  return {
+                    provider: "mangakatana",
+                    count: chaps.length,
+                    chapters: sortChapters(chaps),
+                    title: mTitle.replace(/ : .*| - .*/, "").trim() || mangaTitle,
+                    _mangakatanaBase: fullUrl,
+                  };
+                }
+              }
+            } catch (_) { continue; }
+          }
+        } catch (_) {}
+        return null;
+      }
+
       // ── NHentai provider ──
       async function fetchNhentaiChapters(titles) {
         for (const title of titles) {
@@ -1046,6 +1234,77 @@
             }
           } catch (e) {
             console.error("[Reader] Hentai20 image load failed:", e);
+            if (gen !== chapterGen) return;
+          }
+          container.innerHTML = '<div class="empty-state">Failed to load chapter images.</div>';
+          return;
+        }
+
+        // MangaKatan: fetch chapter page and extract image URLs
+        if (currentProvider === "mangakatana") {
+          try {
+            const html = await proxyFetchText(ch._mangakatanaUrl);
+            if (gen !== chapterGen) return;
+            // MangaKatan stores images in a JS array: var thzq=['url1','url2',...];
+            let pages = [];
+            const thzqMatch = html.match(/var\s+thzq\s*=\s*\[([\s\S]*?)\];/);
+            if (thzqMatch) {
+              const urls = thzqMatch[1].match(/https?:\/\/[^'"]+\.(?:jpg|jpeg|png|webp)/g);
+              if (urls) pages = [...new Set(urls)];
+            }
+            // Fallback: try to find any i1.mangakatana.com image URLs
+            if (!pages.length) {
+              const imgMatches = [...html.matchAll(/https:\/\/i1\.mangakatana\.com\/token\/[^'"]+\.(?:jpg|jpeg|png|webp)/g)];
+              pages = [...new Set(imgMatches.map(m => m[0]))];
+            }
+            // Fallback: standard img/src extraction
+            if (!pages.length) {
+              let imgMatches = [...html.matchAll(/src=["'](https?:\/\/[^"']+\.(?:jpg|jpeg|png|webp))["']/gi)];
+              pages = [...new Set(imgMatches.map(m => m[1]).filter(u => 
+                !u.includes("thumbnail") && !u.includes("logo") && !u.includes("avatar") && !u.includes("banner") && !u.includes("icon")))];
+            }
+            // Also try data-src for lazy-loaded images
+            if (!pages.length) {
+              imgMatches = [...html.matchAll(/data-src=["'](https?:\/\/[^"']+\.(?:jpg|jpeg|png|webp))["']/gi)];
+              pages = [...new Set(imgMatches.map(m => m[1]).filter(u => 
+                !u.includes("thumbnail") && !u.includes("logo") && !u.includes("avatar") && !u.includes("banner")))];
+            }
+            if (pages.length) {
+              container.innerHTML = "";
+              let failedCount = 0;
+              pages.forEach((url, pi) => {
+                const wrapper = document.createElement("div");
+                wrapper.className = "reader-page-wrapper";
+                const img = document.createElement("img");
+                img.className = "reader-page-img";
+                img.src = url;
+                img.alt = `Page ${pi + 1}`;
+                img.loading = pi < 3 ? "eager" : "lazy";
+                const errLabel = document.createElement("div");
+                errLabel.className = "reader-page-error";
+                errLabel.style.display = "none";
+                errLabel.textContent = "Failed to load";
+                img.onerror = function() {
+                  if (this.dataset.retried === "1") {
+                    this.style.display = "none";
+                    errLabel.style.display = "block";
+                    failedCount++;
+                    if (failedCount >= pages.length) container.innerHTML = '<div class="empty-state">Images unavailable.</div>';
+                    return;
+                  }
+                  this.dataset.retried = "1";
+                  this.src = PROXY_BASE + encodeURIComponent(url);
+                };
+                wrapper.appendChild(img);
+                wrapper.appendChild(errLabel);
+                container.appendChild(wrapper);
+              });
+              window.scrollTo({ top: 0, behavior: "instant" });
+              updateNavButtons();
+              return;
+            }
+          } catch (e) {
+            console.error("[Reader] MangaKatan image load failed:", e);
             if (gen !== chapterGen) return;
           }
           container.innerHTML = '<div class="empty-state">Failed to load chapter images.</div>';
