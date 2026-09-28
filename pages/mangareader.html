@@ -137,9 +137,26 @@
       const PROXY_BASE = "https://otakupier.ankitchand533.workers.dev?url=";
       async function proxyFetch(url, timeoutMs) {
         const target = PROXY_BASE + encodeURIComponent(url);
-        const res = await fetch(target, { signal: AbortSignal.timeout(timeoutMs || 20000) });
+        const res = await fetch(target, { signal: AbortSignal.timeout(timeoutMs || 8000) });
         if (!res.ok) throw new Error("Proxy HTTP " + res.status);
         return res.json();
+      }
+
+      // Direct fetch with CORS (for APIs that support it like MangaDex)
+      async function directFetch(url, timeoutMs) {
+        const res = await fetch(url, { signal: AbortSignal.timeout(timeoutMs || 8000) });
+        if (!res.ok) throw new Error("Direct HTTP " + res.status);
+        return res.json();
+      }
+
+      // Fetch with fallback: try direct first, then proxy
+      async function fetchWithFallback(url, timeoutMs) {
+        try {
+          return await directFetch(url, timeoutMs);
+        } catch (e) {
+          console.log("[Reader] Direct fetch failed, trying proxy:", e.message);
+          return await proxyFetch(url, timeoutMs);
+        }
       }
 
       // ── Step 1: Find manga — search MangaDex + WeebCentral in parallel, pick best ──
@@ -155,7 +172,7 @@
             const directRating = isAdult
               ? "contentRating%5B%5D=pornographic&contentRating%5B%5D=erotica&contentRating%5B%5D=suggestive&contentRating%5B%5D=safe"
               : "contentRating%5B%5D=suggestive&contentRating%5B%5D=safe";
-            const chData = await proxyFetch(
+            const chData = await fetchWithFallback(
               `https://api.mangadex.org/manga/${directId}/feed?translatedLanguage%5B%5D=en&limit=1000&order%5Bchapter%5D=asc&${directRating}`
             );
             const allChapters = (chData.data || []).filter(ch => ch.attributes && ch.attributes.chapter && !ch.attributes.externalUrl);
@@ -411,13 +428,13 @@ const uniqueChapters = [...seen.values()];
         }
       }
 
-      async function fetchMangaDexChapters(titles) {
+async function fetchMangaDexChapters(titles) {
         for (const title of titles) {
           try {
             const searchRating = isAdult
               ? "contentRating%5B%5D=pornographic&contentRating%5B%5D=erotica&contentRating%5B%5D=suggestive&contentRating%5B%5D=safe"
               : "contentRating%5B%5D=suggestive&contentRating%5B%5D=safe";
-            const data = await proxyFetch(`https://api.mangadex.org/manga?title=${encodeURIComponent(title)}&limit=10&includes[]=cover_art&${searchRating}`);
+            const data = await fetchWithFallback(`https://api.mangadex.org/manga?title=${encodeURIComponent(title)}&limit=10&includes[]=cover_art&${searchRating}`);
             if (data && data.data && data.data.length) {
               const lower = mangaTitle.toLowerCase();
               const normLower = norm(mangaTitle);
@@ -454,7 +471,7 @@ const uniqueChapters = [...seen.values()];
                     const chRating = isAdult
                       ? "contentRating%5B%5D=pornographic&contentRating%5B%5D=erotica&contentRating%5B%5D=suggestive&contentRating%5B%5D=safe"
                       : "contentRating%5B%5D=suggestive&contentRating%5B%5D=safe";
-                    const chData = await proxyFetch(
+                    const chData = await fetchWithFallback(
                       `https://api.mangadex.org/manga/${mangaId}/feed?translatedLanguage%5B%5D=en&limit=1000&order%5Bchapter%5D=asc&${chRating}`
                     );
                     const allChapters = (chData.data || []).filter(ch => ch.attributes && ch.attributes.chapter && !ch.attributes.externalUrl);
@@ -482,7 +499,7 @@ const uniqueChapters = [...seen.values()];
                         mangadexId: mangaId,
                       };
                     }
-          } catch (_) { console.log("[MangaDex] Error on candidate:", candidate?.manga?.id, _); continue; }
+              } catch (_) { console.log("[MangaDex] Error on candidate:", candidate?.manga?.id, _); continue; }
                 }
               }
             }
@@ -492,7 +509,7 @@ const uniqueChapters = [...seen.values()];
       }
 
       async function fetchWeebCentralChapters() {
-        const wcData = await proxyFetch(
+        const wcData = await fetchWithFallback(
           `https://manga-scrape-api.vercel.app/api/scrape/search?query=${encodeURIComponent(mangaTitle)}&provider=weebcentral`
         );
         const wcResults = Array.isArray(wcData) ? wcData : (wcData.results || wcData.data || []);
@@ -523,7 +540,7 @@ const uniqueChapters = [...seen.values()];
 
         const wcManga = bestMatch;
 
-        const chData = await proxyFetch(
+        const chData = await fetchWithFallback(
           `https://manga-scrape-api.vercel.app/api/scrape/chapters?id=${wcManga.id}&provider=weebcentral`
         );
         const wcChapters = Array.isArray(chData) ? chData : (chData.chapters || chData.data || []);
@@ -582,7 +599,7 @@ const uniqueChapters = [...seen.values()];
         for (const s of trySlugs) {
           const url = `https://manhwaus.net/webtoon/${s}/`;
           try {
-            const html = await proxyFetchText(url);
+            const html = await fetchTextWithFallback(url);
             if (!html) continue;
             const pageTitle = (html.match(/<title[^>]*>([^<]+)<\/title>/i) || [])[1] || "";
             if (pageTitle.toLowerCase().includes("not found")) continue;
@@ -629,7 +646,7 @@ const uniqueChapters = [...seen.values()];
         try {
           console.log("[ManhwaUS] Slug matching failed, trying search...");
           const searchUrl = `https://manhwaus.net/?s=${encodeURIComponent(mangaTitle)}`;
-          const html = await proxyFetchText(searchUrl);
+          const html = await fetchTextWithFallback(searchUrl);
           if (!html) return null;
           // Find matching manga page from search results
           const mangaLinks = [...html.matchAll(/href="(\/webtoon\/[^"]+)"/g)];
@@ -640,7 +657,7 @@ const uniqueChapters = [...seen.values()];
             seenUrls.add(mangaPath);
             const fullUrl = `https://manhwaus.net${mangaPath}`;
             try {
-              const mangaHtml = await proxyFetchText(fullUrl);
+              const mangaHtml = await fetchTextWithFallback(fullUrl);
               if (!mangaHtml) continue;
               const mTitle = (mangaHtml.match(/<title[^>]*>([^<]+)<\/title>/i) || [])[1] || "";
               const stripWords = (s) => s.replace(/\b(the|a|an|read|manhwa|manga|webtoon|18\+?)\b/gi, "").replace(/\s+/g, " ").trim();
@@ -706,7 +723,7 @@ const uniqueChapters = [...seen.values()];
         for (const s of trySlugs) {
           const url = `https://hentai20.io/manga/${s}/`;
           try {
-            const html = await proxyFetchText(url);
+            const html = await fetchTextWithFallback(url);
             if (!html) continue;
             const pageTitle = (html.match(/<title[^>]*>([^<]+)<\/title>/i) || [])[1] || "";
             if (pageTitle.toLowerCase().includes("not found") || pageTitle.toLowerCase().includes("404")) continue;
@@ -752,7 +769,7 @@ const uniqueChapters = [...seen.values()];
         // Fallback: search hentai20 by query
         try {
           const searchUrl = `https://hentai20.io/?s=${encodeURIComponent(mangaTitle)}`;
-          const html = await proxyFetchText(searchUrl);
+          const html = await fetchTextWithFallback(searchUrl);
           if (!html) return null;
           // Find matching manga page from search results
           const mangaLinks = [...html.matchAll(/href="(https:\/\/hentai20\.io\/manga\/[^"]+)"/g)];
@@ -776,7 +793,7 @@ const uniqueChapters = [...seen.values()];
               const overlap = slugWords.filter(w => searchWords.some(sw => sw.startsWith(w.slice(0, 4)))).length;
               if (overlap < 2) continue;
             }
-            const mangaHtml = await proxyFetchText(mangaUrl);
+            const mangaHtml = await fetchTextWithFallback(mangaUrl);
             if (!mangaHtml) continue;
             const mTitle = (mangaHtml.match(/<title[^>]*>([^<]+)<\/title>/i) || [])[1] || "";
             const normM = norm(mTitle);
@@ -840,7 +857,7 @@ const uniqueChapters = [...seen.values()];
         for (const s of trySlugs) {
           const url = `https://mangakatana.com/manga/${s}/`;
           try {
-            const html = await proxyFetchText(url);
+            const html = await fetchTextWithFallback(url);
             if (!html) continue;
             const pageTitle = (html.match(/<title[^>]*>([^<]+)<\/title>/i) || [])[1] || "";
             if (pageTitle.toLowerCase().includes("not found") || pageTitle.toLowerCase().includes("404")) continue;
@@ -883,7 +900,7 @@ const uniqueChapters = [...seen.values()];
         try {
           console.log("[MangaKatan] Slug matching failed, trying search...");
           const searchUrl = `https://mangakatana.com/?search=${encodeURIComponent(mangaTitle)}&search_by=m_name`;
-          const html = await proxyFetchText(searchUrl);
+          const html = await fetchTextWithFallback(searchUrl);
           if (!html) return null;
           // Find matching manga page from search results (handles both relative and absolute URLs)
           const mangaLinks = [...html.matchAll(/href="(?:https?:\/\/mangakatana\.com)?(\/manga\/[^"]+)"/g)];
@@ -894,7 +911,7 @@ const uniqueChapters = [...seen.values()];
             seenUrls.add(mangaPath);
             const fullUrl = `https://mangakatana.com${mangaPath}`;
             try {
-              const mangaHtml = await proxyFetchText(fullUrl);
+              const mangaHtml = await fetchTextWithFallback(fullUrl);
               if (!mangaHtml) continue;
               const mTitle = (mangaHtml.match(/<title[^>]*>([^<]+)<\/title>/i) || [])[1] || "";
               const stripWords = (str) => str.replace(/\b(the|a|an|read|manhwa|manga|webtoon|18\+?)\b/gi, "").replace(/\s+/g, " ").trim();
@@ -936,7 +953,7 @@ const uniqueChapters = [...seen.values()];
       async function fetchNhentaiChapters(titles) {
         for (const title of titles) {
           try {
-            const data = await proxyFetch(
+            const data = await fetchWithFallback(
               `https://nhentai.net/api/v2/galleries?query=${encodeURIComponent(title)}`
             );
             const results = data?.result || [];
@@ -985,9 +1002,20 @@ const uniqueChapters = [...seen.values()];
       // Fetch text content via proxy (for HTML scraping)
       async function proxyFetchText(url, timeoutMs) {
         const target = PROXY_BASE + encodeURIComponent(url);
-        const res = await fetch(target, { signal: AbortSignal.timeout(timeoutMs || 20000) });
+        const res = await fetch(target, { signal: AbortSignal.timeout(timeoutMs || 8000) });
         if (!res.ok) throw new Error("Proxy HTTP " + res.status);
         return res.text();
+      }
+
+      // Fetch text with fallback: try direct first (for sites that allow CORS), then proxy
+      async function fetchTextWithFallback(url, timeoutMs) {
+        try {
+          const res = await fetch(url, { signal: AbortSignal.timeout(timeoutMs || 8000) });
+          if (res.ok) return res.text();
+        } catch (e) {
+          console.log("[Reader] Direct text fetch failed, trying proxy:", e.message);
+        }
+        return proxyFetchText(url, timeoutMs);
       }
 
       function sortChapters(arr) {
