@@ -9,12 +9,12 @@
 <meta name="version" content="20260928-v3">
   <link rel="icon" type="image/svg+xml" href="../favicon.svg?v=2">
   <link rel="icon" type="image/x-icon" href="../favicon.ico">
-  <link rel="stylesheet" href="../css/style.css?v=27">
+<link rel="stylesheet" href="../css/style.css?v=27">
   <link rel="preconnect" href="https://manga-scrape-api.vercel.app">
   <link rel="preconnect" href="https://mangakatana.com">
-  <link rel="dns-prefetch" href="https://soukox.goatcounter.com">
-<script data-goatcounter="https://soukox.goatcounter.com/count"
-          async src="//gc.zgo.at/count.js"></script>
+  <link rel="dns-prefetch" href="https://otakupier.goatcounter.com">
+<script data-goatcounter="https://otakupier.goatcounter.com/count"
+        async src="https://gc.zgo.at/count.js"></script>
 </head>
 <body class="reader-body">
   <nav class="navbar" id="navbar"></nav>
@@ -442,36 +442,13 @@
               '<p style="margin-top:8px;font-size:0.85em;">This manga may not have readable chapters available yet.</p></div>';
           }
           console.log(`[Reader] init completed in ${Date.now() - startTime}ms`);
-        } catch (e) {
+} catch (e) {
           console.error("[Reader] init error:", e);
           $("chapterList").innerHTML = '<div class="empty-state">' +
             '<p>Error loading chapters: ' + e.message + '</p>' +
             '<p style="margin-top:8px;font-size:0.85em;">Check console for details.</p></div>';
         }
-}
       }
-            .filter(r => r.status === "fulfilled")
-            .map(r => r.value)
-            .filter(v => v && v.count > 0);
-          console.log("[Reader] fallback providers:", fallbackValues.map(v => v?.provider + "(" + v?.count + ")"));
-          if (fallbackValues.length) {
-            const exactFb = fallbackValues.filter(c => titleMatches(c));
-            chosen = exactFb.length
-              ? exactFb.reduce((a, b) => a.count >= b.count ? a : b)
-              : fallbackValues.reduce((a, b) => a.count >= b.count ? a : b);
-            if (!isAdult && (chosen.provider === "manhwaus" || chosen.provider === "hentai20")) {
-              isAdult = true; // Mark as adult so the reader knows
-            }
-          }
-        }
-
-        // If all failed and adult, try NHentai
-        if ((!chosen || chosen.count === 0) && isAdult) {
-          const [nhData] = await Promise.allSettled([
-            fetchNhentaiChapters(titles),
-          ]);
-          const nh = nhData.status === "fulfilled" ? nhData.value : null;
-          if (nh) chosen = nh;
         }
 
         console.log("[Reader] chosen:", chosen ? `${chosen.provider} (${chosen.count} ch)` : "null");
