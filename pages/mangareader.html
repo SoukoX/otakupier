@@ -162,8 +162,18 @@
       // ── Step 1: Find manga — search MangaDex + WeebCentral in parallel, pick best ──
       async function init() {
         const startTime = Date.now();
-        try {
-          $("chapterList").innerHTML = '<div class="loading"><div class="spinner"></div>Searching...</div>';
+        let progressTimeout = null;
+        
+        // Update loading message periodically so user knows it's working
+        function updateProgress(msg) {
+          $("chapterList").innerHTML = '<div class="loading"><div class="spinner"></div>' + msg + '</div>';
+        }
+        
+        updateProgress("Searching...");
+        
+        // Global timeout for entire init (30s max)
+        const initPromise = (async () => {
+          try {
 
         // If ID is mdx-*, fetch chapters directly by MangaDex ID
         if (mangaId.startsWith("mdx-")) {
@@ -259,17 +269,27 @@ const uniqueChapters = [...seen.values()];
             fn(),
             new Promise((_, reject) => setTimeout(() => reject(new Error("Timeout")), timeout))
           ]);
+        
+        let providersTried = 0;
+        const totalProviders = isAdult ? 3 : (isManhwa ? 3 : 3);
+        
+        function providerProgress(name) {
+          providersTried++;
+          updateProgress(`Searching... (${providersTried}/${totalProviders}) ${name}`);
+        }
 
         let md = null, wc = null, mk = null, mh = null, h20 = null;
 
         if (isAdult) {
           // Adult manga/manhwa: ManhwaUS (primary), Hentai20 (secondary), MangaDex (fallback)
           console.log("[Reader] Adult content detected - fetching ManhwaUS, Hentai20, MangaDex...");
+          updateProgress("Checking ManhwaUS...");
           const [mdData, mhData, h20Data] = await Promise.allSettled([
             fetchWithTimeout(() => fetchMangaDexChapters(titles)),
-            fetchWithTimeout(() => fetchManhwaUsChapters(titles)),
-            fetchWithTimeout(() => fetchHentai20Chapters(titles)),
+            fetchWithTimeout(() => fetchManhwaUsChapters(titles)).then(r => { providerProgress("ManhwaUS"); return r; }),
+            fetchWithTimeout(() => fetchHentai20Chapters(titles)).then(r => { providerProgress("Hentai20"); return r; }),
           ]);
+          providerProgress("MangaDex");
           md = mdData.status === "fulfilled" ? mdData.value : null;
           mh = mhData.status === "fulfilled" ? mhData.value : null;
           h20 = h20Data.status === "fulfilled" ? h20Data.value : null;
@@ -278,10 +298,11 @@ const uniqueChapters = [...seen.values()];
         } else if (isManhwa) {
           // Non-adult manhwa: MangaKatana (primary), MangaDex (secondary), WeebCentral (tertiary)
           console.log("[Reader] Non-adult manhwa detected - fetching MangaKatana, MangaDex, WeebCentral...");
+          updateProgress("Checking MangaKatana...");
           const [mkData, mdData, wcData] = await Promise.allSettled([
-            fetchWithTimeout(() => fetchMangaKatanChapters(titles)),
-            fetchWithTimeout(() => fetchMangaDexChapters(titles)),
-            fetchWithTimeout(() => fetchWeebCentralChapters()),
+            fetchWithTimeout(() => fetchMangaKatanChapters(titles)).then(r => { providerProgress("MangaKatana"); return r; }),
+            fetchWithTimeout(() => fetchMangaDexChapters(titles)).then(r => { providerProgress("MangaDex"); return r; }),
+            fetchWithTimeout(() => fetchWeebCentralChapters()).then(r => { providerProgress("WeebCentral"); return r; }),
           ]);
           mk = mkData.status === "fulfilled" ? mkData.value : null;
           md = mdData.status === "fulfilled" ? mdData.value : null;
@@ -290,10 +311,11 @@ const uniqueChapters = [...seen.values()];
         } else {
           // Normal manga (non-manhwa, non-adult): MangaDex (primary), WeebCentral (secondary), MangaKatana (tertiary)
           console.log("[Reader] Normal manga detected - fetching MangaDex, WeebCentral, MangaKatana...");
+          updateProgress("Checking MangaDex...");
           const [mdData, wcData, mkData] = await Promise.allSettled([
-            fetchWithTimeout(() => fetchMangaDexChapters(titles)),
-            fetchWithTimeout(() => fetchWeebCentralChapters()),
-            fetchWithTimeout(() => fetchMangaKatanChapters(titles)),
+            fetchWithTimeout(() => fetchMangaDexChapters(titles)).then(r => { providerProgress("MangaDex"); return r; }),
+            fetchWithTimeout(() => fetchWeebCentralChapters()).then(r => { providerProgress("WeebCentral"); return r; }),
+            fetchWithTimeout(() => fetchMangaKatanChapters(titles)).then(r => { providerProgress("MangaKatana"); return r; }),
           ]);
           md = mdData.status === "fulfilled" ? mdData.value : null;
           wc = wcData.status === "fulfilled" ? wcData.value : null;
@@ -426,7 +448,18 @@ const uniqueChapters = [...seen.values()];
             '<p>Error loading chapters: ' + e.message + '</p>' +
             '<p style="margin-top:8px;font-size:0.85em;">Check console for details.</p></div>';
         }
-      }
+      })();
+      
+      // Global timeout - if init takes longer than 30s, show error
+      await Promise.race([
+        initPromise,
+        new Promise((_, reject) => setTimeout(() => reject(new Error("Initialization timeout (30s)")), 30000))
+      ]).catch(e => {
+        console.error("[Reader] Init timeout:", e);
+        $("chapterList").innerHTML = '<div class="empty-state">' +
+          '<p>Loading timed out. Please refresh or try again.</p>' +
+          '<p style="margin-top:8px;font-size:0.85em;">Error: ' + e.message + '</p></div>';
+      });
 
 async function fetchMangaDexChapters(titles) {
         for (const title of titles) {
