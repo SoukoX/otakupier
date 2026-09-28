@@ -172,8 +172,8 @@
             });
             const uniqueChapters = [...seen.values()];
             uniqueChapters.sort((a, b) => {
-              const aN = parseNum(a.attributes.chapter);
-              const bN = parseNum(b.attributes.chapter);
+              const aN = parseChapterNumber(a.attributes.chapter) || 0;
+              const bN = parseChapterNumber(b.attributes.chapter) || 0;
               return aN - bN;
             });
             if (uniqueChapters.length) {
@@ -184,10 +184,10 @@
               loadReaderSaveState();
               if (resumeChapter) {
                 const targetNum = resumeChapter.trim();
-                const targetParsed = parseNum(targetNum);
+                const targetParsed = parseChapterNumber(targetNum);
                 let idx = chapters.findIndex(ch => String(ch.attributes.chapter || "").trim() === targetNum);
-                if (idx < 0 && !isNaN(targetParsed)) {
-                  idx = chapters.findIndex(ch => parseNum(ch.attributes.chapter) === targetParsed);
+                if (idx < 0 && targetParsed !== null) {
+                  idx = chapters.findIndex(ch => parseChapterNumber(ch.attributes.chapter) === targetParsed);
                 }
                 if (idx >= 0) goToChapter(idx);
               }
@@ -198,7 +198,7 @@
           }
         }
 
-        console.log("[Reader] mangaTitle:", mangaTitle, "isAdult:", isAdult, "mangaId:", mangaId);
+        console.log("[Reader] mangaTitle:", mangaTitle, "isAdult:", isAdult, "isManhwa:", isManhwa, "mangaId:", mangaId);
 
         const titles = [
           mangaTitle,
@@ -210,25 +210,6 @@
         // Auto-detect manhwa from AniList if no format param
         await detectManhwaFromAniList();
 
-        // Collect results from MangaDex + WeebCentral + MangaKatan (no rendering yet)
-        // Use Promise.allSettled with individual timeouts so one slow provider doesn't block
-        const fetchWithTimeout = (fn, timeout = 15000) =>
-          Promise.race([
-            fn(),
-            new Promise((_, reject) => setTimeout(() => reject(new Error("Timeout")), timeout))
-          ]);
-
-        const [mdData, wcData, mkData] = await Promise.allSettled([
-          fetchWithTimeout(() => fetchMangaDexChapters(titles)),
-          fetchWithTimeout(() => fetchWeebCentralChapters()),
-          fetchWithTimeout(() => fetchMangaKatanChapters(titles)),
-        ]);
-
-        const md = mdData.status === "fulfilled" ? mdData.value : null;
-        const wc = wcData.status === "fulfilled" ? wcData.value : null;
-        const mk = mkData.status === "fulfilled" ? mkData.value : null;
-        console.log("[Reader] md:", md ? md.count : "null", "wc:", wc ? wc.count : "null", "mk:", mk ? mk.count : "null");
-
         // Verify provider returned the correct manga (not a random one)
         function titleMatches(providerResult) {
           if (!providerResult || !providerResult.title) return false;
@@ -238,55 +219,80 @@
           const normP = norm(providerResult.title);
           const normS = norm(mangaTitle);
           if (normP === normS) return true;
-          // Allow if one is a prefix/suffix of the other
           if (normP.includes(normS) || normS.includes(normP)) return true;
           return false;
         }
 
-        // For adult manga, try ManhwaUS + Hentai20 (often more chapters than MangaDex)
-        // For non-adult manhwa, try MangaKatan
-        let mh = null;
-        let h20 = null;
-        let mk = null;
-        if (isAdult) {
-          console.log("[Reader] Trying ManhwaUS + Hentai20...");
-          const adultResults = await Promise.allSettled([
-            fetchManhwaUsChapters(titles),
-            fetchHentai20Chapters(titles),
+        // Collect results from providers based on content type
+        // Use Promise.allSettled with individual timeouts so one slow provider doesn't block
+        const fetchWithTimeout = (fn, timeout = 15000) =>
+          Promise.race([
+            fn(),
+            new Promise((_, reject) => setTimeout(() => reject(new Error("Timeout")), timeout))
           ]);
-          mh = adultResults[0].status === "fulfilled" ? adultResults[0].value : null;
-          if (adultResults[0].status === "rejected") console.error("[Reader] ManhwaUS error:", adultResults[0].reason);
-          h20 = adultResults[1].status === "fulfilled" ? adultResults[1].value : null;
-          if (adultResults[1].status === "rejected") console.error("[Reader] Hentai20 error:", adultResults[1].reason);
-          console.log("[Reader] mh:", mh ? mh.count : "null", "h20:", h20 ? h20.count : "null");
+
+        let md = null, wc = null, mk = null, mh = null, h20 = null;
+
+        if (isAdult) {
+          // Adult manga/manhwa: ManhwaUS (primary), Hentai20 (secondary), MangaDex (fallback)
+          console.log("[Reader] Adult content detected - fetching ManhwaUS, Hentai20, MangaDex...");
+          const [mdData, mhData, h20Data] = await Promise.allSettled([
+            fetchWithTimeout(() => fetchMangaDexChapters(titles)),
+            fetchWithTimeout(() => fetchManhwaUsChapters(titles)),
+            fetchWithTimeout(() => fetchHentai20Chapters(titles)),
+          ]);
+          md = mdData.status === "fulfilled" ? mdData.value : null;
+          mh = mhData.status === "fulfilled" ? mhData.value : null;
+          h20 = h20Data.status === "fulfilled" ? h20Data.value : null;
+          if (mhData.status === "rejected") console.error("[Reader] ManhwaUS error:", mhData.reason);
+          if (h20Data.status === "rejected") console.error("[Reader] Hentai20 error:", h20Data.reason);
         } else if (isManhwa) {
-          console.log("[Reader] Non-adult manhwa detected, MangaKatan already fetched");
+          // Non-adult manhwa: MangaKatana (primary), MangaDex (secondary), WeebCentral (tertiary)
+          console.log("[Reader] Non-adult manhwa detected - fetching MangaKatana, MangaDex, WeebCentral...");
+          const [mkData, mdData, wcData] = await Promise.allSettled([
+            fetchWithTimeout(() => fetchMangaKatanChapters(titles)),
+            fetchWithTimeout(() => fetchMangaDexChapters(titles)),
+            fetchWithTimeout(() => fetchWeebCentralChapters()),
+          ]);
+          mk = mkData.status === "fulfilled" ? mkData.value : null;
+          md = mdData.status === "fulfilled" ? mdData.value : null;
+          wc = wcData.status === "fulfilled" ? wcData.value : null;
+          if (mkData.status === "rejected") console.error("[Reader] MangaKatana error:", mkData.reason);
         } else {
-          console.log("[Reader] Non-adult manga, MangaKatan already fetched");
+          // Normal manga (non-manhwa, non-adult): MangaDex (primary), WeebCentral (secondary), MangaKatana (tertiary)
+          console.log("[Reader] Normal manga detected - fetching MangaDex, WeebCentral, MangaKatana...");
+          const [mdData, wcData, mkData] = await Promise.allSettled([
+            fetchWithTimeout(() => fetchMangaDexChapters(titles)),
+            fetchWithTimeout(() => fetchWeebCentralChapters()),
+            fetchWithTimeout(() => fetchMangaKatanChapters(titles)),
+          ]);
+          md = mdData.status === "fulfilled" ? mdData.value : null;
+          wc = wcData.status === "fulfilled" ? wcData.value : null;
+          mk = mkData.status === "fulfilled" ? mkData.value : null;
+          if (mkData.status === "rejected") console.error("[Reader] MangaKatana error:", mkData.reason);
         }
 
-        // Pick best provider
-        // Non-adult manhwa: MangaKatan primary, MangaDex secondary
-        // Non-adult manga: MangaKatan primary (if has chapters), MangaDex secondary, WeebCentral tertiary
-        // Adult: ManhwaUS primary, Hentai20 secondary, MangaDex fallback
+        console.log("[Reader] md:", md ? md.count : "null", "wc:", wc ? wc.count : "null", "mk:", mk ? mk.count : "null", "mh:", mh ? mh.count : "null", "h20:", h20 ? h20.count : "null");
+
+        // Pick best provider based on content type
         let chosen = null;
-        const candidates = [mk, mh, h20, md, wc].filter(c => c && c.count > 0);
+        const candidates = [md, wc, mk, mh, h20].filter(c => c && c.count > 0);
+
         if (candidates.length) {
           if (isAdult) {
-            // Adult manga: prefer ManhwaUS (most chapters), then Hentai20, then MangaDex
+            // Adult: ManhwaUS primary, Hentai20 secondary, MangaDex fallback
             if (mh && mh.count > 0) {
               chosen = mh;
             } else if (h20 && h20.count > 0) {
               chosen = h20;
             } else {
-              // MangaDex as fallback for adult
               const exact = candidates.filter(c => titleMatches(c));
               chosen = exact.length
                 ? exact.reduce((a, b) => a.count >= b.count ? a : b)
                 : candidates.reduce((a, b) => a.count >= b.count ? a : b);
             }
           } else if (isManhwa) {
-            // Non-adult manhwa: prefer MangaKatan, then MangaDex, then WeebCentral
+            // Non-adult manhwa: MangaKatana primary, MangaDex secondary, WeebCentral tertiary
             if (mk && mk.count > 0) {
               chosen = mk;
             } else if (md && md.count > 0) {
@@ -300,15 +306,14 @@
                 : candidates.reduce((a, b) => a.count >= b.count ? a : b);
             }
           } else {
-            // Non-adult manga: prefer MangaKatan if it has chapters (many manhwa not tagged), then MangaDex, then WeebCentral
-            if (mk && mk.count > 0) {
-              chosen = mk;
-            } else if (md && md.count > 0) {
+            // Normal manga: MangaDex primary, WeebCentral secondary, MangaKatana tertiary
+            if (md && md.count > 0) {
               chosen = md;
             } else if (wc && wc.count > 0) {
               chosen = wc;
+            } else if (mk && mk.count > 0) {
+              chosen = mk;
             } else {
-              // Fallback: pick best from any available provider
               const exact = candidates.filter(c => titleMatches(c));
               chosen = exact.length
                 ? exact.reduce((a, b) => a.count >= b.count ? a : b)
@@ -317,15 +322,17 @@
           }
         }
 
-        // CRITICAL FALLBACK: When MangaDex + WeebCentral both fail (common for
-        // Korean manhwa which aren't on those platforms), always try ManhwaUS +
-        // Hentai20 regardless of the isAdult flag. This ensures adult manhwa
-        // like Secret Class, MILF Hunter, etc. are never stranded with "No chapters".
+        // CRITICAL FALLBACK: If primary providers failed, try others
         if (!chosen || chosen.count === 0) {
           console.log("[Reader] All primary providers failed, trying fallback providers...");
-          const fallbackProviders = isAdult
-            ? [fetchManhwaUsChapters(titles), fetchHentai20Chapters(titles)]
-            : [fetchMangaKatanChapters(titles), fetchManhwaUsChapters(titles), fetchHentai20Chapters(titles)];
+          let fallbackProviders = [];
+          if (isAdult) {
+            fallbackProviders = [fetchManhwaUsChapters(titles), fetchHentai20Chapters(titles)];
+          } else if (isManhwa) {
+            fallbackProviders = [fetchMangaDexChapters(titles), fetchWeebCentralChapters()];
+          } else {
+            fallbackProviders = [fetchWeebCentralChapters(), fetchMangaKatanChapters(titles), fetchManhwaUsChapters(titles)];
+          }
           const fallbackResults = await Promise.allSettled(fallbackProviders);
           const fallbackValues = fallbackResults
             .filter(r => r.status === "fulfilled")
@@ -343,7 +350,7 @@
           }
         }
 
-        // If all primary providers failed, try NHentai (adult only, doujinshi focus)
+        // If all failed and adult, try NHentai
         if ((!chosen || chosen.count === 0) && isAdult) {
           const [nhData] = await Promise.allSettled([
             fetchNhentaiChapters(titles),
@@ -365,13 +372,13 @@
           // Resume from saved chapter if ?ch= param present
           if (resumeChapter) {
             const targetNum = resumeChapter.trim();
-            const targetParsed = parseNum(targetNum);
+            const targetParsed = parseChapterNumber(targetNum);
             let idx = -1;
             // Try exact string match first
             idx = chapters.findIndex(ch => String(ch.attributes.chapter || "").trim() === targetNum);
             // Fallback: numeric match
-            if (idx < 0 && !isNaN(targetParsed)) {
-              idx = chapters.findIndex(ch => parseNum(ch.attributes.chapter) === targetParsed);
+            if (idx < 0 && targetParsed !== null) {
+              idx = chapters.findIndex(ch => parseChapterNumber(ch.attributes.chapter) === targetParsed);
             }
             if (idx >= 0) goToChapter(idx);
           }
@@ -969,44 +976,72 @@
 
       function sortChapters(arr) {
         return arr.sort((a, b) => {
-          const na = parseNum(a.attributes.chapter);
-          const nb = parseNum(b.attributes.chapter);
-          // Numeric chapters sort by number
-          if (na !== Infinity && nb !== Infinity && na !== nb) return na - nb;
-          // If one is numeric and the other isn't, numeric comes first
-          if (na !== Infinity && nb === Infinity) return -1;
-          if (na === Infinity && nb !== Infinity) return 1;
-          // Both non-numeric: sort alphabetically by chapter label
-          if (na === Infinity && nb === Infinity) {
-            const la = String(a.attributes.chapter || "").toLowerCase();
-            const lb = String(b.attributes.chapter || "").toLowerCase();
-            return la.localeCompare(lb);
+          const chapterA = String(a.attributes.chapter || "").trim();
+          const chapterB = String(b.attributes.chapter || "").trim();
+
+          const numA = parseChapterNumber(chapterA);
+          const numB = parseChapterNumber(chapterB);
+
+          const hasNumA = numA !== null;
+          const hasNumB = numB !== null;
+
+          // Both have numeric values - sort numerically
+          if (hasNumA && hasNumB) {
+            if (numA !== numB) return numA - numB;
+            // Same numeric value - check for part suffixes
+            const partA = getPartSuffix(chapterA);
+            const partB = getPartSuffix(chapterB);
+            if (partA && partB) return partA.localeCompare(partB);
+            if (partA) return -1; // "13" comes before "13 Part 2"
+            if (partB) return 1;
+            // Tiebreak by volume
+            const va = parseFloat(a.attributes.volume) || 0;
+            const vb = parseFloat(b.attributes.volume) || 0;
+            return va - vb;
           }
-          // Same number: tiebreak by volume
-          const va = parseFloat(a.attributes.volume) || 0;
-          const vb = parseFloat(b.attributes.volume) || 0;
-          return va - vb;
+
+          // Only one has numeric - numeric comes first
+          if (hasNumA && !hasNumB) return -1;
+          if (!hasNumA && hasNumB) return 1;
+
+          // Neither has numeric - sort alphabetically
+          return chapterA.localeCompare(chapterB);
         });
       }
 
-      function parseNum(str) {
-        const s = String(str).trim();
-        const n = parseFloat(s);
-        if (!isNaN(n)) return n;
-        const m = s.match(/[\d.]+/);
-        return m ? parseFloat(m[0]) : Infinity;
+      function parseChapterNumber(str) {
+        const s = String(str || "").trim();
+        // Match leading number (integer or decimal) like "13", "13.5", "0.5"
+        const match = s.match(/^(\d+(?:\.\d+)?)/);
+        if (match) {
+          const n = parseFloat(match[1]);
+          return isNaN(n) ? null : n;
+        }
+        return null;
+      }
+
+      function getPartSuffix(str) {
+        const s = String(str || "").trim();
+        // Remove leading number and any separators
+        const afterNum = s.replace(/^\d+(?:\.\d+)?\s*/, "").trim().toLowerCase();
+        if (!afterNum) return "";
+        // Check for part suffixes like "part 2", "pt 2", "b", "c", "extra", "appendix"
+        const match = afterNum.match(/^(part|pt)\s*(\d+)/);
+        if (match) return "part_" + match[2].padStart(3, "0");
+        const single = afterNum.match(/^([bcd]|extra|appendix|omake|special)/);
+        if (single) return single[1];
+        return afterNum;
       }
 
       function normKey(str) {
         const s = String(str || "").trim();
-        const n = parseNum(s);
-        if (n !== Infinity && !isNaN(n)) {
-          // Check for part suffixes (e.g., "13 Part 2", "13.5b") — don't merge these
-          const afterNum = s.replace(/^[\d.]+/, "").trim().toLowerCase();
-          if (afterNum && /^(part|pt|b|c|d|extra|appendix)/.test(afterNum)) {
-            return String(n) + "_" + afterNum.replace(/[^a-z0-9]/g, "");
+        const num = parseChapterNumber(s);
+        if (num !== null) {
+          const part = getPartSuffix(s);
+          if (part) {
+            return String(num) + "_" + part.replace(/[^a-z0-9_]/g, "");
           }
-          return String(n);
+          return String(num);
         }
         // Non-numeric chapters (Extra, Oneshot, etc.) — normalize for dedup
         return "n_" + s.toLowerCase()
