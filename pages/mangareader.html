@@ -99,7 +99,7 @@
             headers: { "Content-Type": "application/json", Accept: "application/json" },
             body,
             // Short timeout so it doesn't block
-            signal: AbortSignal.timeout(5000)
+            signal: AbortSignal.timeout(3000)
           });
           const data = await res.json();
           const media = data?.data?.Page?.media?.[0];
@@ -112,6 +112,9 @@
           console.warn("[Reader] Manhwa auto-detect failed:", e);
         }
       }
+
+      // Start detection early but don't await it yet
+      const manhwaDetectPromise = detectManhwaFromAniList();
 
       // ── Sidebar ──
       function updateSidebar() {
@@ -141,6 +144,7 @@
 
       // ── Step 1: Find manga — search MangaDex + WeebCentral in parallel, pick best ──
       async function init() {
+        const startTime = Date.now();
         try {
           $("chapterList").innerHTML = '<div class="loading"><div class="spinner"></div>Searching...</div>';
 
@@ -174,14 +178,14 @@
                 if (curTime > exTime) seen.set(key, ch);
               }
             });
-            const uniqueChapters = [...seen.values()];
+const uniqueChapters = [...seen.values()];
             console.log("[Reader] After dedup:", uniqueChapters.length, "unique chapters");
             uniqueChapters.sort((a, b) => {
               const aN = parseChapterNumber(a.attributes.chapter) || 0;
               const bN = parseChapterNumber(b.attributes.chapter) || 0;
               return aN - bN;
             });
-if (uniqueChapters.length) {
+            if (uniqueChapters.length) {
               chapters = uniqueChapters;
               mangadexId = directId;
               currentProvider = "mangadex";
@@ -194,13 +198,6 @@ if (uniqueChapters.length) {
                 if (idx < 0 && targetParsed !== null) {
                   idx = chapters.findIndex(ch => parseChapterNumber(ch.attributes.chapter) === targetParsed);
                 }
-                if (idx >= 0) goToChapter(idx);
-              } else {
-                // Default to first chapter (index 0 = chapter 1)
-                goToChapter(0);
-              }
-              return;
-            }
                 if (idx >= 0) goToChapter(idx);
               } else {
                 // Default to first chapter (index 0 = chapter 1)
@@ -222,8 +219,8 @@ if (uniqueChapters.length) {
           mangaTitle.split(":")[0].trim(),
         ].filter(Boolean);
 
-        // Auto-detect manhwa from AniList if no format param
-        await detectManhwaFromAniList();
+        // Auto-detect manhwa from AniList if no format param (fire-and-forget, non-blocking)
+        manhwaDetectPromise.catch(() => {}); // Suppress unhandled rejection
 
         // Verify provider returned the correct manga (not a random one)
         function titleMatches(providerResult) {
@@ -240,7 +237,7 @@ if (uniqueChapters.length) {
 
         // Collect results from providers based on content type
         // Use Promise.allSettled with individual timeouts so one slow provider doesn't block
-        const fetchWithTimeout = (fn, timeout = 15000) =>
+        const fetchWithTimeout = (fn, timeout = 8000) =>
           Promise.race([
             fn(),
             new Promise((_, reject) => setTimeout(() => reject(new Error("Timeout")), timeout))
@@ -405,6 +402,7 @@ if (uniqueChapters.length) {
             '<p>No chapters found.</p>' +
             '<p style="margin-top:8px;font-size:0.85em;">This manga may not have readable chapters available yet.</p></div>';
         }
+        console.log(`[Reader] init completed in ${Date.now() - startTime}ms`);
         } catch (e) {
           console.error("[Reader] init error:", e);
           $("chapterList").innerHTML = '<div class="empty-state">' +
@@ -457,7 +455,7 @@ if (uniqueChapters.length) {
                       ? "contentRating%5B%5D=pornographic&contentRating%5B%5D=erotica&contentRating%5B%5D=suggestive&contentRating%5B%5D=safe"
                       : "contentRating%5B%5D=suggestive&contentRating%5B%5D=safe";
                     const chData = await proxyFetch(
-                      `https://api.mangadex.org/manga/${mangaId}/feed?translatedLanguage%5B%5D=en&limit=500&order%5Bchapter%5D=asc&${chRating}`
+                      `https://api.mangadex.org/manga/${mangaId}/feed?translatedLanguage%5B%5D=en&limit=1000&order%5Bchapter%5D=asc&${chRating}`
                     );
                     const allChapters = (chData.data || []).filter(ch => ch.attributes && ch.attributes.chapter && !ch.attributes.externalUrl);
                     const seen = new Map();
