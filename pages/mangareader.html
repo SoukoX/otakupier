@@ -152,9 +152,14 @@
               ? "contentRating%5B%5D=pornographic&contentRating%5B%5D=erotica&contentRating%5B%5D=suggestive&contentRating%5B%5D=safe"
               : "contentRating%5B%5D=suggestive&contentRating%5B%5D=safe";
             const chData = await proxyFetch(
-              `https://api.mangadex.org/manga/${directId}/feed?translatedLanguage%5B%5D=en&limit=500&order%5Bchapter%5D=asc&${directRating}`
+              `https://api.mangadex.org/manga/${directId}/feed?translatedLanguage%5B%5D=en&limit=1000&order%5Bchapter%5D=asc&${directRating}`
             );
             const allChapters = (chData.data || []).filter(ch => ch.attributes && ch.attributes.chapter && !ch.attributes.externalUrl);
+            console.log("[Reader] Direct MangaDex: total chapters fetched:", allChapters.length);
+            if (allChapters.length > 0) {
+              console.log("[Reader] First 5 chapters:", allChapters.slice(0,5).map(c => c.attributes.chapter));
+              console.log("[Reader] Last 5 chapters:", allChapters.slice(-5).map(c => c.attributes.chapter));
+            }
             const seen = new Map();
             allChapters.forEach(ch => {
               const chapNum = ch.attributes.chapter;
@@ -164,19 +169,19 @@
               if (!existing) {
                 seen.set(key, ch);
               } else {
-                // Dedup: prefer the most recent chapter (consistent with search path)
                 const curTime = new Date(ch.attributes.publishAt || 0).getTime();
                 const exTime = new Date(existing.attributes.publishAt || 0).getTime();
                 if (curTime > exTime) seen.set(key, ch);
               }
             });
             const uniqueChapters = [...seen.values()];
+            console.log("[Reader] After dedup:", uniqueChapters.length, "unique chapters");
             uniqueChapters.sort((a, b) => {
               const aN = parseChapterNumber(a.attributes.chapter) || 0;
               const bN = parseChapterNumber(b.attributes.chapter) || 0;
               return aN - bN;
             });
-            if (uniqueChapters.length) {
+if (uniqueChapters.length) {
               chapters = uniqueChapters;
               mangadexId = directId;
               currentProvider = "mangadex";
@@ -190,6 +195,16 @@
                   idx = chapters.findIndex(ch => parseChapterNumber(ch.attributes.chapter) === targetParsed);
                 }
                 if (idx >= 0) goToChapter(idx);
+              } else {
+                // Default to first chapter (index 0 = chapter 1)
+                goToChapter(0);
+              }
+              return;
+            }
+                if (idx >= 0) goToChapter(idx);
+              } else {
+                // Default to first chapter (index 0 = chapter 1)
+                goToChapter(0);
               }
               return;
             }
@@ -381,6 +396,9 @@
               idx = chapters.findIndex(ch => parseChapterNumber(ch.attributes.chapter) === targetParsed);
             }
             if (idx >= 0) goToChapter(idx);
+          } else {
+            // Default to first chapter (index 0 = chapter 1)
+            goToChapter(0);
           }
         } else {
           $("chapterList").innerHTML = '<div class="empty-state">' +
@@ -1119,7 +1137,8 @@
                 wrapper.className = "reader-page-wrapper";
                 const img = document.createElement("img");
                 img.className = "reader-page-img";
-                img.src = url;
+                // Use proxy from start for better reliability
+                img.src = PROXY_BASE + encodeURIComponent(url);
                 img.alt = `Page ${pi + 1}`;
                 img.loading = pi < 3 ? "eager" : "lazy";
                 const errLabel = document.createElement("div");
@@ -1127,7 +1146,7 @@
                 errLabel.style.display = "none";
                 errLabel.textContent = "Failed to load";
                 img.onerror = function() {
-                  if (this.dataset.retried === "2") {
+                  if (this.dataset.retried === "3") {
                     this.style.display = "none";
                     errLabel.style.display = "block";
                     failedCount++;
@@ -1139,7 +1158,11 @@
                   this.dataset.retried = String(parseInt(this.dataset.retried || "0") + 1);
                   const retry = parseInt(this.dataset.retried);
                   if (retry === 1) {
-                    this.src = PROXY_BASE + encodeURIComponent(url);
+                    // Try direct
+                    this.src = url;
+                  } else if (retry === 2) {
+                    // Try proxy again with cache busting
+                    this.src = PROXY_BASE + encodeURIComponent(url + "?t=" + Date.now());
                   } else {
                     this.style.display = "none";
                     errLabel.style.display = "block";
@@ -1188,7 +1211,8 @@
                 wrapper.className = "reader-page-wrapper";
                 const img = document.createElement("img");
                 img.className = "reader-page-img";
-                img.src = url;
+                // Use proxy from start for better reliability
+                img.src = PROXY_BASE + encodeURIComponent(url);
                 img.alt = `Page ${pi + 1}`;
                 img.loading = pi < 3 ? "eager" : "lazy";
                 const errLabel = document.createElement("div");
@@ -1196,15 +1220,26 @@
                 errLabel.style.display = "none";
                 errLabel.textContent = "Failed to load";
                 img.onerror = function() {
-                  if (this.dataset.retried === "1") {
+                  if (this.dataset.retried === "3") {
                     this.style.display = "none";
                     errLabel.style.display = "block";
                     failedCount++;
                     if (failedCount >= pages.length) container.innerHTML = '<div class="empty-state">Images unavailable.</div>';
                     return;
                   }
-                  this.dataset.retried = "1";
-                  this.src = PROXY_BASE + encodeURIComponent(url);
+                  this.dataset.retried = String(parseInt(this.dataset.retried || "0") + 1);
+                  const retry = parseInt(this.dataset.retried);
+                  if (retry === 1) {
+                    // Try direct
+                    this.src = url;
+                  } else if (retry === 2) {
+                    // Try proxy again with cache busting
+                    this.src = PROXY_BASE + encodeURIComponent(url + "?t=" + Date.now());
+                  } else {
+                    this.style.display = "none";
+                    errLabel.style.display = "block";
+                    failedCount++;
+                  }
                 };
                 wrapper.appendChild(img);
                 wrapper.appendChild(errLabel);
@@ -1245,7 +1280,8 @@
                 wrapper.className = "reader-page-wrapper";
                 const img = document.createElement("img");
                 img.className = "reader-page-img";
-                img.src = url;
+                // Use proxy from start for better reliability
+                img.src = PROXY_BASE + encodeURIComponent(url);
                 img.alt = `Page ${pi + 1}`;
                 img.loading = pi < 3 ? "eager" : "lazy";
                 const errLabel = document.createElement("div");
@@ -1253,15 +1289,26 @@
                 errLabel.style.display = "none";
                 errLabel.textContent = "Failed to load";
                 img.onerror = function() {
-                  if (this.dataset.retried === "1") {
+                  if (this.dataset.retried === "3") {
                     this.style.display = "none";
                     errLabel.style.display = "block";
                     failedCount++;
                     if (failedCount >= pages.length) container.innerHTML = '<div class="empty-state">Images unavailable.</div>';
                     return;
                   }
-                  this.dataset.retried = "1";
-                  this.src = PROXY_BASE + encodeURIComponent(url);
+                  this.dataset.retried = String(parseInt(this.dataset.retried || "0") + 1);
+                  const retry = parseInt(this.dataset.retried);
+                  if (retry === 1) {
+                    // Try direct
+                    this.src = url;
+                  } else if (retry === 2) {
+                    // Try proxy again with cache busting
+                    this.src = PROXY_BASE + encodeURIComponent(url + "?t=" + Date.now());
+                  } else {
+                    this.style.display = "none";
+                    errLabel.style.display = "block";
+                    failedCount++;
+                  }
                 };
                 wrapper.appendChild(img);
                 wrapper.appendChild(errLabel);
@@ -1316,7 +1363,8 @@
                 wrapper.className = "reader-page-wrapper";
                 const img = document.createElement("img");
                 img.className = "reader-page-img";
-                img.src = url;
+                // Use proxy from start for better reliability
+                img.src = PROXY_BASE + encodeURIComponent(url);
                 img.alt = `Page ${pi + 1}`;
                 img.loading = pi < 3 ? "eager" : "lazy";
                 const errLabel = document.createElement("div");
@@ -1324,7 +1372,35 @@
                 errLabel.style.display = "none";
                 errLabel.textContent = "Failed to load";
                 img.onerror = function() {
-                  if (this.dataset.retried === "1") {
+                  if (this.dataset.retried === "3") {
+                    this.style.display = "none";
+                    errLabel.style.display = "block";
+                    failedCount++;
+                    if (failedCount >= pages.length) container.innerHTML = '<div class="empty-state">Images unavailable.</div>';
+                    return;
+                  }
+                  this.dataset.retried = String(parseInt(this.dataset.retried || "0") + 1);
+                  const retry = parseInt(this.dataset.retried);
+                  if (retry === 1) {
+                    // Try direct
+                    this.src = url;
+                  } else if (retry === 2) {
+                    // Try proxy again with cache busting
+                    this.src = PROXY_BASE + encodeURIComponent(url + "?t=" + Date.now());
+                  } else {
+                    this.style.display = "none";
+                    errLabel.style.display = "block";
+                    failedCount++;
+                  }
+                };
+                wrapper.appendChild(img);
+                wrapper.appendChild(errLabel);
+                container.appendChild(wrapper);
+              });
+              window.scrollTo({ top: 0, behavior: "instant" });
+              updateNavButtons();
+              return;
+            }
                     this.style.display = "none";
                     errLabel.style.display = "block";
                     failedCount++;
@@ -1415,8 +1491,9 @@
                 wrapper.className = "reader-page-wrapper";
                 const img = document.createElement("img");
                 img.className = "reader-page-img";
+                // Use proxy from the start for MangaDex to avoid CORS/expired URL issues
                 const directUrl = `${data.baseUrl}/${basePath}/${data.chapter.hash}/${filename}`;
-                img.src = directUrl;
+                img.src = PROXY_BASE + encodeURIComponent(directUrl);
                 img.alt = `Page ${pi + 1}`;
                 img.loading = pi < 3 ? "eager" : "lazy";
                 const errLabel = document.createElement("div");
@@ -1424,7 +1501,7 @@
                 errLabel.style.display = "none";
                 errLabel.textContent = "Failed to load";
                 img.onerror = function() {
-                  if (this.dataset.retried === "2") {
+                  if (this.dataset.retried === "3") {
                     this.style.display = "none";
                     errLabel.style.display = "block";
                     failedCount++;
@@ -1436,8 +1513,15 @@
                   this.dataset.retried = String(parseInt(this.dataset.retried || "0") + 1);
                   const retry = parseInt(this.dataset.retried);
                   if (retry === 1) {
-                    this.src = PROXY_BASE + encodeURIComponent(directUrl);
+                    // Try without proxy (direct)
+                    this.src = directUrl;
+                  } else if (retry === 2) {
+                    // Try data-saver version
+                    const saverPath = basePath === "data" ? "data-saver" : "data";
+                    const saverUrl = `${data.baseUrl}/${saverPath}/${data.chapter.hash}/${filename}`;
+                    this.src = PROXY_BASE + encodeURIComponent(saverUrl);
                   } else {
+                    // Last attempt: direct saver
                     const saverPath = basePath === "data" ? "data-saver" : "data";
                     const saverUrl = `${data.baseUrl}/${saverPath}/${data.chapter.hash}/${filename}`;
                     this.src = saverUrl;
