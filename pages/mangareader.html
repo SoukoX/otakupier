@@ -355,19 +355,11 @@
                   : candidates.reduce((a, b) => a.count >= b.count ? a : b);
               }
             } else {
-              // Normal manga: MangaDex primary, WeebCentral secondary, MangaKatana tertiary
-              if (md && md.count > 0) {
-                chosen = md;
-              } else if (wc && wc.count > 0) {
-                chosen = wc;
-              } else if (mk && mk.count > 0) {
-                chosen = mk;
-              } else {
-                const exact = candidates.filter(c => titleMatches(c));
-                chosen = exact.length
-                  ? exact.reduce((a, b) => a.count >= b.count ? a : b)
-                  : candidates.reduce((a, b) => a.count >= b.count ? a : b);
-              }
+              // Normal manga: pick provider with most chapters (WeebCentral often has more for popular titles)
+              const exact = candidates.filter(c => titleMatches(c));
+              chosen = exact.length
+                ? exact.reduce((a, b) => a.count >= b.count ? a : b)
+                : candidates.reduce((a, b) => a.count >= b.count ? a : b);
             }
           }
 
